@@ -262,6 +262,11 @@ export function AlbumDetailScreen() {
           <MarqueeText style={[styles.albumName, { color: colors.textPrimary }]}>
             {album.name}
           </MarqueeText>
+          {album.version?.trim() ? (
+            <Text style={[styles.albumYear, { color: colors.textSecondary }]}>
+              {album.version.trim()}
+            </Text>
+          ) : null}
           <View style={styles.subtitleRow}>
             <View style={styles.subtitleText}>
               {album.artistId && !offlineMode ? (
