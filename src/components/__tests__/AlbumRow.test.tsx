@@ -200,6 +200,32 @@ describe('AlbumRow', () => {
     expect(show).toHaveBeenCalledWith({ type: 'album', item: album });
   });
 
+  it('displays album version after artist with a hyphen', () => {
+    const withVersion = {
+      ...album,
+      artist: 'The Beautiful South',
+      version: 'Special Edition',
+    } as AlbumID3;
+    const { getByText } = render(<AlbumRow album={withVersion} />);
+    expect(getByText('The Beautiful South - Special Edition')).toBeTruthy();
+  });
+
+  it('does not append a separator when album version is absent', () => {
+    const noVersion = { ...album, artist: 'The Beautiful South' } as AlbumID3;
+    const { getByText } = render(<AlbumRow album={noVersion} />);
+    expect(getByText('The Beautiful South')).toBeTruthy();
+  });
+
+  it('ignores whitespace-only album versions', () => {
+    const blankVersion = {
+      ...album,
+      artist: 'The Beautiful South',
+      version: '   ',
+    } as AlbumID3;
+    const { getByText } = render(<AlbumRow album={blankVersion} />);
+    expect(getByText('The Beautiful South')).toBeTruthy();
+  });
+
   it('renders year when album.year is set', () => {
     const withYear = { ...album, year: 2024 } as AlbumID3;
     const { getByText } = render(<AlbumRow album={withYear} />);

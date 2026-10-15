@@ -115,6 +115,7 @@ export const AlbumRow = memo(function AlbumRow({
             numberOfLines={1}
           >
             {album.artist ?? t('unknownArtist')}
+            {album.version?.trim() ? ` - ${album.version.trim()}` : ''}
           </Text>
           <View style={styles.meta}>
             <RowMetaLine
