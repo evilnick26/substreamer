@@ -1144,6 +1144,7 @@
   "downloadedMetadataBannerPausedNoConnection": "Downloads paused — no connection",
   "syncPendingLibraryUpdate": "Substreamer needs to finish updating your library for your server before it can sync again. That runs automatically the next time you open the app while your server is reachable.",
   "migrationOfferDeclineHint": "Substreamer will ask again next time you open it. Until then your library will not update.",
+  "routeSelectOutput": "Audio Output",
   "routeListeningOn": "Listening on",
   "routeThisIphone": "This iPhone",
   "routeCurrentlyListeningHere": "Currently listening here",

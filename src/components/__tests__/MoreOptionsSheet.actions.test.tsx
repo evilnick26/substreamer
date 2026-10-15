@@ -36,6 +36,7 @@ let mockPathname = '/';
 let mockCanGoBack = true;
 let mockQueue: unknown[] = [];
 
+const mockOpenRoutePicker = jest.fn();
 const mockRouterPush = jest.fn();
 const mockRouterBack = jest.fn();
 const mockAlert = jest.fn();
@@ -122,6 +123,12 @@ jest.mock('../TrackDetailsModal', () => {
       ) : null,
   };
 });
+jest.mock('../RoutePicker/useRoutePickerStore', () => ({
+  useRoutePickerStore: {
+    getState: () => ({ open: mockOpenRoutePicker }),
+  },
+}));
+
 jest.mock('../StarRating', () => {
   const { Text } = require('react-native');
   return { StarRatingDisplay: ({ rating }: { rating: number }) => <Text>{`stars:${rating}`}</Text> };
@@ -1198,5 +1205,42 @@ describe('MoreOptionsSheet — delete playlist', () => {
     act(() => jest.runOnlyPendingTimers());
     expect(processingOverlayStore.getState()).toMatchObject({ status: 'error', label: 'Failed to delete playlist' });
     warn.mockRestore();
+  });
+});
+
+
+describe('MoreOptionsSheet — phone Now Playing audio output', () => {
+  it('shows Audio Output on the phone player', () => {
+    open(songEntity, 'player-phone-portrait');
+    expect(screen.getByText('Audio Output')).toBeTruthy();
+  });
+
+  it.each([
+    'default',
+    'playlist-detail',
+    'player-tablet-portrait',
+    'player-tablet-splitview',
+    'player-tablet-landscape',
+  ] as const)('does not show Audio Output for %s', (source) => {
+    open(songEntity, source);
+    expect(screen.queryByText('Audio Output')).toBeNull();
+  });
+
+  it('keeps Audio Output available offline', () => {
+    mockOfflineMode = true;
+    open(songEntity, 'player-phone-portrait');
+    expect(screen.getByText('Audio Output')).toBeTruthy();
+  });
+
+  it('opens the route picker only after More Options closes', async () => {
+    mockOpenRoutePicker.mockClear();
+    open(songEntity, 'player-phone-portrait');
+
+    fireEvent.press(screen.getByText('Audio Output'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('bottom-sheet')).toBeNull();
+      expect(mockOpenRoutePicker).toHaveBeenCalledTimes(1);
+    });
   });
 });

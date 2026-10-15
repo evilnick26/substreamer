@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { AlbumDetailsModal } from './AlbumDetailsModal';
 import { BottomSheet } from './BottomSheet';
+import { useRoutePickerStore } from './RoutePicker/useRoutePickerStore';
 import { TrackDetailsModal } from './TrackDetailsModal';
 import { CachedImage } from './CachedImage';
 import { useConfirmAlbumRemoval } from '../hooks/useConfirmAlbumRemoval';
@@ -326,6 +327,11 @@ export function MoreOptionsSheet() {
       handleClose();
     }
   }, [entity, handleClose]);
+
+  const handleOpenAudioOutput = useCallback(async () => {
+    await moreOptionsStore.getState().hideAndAwait();
+    useRoutePickerStore.getState().open();
+  }, []);
 
   const handleAddToPlaylist = useCallback(async () => {
     if (!entity) return;
@@ -644,6 +650,7 @@ export function MoreOptionsSheet() {
     (!offline || (entity.type === 'song' && entity.item.albumId != null &&
       entity.item.albumId in musicCacheStore.getState().cachedItems));
   const showAddToPlaylist = !offline && canAddToPlaylist(entity);
+  const showAudioOutput = source === 'player-phone-portrait' && entity.type === 'song';
   const showAddQueueToPlaylist = !offline && isPlayerSource;
   const showAddToQueue = !isPlayerSource && canAddToQueue(entity);
   // Play Next is song-only, and shows wherever Add to Queue does so both
@@ -749,6 +756,15 @@ export function MoreOptionsSheet() {
                   label={starred ? t('removeFromFavorites') : t('addToFavorites')}
                   onPress={handleToggleStar}
                   disabled={busy}
+                />
+              )}
+
+              {/* Audio output — phone Now Playing only */}
+              {showAudioOutput && (
+                <MoreOptionsRow
+                  icon={<MaterialCommunityIcons name="cast-audio" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
+                  label={t('routeSelectOutput')}
+                  onPress={handleOpenAudioOutput}
                 />
               )}
 
