@@ -30,6 +30,7 @@ import {
 } from '../../modules/expo-ssl-trust/src';
 
 const PRIMARY = '#1D9BF0';
+const SANCTIFI_SERVER_URL = 'https://sancti.fi';
 
 export function LoginScreen() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export function LoginScreen() {
   const isLoggedIn = authStore((s) => s.isLoggedIn);
   const setSession = authStore((s) => s.setSession);
 
-  const [serverUrl, setServerUrl] = useState('');
+  const serverUrl = SANCTIFI_SERVER_URL;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -250,14 +251,11 @@ export function LoginScreen() {
             placeholder={t('loginServerPlaceholder')}
             placeholderTextColor="rgba(255,255,255,0.85)"
             value={serverUrl}
-            onChangeText={(t) => {
-              setServerUrl(t);
-              setError(null);
-            }}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            editable={!loading}
+            editable={false}
+            selectTextOnFocus
             multiline={false}
             numberOfLines={1}
           />
