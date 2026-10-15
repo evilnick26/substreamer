@@ -491,6 +491,19 @@ export const bumpAlbumPlayStats = (db: InternalDb, id: string, played: string): 
 export const getAlbum = (db: InternalDb, id: string): Promise<Record<string, unknown> | null> =>
   db.getFirstAsync('SELECT * FROM albums WHERE id = ?', [id]);
 
+/** Narrow, local-only version read for the phone player. Downloaded metadata is a
+ * fallback when an album is absent from the synchronised library. */
+export async function getAlbumVersion(db: InternalDb, albumId: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ version: string | null }>(
+    `SELECT COALESCE(NULLIF(TRIM(a.version), ''), NULLIF(TRIM(ca.version), '')) AS version
+       FROM (SELECT ? AS id) requested
+       LEFT JOIN albums a ON a.id = requested.id
+       LEFT JOIN cached_albums ca ON ca.item_id = requested.id`,
+    [albumId],
+  );
+  return row?.version ?? null;
+}
+
 /** Every album id in the table — the sync's known-id set, for change-detect and walk
  *  enumeration. */
 export const listAlbumIds = (db: InternalDb): Promise<string[]> =>

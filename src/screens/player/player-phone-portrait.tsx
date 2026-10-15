@@ -27,7 +27,6 @@ import { AlbumInfoContent } from '@/components/AlbumInfoContent';
 import { LyricsContent } from '@/components/LyricsContent';
 import { BookmarkButton } from '@/components/BookmarkButton';
 import { CachedImage } from '@/components/CachedImage';
-import { CastButton } from '@/components/RoutePicker';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
 import { MarqueeText } from '@/components/MarqueeText';
@@ -62,6 +61,8 @@ import {
 } from '@/services/playerService';
 import { sanitizeBiographyText } from '@/utils/formatters';
 import { type Child } from '@/services/subsonicService';
+import { getDb } from '@/store/persistence/db';
+import { getAlbumVersion } from '@/db/repository/albums';
 import { usePlayerAlbumInfo } from '@/hooks/usePlayerAlbumInfo';
 import { usePlayerLyrics, type PlayerLyricsResult } from '@/hooks/usePlayerLyrics';
 import { playbackSettingsStore } from '@/store/playbackSettingsStore';
@@ -459,6 +460,31 @@ const PlayerContent = memo(function PlayerContent({
   shuffling,
 }: PlayerContentProps) {
   const { t } = useTranslation();
+  const router = useRouter();
+  const albumId = currentTrack.albumId ?? null;
+  const [versionResult, setVersionResult] = useState<{ albumId: string; version: string | null } | null>(null);
+  // The title comes from the track immediately; version is local-only and optional.
+  // Ignore late completions after rapid album changes or unmount.
+  useEffect(() => {
+    let active = true;
+    if (albumId) {
+      const db = getDb();
+      if (db) {
+        getAlbumVersion(db, albumId)
+          .then((version) => {
+            if (active) setVersionResult({ albumId, version });
+          })
+          .catch(() => {
+            if (active) setVersionResult({ albumId, version: null });
+          });
+      }
+    }
+    return () => { active = false; };
+  }, [albumId]);
+  const albumVersion = versionResult?.albumId === albumId ? versionResult.version : null;
+  const openAlbum = useCallback(() => {
+    if (albumId) router.push(`/album/${albumId}`);
+  }, [albumId, router]);
   const songCoverArtId = currentTrack?.coverArt ?? undefined;
   const songAlbumId = currentTrack?.albumId;
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
@@ -564,7 +590,32 @@ const PlayerContent = memo(function PlayerContent({
             >
               {currentTrack.artist ?? t('unknownArtist')}
             </Text>
-            <CastButton />
+            <Pressable
+              testID="player-album-link"
+              accessibilityRole={albumId ? 'button' : undefined}
+              accessibilityLabel={currentTrack.album ?? undefined}
+              disabled={!albumId}
+              onPress={openAlbum}
+              style={styles.albumLine}
+            >
+              <View style={styles.albumTitleWrap}>
+                <MarqueeText style={[styles.albumTitle, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}>
+                  {currentTrack.year != null && currentTrack.year > 0
+                    ? `(${currentTrack.year}) ${currentTrack.album ?? ''}`
+                    : currentTrack.album ?? ''}
+                </MarqueeText>
+              </View>
+              {!!albumVersion && (
+                <Text
+                  testID="player-album-version"
+                  style={[styles.albumVersion, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {albumVersion}
+                </Text>
+              )}
+            </Pressable>
           </View>
           <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
         </View>
@@ -937,6 +988,26 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 16,
     marginTop: 4,
+  },
+  albumLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+    minHeight: 21,
+  },
+  albumTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  albumTitle: {
+    fontSize: 14,
+  },
+  albumVersion: {
+    flexShrink: 1,
+    maxWidth: '30%',
+    marginLeft: 8,
+    textAlign: 'right',
   },
   favoriteButton: {
     paddingLeft: 12,

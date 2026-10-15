@@ -16,6 +16,7 @@ import {
   getAlbumInfoRow,
   upsertAlbumInfoRow,
   upsertAlbums,
+  getAlbumVersion,
 } from '../albums';
 import {
   ARTIST_LIST_COLS,
@@ -114,6 +115,16 @@ beforeEach(() => {
 });
 
 describe('albums repository', () => {
+  it('reads the album version without loading the album or its children', async () => {
+    await upsertAlbums(db(), [
+      album('v1', 'With version', { version: 'Deluxe Edition' }),
+      album('v2', 'Without version'),
+    ]);
+    expect(await getAlbumVersion(db(), 'v1')).toBe('Deluxe Edition');
+    expect(await getAlbumVersion(db(), 'v2')).toBeNull();
+    expect(await getAlbumVersion(db(), 'missing')).toBeNull();
+  });
+
   it('upserts rows + children (id-sorted) and counts them', async () => {
     await upsertAlbums(db(), [
       album('a2', 'Bravo', {

@@ -50,8 +50,11 @@ jest.mock('expo-router', () => ({
     ),
   },
   useNavigation: () => ({ setOptions: jest.fn() }),
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
 }));
+
+jest.mock('@/store/persistence/db', () => ({ getDb: jest.fn(() => ({})) }));
+jest.mock('@/db/repository/albums', () => ({ getAlbumVersion: jest.fn(async () => null) }));
 
 jest.mock('expo-linear-gradient', () => {
   const { View } = require('react-native');
@@ -258,6 +261,8 @@ import { type Child } from '@/services/subsonicService';
 const { PlayerPhonePortrait } = require('@/screens/player/player-phone-portrait');
 
 const fetchLyrics = lyricsStore.getState().fetchLyrics as jest.Mock;
+const getAlbumVersion = require('@/db/repository/albums').getAlbumVersion as jest.Mock;
+const getDb = require('@/store/persistence/db').getDb as jest.Mock;
 
 const MOCK_TRACK: Child = {
   id: 'track-1',
@@ -278,6 +283,12 @@ const MOCK_QUEUE: Child[] = [
 
 beforeEach(() => {
   fetchLyrics.mockClear();
+  // Unrelated player tests should not resolve optional metadata asynchronously.
+  // Tests of album-version behaviour override this mock explicitly.
+  getAlbumVersion.mockReset().mockImplementation(
+    () => new Promise<string | null>(() => {}),
+  );
+  getDb.mockReturnValue({});
   appStateStore.setState({ isActive: true });
   playerStore.setState({
     currentTrack: MOCK_TRACK,
@@ -294,6 +305,71 @@ beforeEach(() => {
 });
 
 describe('PlayerPhonePortrait', () => {
+  it('shows album title immediately and loads the optional version locally', async () => {
+    getAlbumVersion.mockResolvedValue('Deluxe Edition');
+    const { getByText, findByText } = render(<PlayerPhonePortrait />);
+    expect(getByText('Test Album')).toBeTruthy();
+    expect(await findByText('Deluxe Edition')).toBeTruthy();
+    expect(getAlbumVersion).toHaveBeenCalledWith(expect.anything(), 'album-1');
+  });
+
+  it('keeps album title when version is unavailable', async () => {
+    const { getByText, queryByTestId } = render(<PlayerPhonePortrait />);
+    expect(getByText('Test Album')).toBeTruthy();
+    expect(queryByTestId('player-album-version')).toBeNull();
+  });
+
+  it('shows the album year before the album title', () => {
+    playerStore.setState({
+      currentTrack: { ...MOCK_TRACK, year: 1994, album: 'Troublegum' },
+    });
+    const { getByText } = render(<PlayerPhonePortrait />);
+    expect(getByText('(1994) Troublegum')).toBeTruthy();
+  });
+
+  it('shows the album title without a year when the year is unavailable', () => {
+    playerStore.setState({
+      currentTrack: { ...MOCK_TRACK, year: undefined, album: 'Troublegum' },
+    });
+    const { getByText, queryByText } = render(<PlayerPhonePortrait />);
+    expect(getByText('Troublegum')).toBeTruthy();
+    expect(queryByText('(undefined) Troublegum')).toBeNull();
+  });
+
+  it('opens the album from the album row', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+    const { getByTestId } = render(<PlayerPhonePortrait />);
+    fireEvent.press(getByTestId('player-album-link'));
+    expect(push).toHaveBeenCalledWith('/album/album-1');
+    jest.restoreAllMocks();
+  });
+
+  it('does not navigate without an album ID', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+    playerStore.setState({ currentTrack: { ...MOCK_TRACK, albumId: undefined } });
+    const { getByText, getByTestId } = render(<PlayerPhonePortrait />);
+    expect(getByText('Test Album')).toBeTruthy();
+    fireEvent.press(getByTestId('player-album-link'));
+    expect(push).not.toHaveBeenCalled();
+    jest.restoreAllMocks();
+  });
+
+  it('ignores an old album lookup that resolves after skipping', async () => {
+    let resolveOld!: (value: string | null) => void;
+    getAlbumVersion
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce('New Edition');
+    const { queryByText, findByText } = render(<PlayerPhonePortrait />);
+    act(() => {
+      playerStore.setState({ currentTrack: { ...MOCK_TRACK, id: 'track-new', albumId: 'album-2', album: 'New Album' } });
+    });
+    expect(await findByText('New Edition')).toBeTruthy();
+    await act(async () => { resolveOld('Old Edition'); });
+    expect(queryByText('Old Edition')).toBeNull();
+  });
+
   it('renders empty state when no current track', () => {
     playerStore.setState({ currentTrack: null });
     const { getByText } = render(<PlayerPhonePortrait />);
