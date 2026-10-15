@@ -205,11 +205,16 @@ export function AlbumDetailScreen() {
   const renderItem = useCallback(
     ({ item, index }: { item: AlbumListItem; index: number }) => {
       if (item.type === 'disc-header') {
+        const subtitle = album?.discTitles
+          ?.find((dt) => dt.disc === item.discNumber)
+          ?.title?.trim();
+
         return (
           <View style={[styles.discHeaderWrap, index > 0 && styles.discHeaderGap]}>
             <Ionicons name="disc-outline" size={16} color={colors.primary} style={styles.discIcon} />
             <Text style={[styles.discTitle, { color: colors.label }]}>
               {t('discNumber', { number: item.discNumber })}
+              {subtitle ? ` — ${subtitle}` : ''}
             </Text>
           </View>
         );
@@ -225,7 +230,7 @@ export function AlbumDetailScreen() {
         </View>
       );
     },
-    [colors, allSongs, t],
+    [colors, allSongs, album, t],
   );
 
   const keyExtractor = useCallback(
