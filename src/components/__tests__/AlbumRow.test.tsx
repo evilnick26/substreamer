@@ -1,7 +1,7 @@
 jest.mock('../../store/persistence/kvStorage', () => require('../../store/persistence/__mocks__/kvStorage'));
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -104,6 +104,7 @@ import { fireEvent } from '@testing-library/react-native';
 
 import { AlbumRow } from '../AlbumRow';
 import { musicCacheStore } from '../../store/musicCacheStore';
+import { layoutPreferencesStore } from '../../store/layoutPreferencesStore';
 import type { AlbumID3 } from '../../services/subsonicService';
 import { addAlbumToQueue, toggleStar } from '../../services/moreOptionsService';
 
@@ -118,6 +119,7 @@ const album: AlbumID3 = {
 beforeEach(() => {
   mockStarred = false;
   mockRating = 0;
+  layoutPreferencesStore.getState().setShowAlbumVersion(true);
   musicCacheStore.setState({ cachedItems: {}, downloadQueue: [] } as any);
 });
 
@@ -207,6 +209,33 @@ describe('AlbumRow', () => {
       version: 'Special Edition',
     } as AlbumID3;
     const { getByText } = render(<AlbumRow album={withVersion} />);
+    expect(getByText('The Beautiful South - Special Edition')).toBeTruthy();
+  });
+
+  it('hides album version without hiding the artist when the preference is off', () => {
+    layoutPreferencesStore.getState().setShowAlbumVersion(false);
+    const withVersion = {
+      ...album,
+      artist: 'The Beautiful South',
+      version: 'Special Edition',
+    } as AlbumID3;
+    const { getByText, queryByText } = render(<AlbumRow album={withVersion} />);
+    expect(getByText('The Beautiful South')).toBeTruthy();
+    expect(queryByText('The Beautiful South - Special Edition')).toBeNull();
+  });
+
+  it('updates album version visibility when the shared preference changes', () => {
+    const withVersion = {
+      ...album,
+      artist: 'The Beautiful South',
+      version: 'Special Edition',
+    } as AlbumID3;
+    const { getByText, queryByText } = render(<AlbumRow album={withVersion} />);
+    expect(getByText('The Beautiful South - Special Edition')).toBeTruthy();
+    act(() => layoutPreferencesStore.getState().setShowAlbumVersion(false));
+    expect(getByText('The Beautiful South')).toBeTruthy();
+    expect(queryByText('The Beautiful South - Special Edition')).toBeNull();
+    act(() => layoutPreferencesStore.getState().setShowAlbumVersion(true));
     expect(getByText('The Beautiful South - Special Edition')).toBeTruthy();
   });
 

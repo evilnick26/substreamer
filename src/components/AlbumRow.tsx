@@ -16,6 +16,7 @@ import { type AlbumID3 } from '../services/subsonicService';
 import { addToPlaylistStore } from '../store/addToPlaylistStore';
 import { moreOptionsStore } from '../store/moreOptionsStore';
 import { offlineModeStore } from '../store/offlineModeStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { formatCompactDuration } from '../utils/formatters';
 
 const COVER_SIZE = 300;
@@ -35,6 +36,7 @@ export const AlbumRow = memo(function AlbumRow({
   const downloadStatus = useDownloadStatus('album', album.id);
   const rating = useRating(album.id, album.userRating);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const showAlbumVersion = layoutPreferencesStore((s) => s.showAlbumVersion);
 
   const defaultOnPress = useCallback(() => {
     router.push(`/album/${album.id}`);
@@ -115,7 +117,7 @@ export const AlbumRow = memo(function AlbumRow({
             numberOfLines={1}
           >
             {album.artist ?? t('unknownArtist')}
-            {album.version?.trim() ? ` - ${album.version.trim()}` : ''}
+            {showAlbumVersion && album.version?.trim() ? ` - ${album.version.trim()}` : ''}
           </Text>
           <View style={styles.meta}>
             <RowMetaLine

@@ -192,7 +192,7 @@
   "songCoverArt": "Track cover art",
   "showAlbumVersion": "Show Album Version",
   "nowPlayingDisplay": "Now Playing Display",
-  "showAlbumVersionHint": "Show album versions on the Now Playing screen",
+  "showAlbumVersionHint": "Show album versions throughout the app",
   "songCoverArtHint": "Album mode shows the album's cover for every track; per-track shows each track's own artwork when the server provides it",
   "songCoverArtAlbum": "Album cover for all tracks (default)",
   "songCoverArtPerTrack": "Per-track cover art",

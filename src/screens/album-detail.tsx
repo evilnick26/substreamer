@@ -42,6 +42,7 @@ import { getDb } from '../store/persistence/db';
 import { getAlbumDetail } from '../db/repository/details';
 import { moreOptionsStore } from '../store/moreOptionsStore';
 import { offlineModeStore } from '../store/offlineModeStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 
 import type { AlbumWithSongsID3, Child } from '../services/subsonicService';
 
@@ -73,6 +74,7 @@ export function AlbumDetailScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const showAlbumVersion = layoutPreferencesStore((s) => s.showAlbumVersion);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
@@ -262,7 +264,7 @@ export function AlbumDetailScreen() {
           <MarqueeText style={[styles.albumName, { color: colors.textPrimary }]}>
             {album.name}
           </MarqueeText>
-          {album.version?.trim() ? (
+          {showAlbumVersion && album.version?.trim() ? (
             <Text style={[styles.albumYear, { color: colors.textSecondary }]}>
               {album.version.trim()}
             </Text>
@@ -312,7 +314,7 @@ export function AlbumDetailScreen() {
         <View style={styles.trackListSpacer} />
       </>
     );
-  }, [album, colors, allSongs, offlineMode, router, t]);
+  }, [album, colors, allSongs, offlineMode, router, t, showAlbumVersion]);
 
   const listEmpty = useMemo(
     () => (
