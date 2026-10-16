@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { SettingsLinkRow } from '../components/settings/SettingsLinkRow';
+import { SanctifiVersionLabel } from '../components/settings/SanctifiVersionLabel';
 import { VersionFooter } from '../components/settings/VersionFooter';
 import { devOptionsStore } from '../store/devOptionsStore';
 import { onboardingStore } from '../store/onboardingStore';
@@ -67,6 +68,7 @@ export function SettingsScreen() {
         icon="help-circle-outline"
         onPress={handleShowOnboarding}
       />
+      <SanctifiVersionLabel />
       <VersionFooter />
     </ScrollView>
   );
