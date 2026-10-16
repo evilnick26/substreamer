@@ -18,6 +18,21 @@ beforeEach(() => {
 });
 
 describe('layoutPreferencesStore', () => {
+  beforeEach(() => {
+    layoutPreferencesStore.getState().setShowAlbumVersion(true);
+  });
+
+  it('defaults to showing album versions', () => {
+    expect(layoutPreferencesStore.getState().showAlbumVersion).toBe(true);
+  });
+
+  it('can hide and restore album versions', () => {
+    layoutPreferencesStore.getState().setShowAlbumVersion(false);
+    expect(layoutPreferencesStore.getState().showAlbumVersion).toBe(false);
+    layoutPreferencesStore.getState().setShowAlbumVersion(true);
+    expect(layoutPreferencesStore.getState().showAlbumVersion).toBe(true);
+  });
+
   it('setAlbumLayout changes album layout', () => {
     layoutPreferencesStore.getState().setAlbumLayout('grid');
     expect(layoutPreferencesStore.getState().albumLayout).toBe('grid');

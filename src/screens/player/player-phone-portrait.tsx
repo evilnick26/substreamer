@@ -1,3 +1,4 @@
+import { layoutPreferencesStore } from '../../store/layoutPreferencesStore';
 import Ionicons from "@react-native-vector-icons/ionicons/static";
 import { FlashList } from '@shopify/flash-list';
 import { Stack, useNavigation, useRouter } from 'expo-router';
@@ -462,6 +463,7 @@ const PlayerContent = memo(function PlayerContent({
   const { t } = useTranslation();
   const router = useRouter();
   const albumId = currentTrack.albumId ?? null;
+  const showAlbumVersion = layoutPreferencesStore((s) => s.showAlbumVersion);
   const [versionResult, setVersionResult] = useState<{ albumId: string; version: string | null } | null>(null);
   // The title comes from the track immediately; version is local-only and optional.
   // Ignore late completions after rapid album changes or unmount.
@@ -605,7 +607,7 @@ const PlayerContent = memo(function PlayerContent({
                     : currentTrack.album ?? ''}
                 </MarqueeText>
               </View>
-              {!!albumVersion && (
+              {showAlbumVersion && !!albumVersion && (
                 <Text
                   testID="player-album-version"
                   style={[styles.albumVersion, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}

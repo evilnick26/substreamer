@@ -249,6 +249,7 @@ jest.mock('@shopify/flash-list', () => {
   };
 });
 
+import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 
@@ -282,6 +283,7 @@ const MOCK_QUEUE: Child[] = [
 ];
 
 beforeEach(() => {
+  layoutPreferencesStore.getState().setShowAlbumVersion(true);
   fetchLyrics.mockClear();
   // Unrelated player tests should not resolve optional metadata asynchronously.
   // Tests of album-version behaviour override this mock explicitly.
@@ -305,6 +307,23 @@ beforeEach(() => {
 });
 
 describe('PlayerPhonePortrait', () => {
+  it('hides only the album version when the preference is off', async () => {
+    getAlbumVersion.mockResolvedValue('Deluxe Edition');
+    layoutPreferencesStore.getState().setShowAlbumVersion(false);
+    playerStore.setState({ currentTrack: { ...MOCK_TRACK, year: 1994, album: 'Troublegum' } });
+    const { getByText, queryByTestId } = render(<PlayerPhonePortrait />);
+    await act(async () => { await Promise.resolve(); });
+    expect(getByText('(1994) Troublegum')).toBeTruthy();
+    expect(queryByTestId('player-album-version')).toBeNull();
+  });
+
+  it('shows the album version when the preference is on', async () => {
+    getAlbumVersion.mockResolvedValue('Deluxe Edition');
+    layoutPreferencesStore.getState().setShowAlbumVersion(true);
+    const { findByText } = render(<PlayerPhonePortrait />);
+    expect(await findByText('Deluxe Edition')).toBeTruthy();
+  });
+
   it('shows album title immediately and loads the optional version locally', async () => {
     getAlbumVersion.mockResolvedValue('Deluxe Edition');
     const { getByText, findByText } = render(<PlayerPhonePortrait />);

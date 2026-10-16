@@ -27,6 +27,7 @@ export interface LayoutPreferencesState {
   artistAlbumSortOrder: ArtistAlbumSortOrder;
   dateFormat: DateFormat;
   songCoverArtMode: SongCoverArtMode;
+  showAlbumVersion: boolean;
   listLength: ListLength;
   includePartialInDownloadedFilter: boolean;
   setAlbumLayout: (layout: ItemLayout) => void;
@@ -41,6 +42,7 @@ export interface LayoutPreferencesState {
   setArtistAlbumSortOrder: (order: ArtistAlbumSortOrder) => void;
   setDateFormat: (format: DateFormat) => void;
   setSongCoverArtMode: (mode: SongCoverArtMode) => void;
+  setShowAlbumVersion: (value: boolean) => void;
   setListLength: (length: ListLength) => void;
   setIncludePartialInDownloadedFilter: (value: boolean) => void;
 }
@@ -62,6 +64,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
       artistAlbumSortOrder: 'newest',
       dateFormat: 'yyyy/mm/dd',
       songCoverArtMode: 'album',
+      showAlbumVersion: true,
       listLength: 20,
       includePartialInDownloadedFilter: false,
       setAlbumLayout: (albumLayout) => set({ albumLayout }),
@@ -77,6 +80,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
         set({ artistAlbumSortOrder }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
       setSongCoverArtMode: (songCoverArtMode) => set({ songCoverArtMode }),
+      setShowAlbumVersion: (showAlbumVersion) => set({ showAlbumVersion }),
       setListLength: (listLength) => set({ listLength }),
       setIncludePartialInDownloadedFilter: (includePartialInDownloadedFilter) =>
         set({ includePartialInDownloadedFilter }),
@@ -97,6 +101,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
         artistAlbumSortOrder: state.artistAlbumSortOrder,
         dateFormat: state.dateFormat,
         songCoverArtMode: state.songCoverArtMode,
+        showAlbumVersion: state.showAlbumVersion,
         listLength: state.listLength,
         includePartialInDownloadedFilter: state.includePartialInDownloadedFilter,
       }),
