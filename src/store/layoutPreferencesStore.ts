@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { kvStorage } from './persistence';
+import { DEFAULT_LIBRARY_ORDER, normalizeLibraryOrder, type LibrarySegment } from '../constants/libraryNavigation';
 
 export type ItemLayout = 'list' | 'grid';
 export type AlbumSortOrder = 'artist' | 'title';
@@ -15,6 +16,8 @@ export type ListLength = 20 | 30 | 50 | 100;
 export const LIST_LENGTH_DISPLAY_CAP = 20;
 
 export interface LayoutPreferencesState {
+  libraryOrder: LibrarySegment[];
+  setLibraryOrder: (order: LibrarySegment[]) => void;
   albumLayout: ItemLayout;
   artistLayout: ItemLayout;
   playlistLayout: ItemLayout;
@@ -52,7 +55,9 @@ const PERSIST_KEY = 'substreamer-layout-preferences';
 export const layoutPreferencesStore = create<LayoutPreferencesState>()(
   persist(
     (set) => ({
-      albumLayout: 'list',
+      libraryOrder: [...DEFAULT_LIBRARY_ORDER],
+    setLibraryOrder: (order) => set({ libraryOrder: normalizeLibraryOrder(order) }),
+    albumLayout: 'list',
       artistLayout: 'list',
       playlistLayout: 'list',
       songLayout: 'list',
@@ -88,7 +93,12 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
     {
       name: PERSIST_KEY,
       storage: createJSONStorage(() => kvStorage),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<LayoutPreferencesState>;
+        return { ...current, ...saved, libraryOrder: normalizeLibraryOrder(saved.libraryOrder) };
+      },
       partialize: (state) => ({
+        libraryOrder: state.libraryOrder,
         albumLayout: state.albumLayout,
         artistLayout: state.artistLayout,
         playlistLayout: state.playlistLayout,

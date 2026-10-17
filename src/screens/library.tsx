@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../components/EmptyState';
+import { normalizeLibraryOrder, type LibrarySegment } from '../constants/libraryNavigation';
 import { SegmentControl } from '../components/SegmentControl';
 import { useTheme } from '../hooks/useTheme';
 import { runWhenIdle } from '../utils/runWhenIdle';
@@ -19,15 +20,6 @@ import { ArtistListScreen } from './artist-list';
 import { PlaylistListScreen } from './playlist-list';
 import { SongLibraryListScreen } from './song-library-list';
 
-type LibrarySegment = 'albums' | 'artists' | 'playlists' | 'songs';
-
-const SEGMENT_KEYS = [
-  { key: 'songs', labelKey: 'songs' },
-  { key: 'albums', labelKey: 'albums' },
-  { key: 'artists', labelKey: 'artists' },
-  { key: 'playlists', labelKey: 'playlists' },
-] as const;
-
 /* ------------------------------------------------------------------ */
 /*  LibraryScreen                                                     */
 /* ------------------------------------------------------------------ */
@@ -37,7 +29,8 @@ export function LibraryScreen() {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
   const headerHeight = searchStore((s) => s.headerHeight);
-  const [activeSegment, setActiveSegment] = useState<LibrarySegment>('albums');
+  const libraryOrder = layoutPreferencesStore((s) => s.libraryOrder);
+  const [activeSegment, setActiveSegment] = useState<LibrarySegment>('artists');
 
   // Defer the heavy list render past the tap so switching segments (and the
   // first tab mount) stays responsive on slower devices — the segment control
@@ -50,8 +43,8 @@ export function LibraryScreen() {
   }, [activeSegment]);
 
   const segments = useMemo(
-    () => SEGMENT_KEYS.map((s) => ({ key: s.key, label: t(s.labelKey) })),
-    [t],
+    () => normalizeLibraryOrder(libraryOrder).map((key) => ({ key, label: t(key) })),
+    [t, libraryOrder],
   );
 
   const albumLayout = layoutPreferencesStore((s) => s.albumLayout);

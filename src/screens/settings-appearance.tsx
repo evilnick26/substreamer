@@ -1,5 +1,5 @@
 import { HeaderHeightContext } from 'expo-router/react-navigation';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { ScrollView } from 'react-native';
 
 import { BottomChrome } from '../components/BottomChrome';
@@ -23,10 +23,12 @@ import { settingsStyles } from '../styles/settingsStyles';
 
 export function SettingsAppearanceScreen() {
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const [libraryDragging, setLibraryDragging] = useState(false);
 
   return (
     <GradientBackground scrollable>
       <ScrollView
+        scrollEnabled={!libraryDragging}
         style={settingsStyles.container}
         contentContainerStyle={[settingsStyles.content, { paddingTop: headerHeight + 16 }]}
         showsVerticalScrollIndicator={false}
@@ -44,7 +46,7 @@ export function SettingsAppearanceScreen() {
         <ListLengthCard />
         <ArtistPlayModeCard />
         <FiltersCard />
-        <LibraryLayoutCard />
+        <LibraryLayoutCard onDragActive={setLibraryDragging} />
         <FavoritesLayoutCard />
       </ScrollView>
       <BottomChrome withSafeAreaPadding />
