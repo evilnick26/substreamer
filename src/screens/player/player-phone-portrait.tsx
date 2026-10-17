@@ -527,7 +527,7 @@ const PlayerContent = memo(function PlayerContent({
     const reserved = insets.top + HEADER_BAR_HEIGHT + insets.bottom + m.reserved;
     const maxHero = windowHeight - reserved;
     const fitted = Math.max(Math.min(naturalWidth, maxHero), m.heroFloor);
-    return Math.round(fitted * 0.9);
+    return Math.round(fitted * 1.0);
   }, [windowHeight, windowWidth, insets.top, insets.bottom, m.reserved, m.heroFloor]);
 
   const marqueeStyle = useMemo(
@@ -571,63 +571,8 @@ const PlayerContent = memo(function PlayerContent({
         </View>
       </View>
 
-      {/* Track info */}
-      <View style={[styles.trackInfo, { marginBottom: m.infoMarginBottom }]}>
-        <View style={styles.trackInfoRow}>
-          <View style={styles.trackInfoText}>
-            <MarqueeText style={marqueeStyle}>
-              {currentTrack.title}
-            </MarqueeText>
-            <Pressable
-              testID="player-artist-link"
-              accessibilityRole={artistId ? 'button' : undefined}
-              accessibilityLabel={currentTrack.artist ?? undefined}
-              disabled={!artistId}
-              onPress={openArtist}
-            >
-              <Text
-                style={[styles.trackArtist, { color: colors.textSecondary, fontSize: m.artistFont }]}
-                numberOfLines={1}
-              >
-                {currentTrack.artist ?? t('unknownArtist')}
-              </Text>
-            </Pressable>
-            <Pressable
-              testID="player-album-link"
-              accessibilityRole={albumId ? 'button' : undefined}
-              accessibilityLabel={currentTrack.album ?? undefined}
-              disabled={!albumId}
-              onPress={openAlbum}
-              style={styles.albumLine}
-            >
-              <View style={styles.albumTitleWrap}>
-                <MarqueeText style={[styles.albumTitle, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}>
-                  {currentTrack.year != null && currentTrack.year > 0
-                    ? `(${currentTrack.year}) ${currentTrack.album ?? ''}`
-                    : currentTrack.album ?? ''}
-                </MarqueeText>
-              </View>
-              {showAlbumVersion && !!albumVersion && (
-                <Text
-                  testID="player-album-version"
-                  style={[styles.albumVersion, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {albumVersion}
-                </Text>
-              )}
-            </Pressable>
-          </View>
-          <View style={styles.trackActionColumn}>
-            <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
-            <BookmarkButton style={styles.favoriteButton} />
-          </View>
-        </View>
-      </View>
-
       {/* Progress bar */}
-      <View style={[styles.progressSection, { marginBottom: m.progressMarginBottom }]}>
+      <View testID="player-progress-section" style={[styles.progressSection, { marginBottom: m.progressMarginBottom }]}>
         <PlayerProgressBar
           position={position}
           duration={duration}
@@ -646,7 +591,7 @@ const PlayerContent = memo(function PlayerContent({
       <View style={styles.playerSpacer} />
 
       {/* Playback controls */}
-      <View style={[styles.controls, { paddingVertical: m.controlsPadV }]}>
+      <View testID="player-controls" style={[styles.controls, { paddingVertical: m.controlsPadV }]}>
         {/* Shuffle toggle */}
         <View style={styles.controlSideLeft}>
           <ShuffleButton
@@ -712,6 +657,62 @@ const PlayerContent = memo(function PlayerContent({
       </View>
 
       <View style={styles.playerSpacer} />
+
+      {/* Track info */}
+      <View testID="player-track-info" style={[styles.trackInfo, { marginBottom: m.infoMarginBottom }]}>
+        <View style={styles.trackInfoRow}>
+          <View style={styles.trackInfoText}>
+            <MarqueeText style={marqueeStyle}>
+              {currentTrack.title}
+            </MarqueeText>
+            <Pressable
+              testID="player-artist-link"
+              accessibilityRole={artistId ? 'button' : undefined}
+              accessibilityLabel={currentTrack.artist ?? undefined}
+              disabled={!artistId}
+              onPress={openArtist}
+            >
+              <Text
+                style={[styles.trackArtist, { color: colors.textSecondary, fontSize: m.artistFont }]}
+                numberOfLines={1}
+              >
+                {currentTrack.artist ?? t('unknownArtist')}
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="player-album-link"
+              accessibilityRole={albumId ? 'button' : undefined}
+              accessibilityLabel={currentTrack.album ?? undefined}
+              disabled={!albumId}
+              onPress={openAlbum}
+              style={styles.albumLine}
+            >
+              <View style={styles.albumTitleWrap}>
+                <MarqueeText style={[styles.albumTitle, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}>
+                  {currentTrack.year != null && currentTrack.year > 0
+                    ? `(${currentTrack.year}) ${currentTrack.album ?? ''}`
+                    : currentTrack.album ?? ''}
+                </MarqueeText>
+              </View>
+              {showAlbumVersion && !!albumVersion && (
+                <Text
+                  testID="player-album-version"
+                  style={[styles.albumVersion, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {albumVersion}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+          <View style={styles.trackActionColumn}>
+            <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
+            <BookmarkButton style={styles.favoriteButton} />
+          </View>
+        </View>
+      </View>
+
     </View>
   );
 });

@@ -308,6 +308,25 @@ beforeEach(() => {
 });
 
 describe('PlayerPhonePortrait', () => {
+  it('renders progress, transport, then track information after the artwork', () => {
+    const { getByTestId, UNSAFE_root } = render(<PlayerPhonePortrait />);
+    const sectionIds = [
+      'player-progress-section',
+      'player-controls',
+      'player-track-info',
+    ];
+
+    // Assert each section exists, then inspect their order in the rendered tree.
+    // Do not assume React Native testing wrappers share an immediate parent.
+    sectionIds.forEach(id => expect(getByTestId(id)).toBeTruthy());
+    const renderedOrder = UNSAFE_root.findAll(
+      node => sectionIds.includes(node.props.testID),
+    ).map(node => node.props.testID);
+    // React Native wrappers can expose the same testID more than once.
+    const uniqueOrder = [...new Set(renderedOrder)];
+    expect(uniqueOrder).toEqual(sectionIds);
+  });
+
   it('hides only the album version when the preference is off', async () => {
     getAlbumVersion.mockResolvedValue('Deluxe Edition');
     layoutPreferencesStore.getState().setShowAlbumVersion(false);
