@@ -463,6 +463,7 @@ const PlayerContent = memo(function PlayerContent({
   const { t } = useTranslation();
   const router = useRouter();
   const albumId = currentTrack.albumId ?? null;
+  const artistId = currentTrack.artistId ?? null;
   const showAlbumVersion = layoutPreferencesStore((s) => s.showAlbumVersion);
   const [versionResult, setVersionResult] = useState<{ albumId: string; version: string | null } | null>(null);
   // The title comes from the track immediately; version is local-only and optional.
@@ -487,6 +488,9 @@ const PlayerContent = memo(function PlayerContent({
   const openAlbum = useCallback(() => {
     if (albumId) router.push(`/album/${albumId}`);
   }, [albumId, router]);
+  const openArtist = useCallback(() => {
+    if (artistId) router.push(`/artist/${artistId}`);
+  }, [artistId, router]);
   const songCoverArtId = currentTrack?.coverArt ?? undefined;
   const songAlbumId = currentTrack?.albumId;
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
@@ -586,12 +590,20 @@ const PlayerContent = memo(function PlayerContent({
             <MarqueeText style={marqueeStyle}>
               {currentTrack.title}
             </MarqueeText>
-            <Text
-              style={[styles.trackArtist, { color: colors.textSecondary, fontSize: m.artistFont }]}
-              numberOfLines={1}
+            <Pressable
+              testID="player-artist-link"
+              accessibilityRole={artistId ? 'button' : undefined}
+              accessibilityLabel={currentTrack.artist ?? undefined}
+              disabled={!artistId}
+              onPress={openArtist}
             >
-              {currentTrack.artist ?? t('unknownArtist')}
-            </Text>
+              <Text
+                style={[styles.trackArtist, { color: colors.textSecondary, fontSize: m.artistFont }]}
+                numberOfLines={1}
+              >
+                {currentTrack.artist ?? t('unknownArtist')}
+              </Text>
+            </Pressable>
             <Pressable
               testID="player-album-link"
               accessibilityRole={albumId ? 'button' : undefined}

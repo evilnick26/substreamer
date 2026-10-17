@@ -269,6 +269,7 @@ const MOCK_TRACK: Child = {
   id: 'track-1',
   title: 'Test Song',
   artist: 'Test Artist',
+  artistId: 'artist-1',
   album: 'Test Album',
   albumId: 'album-1',
   coverArt: 'cover-1',
@@ -361,6 +362,26 @@ describe('PlayerPhonePortrait', () => {
     const { getByTestId } = render(<PlayerPhonePortrait />);
     fireEvent.press(getByTestId('player-album-link'));
     expect(push).toHaveBeenCalledWith('/album/album-1');
+    jest.restoreAllMocks();
+  });
+
+  it('opens the artist from the artist name', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+    const { getByTestId } = render(<PlayerPhonePortrait />);
+    fireEvent.press(getByTestId('player-artist-link'));
+    expect(push).toHaveBeenCalledWith('/artist/artist-1');
+    jest.restoreAllMocks();
+  });
+
+  it('does not navigate without an artist ID', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+    playerStore.setState({ currentTrack: { ...MOCK_TRACK, artistId: undefined } });
+    const { getByText, getByTestId } = render(<PlayerPhonePortrait />);
+    expect(getByText('Test Artist')).toBeTruthy();
+    fireEvent.press(getByTestId('player-artist-link'));
+    expect(push).not.toHaveBeenCalled();
     jest.restoreAllMocks();
   });
 
