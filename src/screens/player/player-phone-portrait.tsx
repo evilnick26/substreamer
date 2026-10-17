@@ -32,14 +32,11 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
 import { MarqueeText } from '@/components/MarqueeText';
 import { MoreOptionsButton } from '@/components/MoreOptionsButton';
-import { PlaybackRateButton } from '@/components/PlaybackRateButton';
 import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { PlayerTabBar, type PlayerTab } from '@/components/PlayerTabBar';
 import { RepeatButton } from '@/components/RepeatButton';
 import { ShuffleButton } from '@/components/ShuffleButton';
 import { ShuffleOverlay } from '@/components/ShuffleOverlay';
-import { SkipIntervalButton } from '@/components/SkipIntervalButton';
-import { SleepTimerButton } from '@/components/SleepTimerButton';
 import { SleepTimerCapsule } from '@/components/SleepTimerCapsule';
 import { PlaybackSourceBadge } from '@/components/PlaybackSourceBadge';
 import { QueueItemRow } from '@/components/QueueItemRow';
@@ -66,7 +63,6 @@ import { getDb } from '@/store/persistence/db';
 import { getAlbumVersion } from '@/db/repository/albums';
 import { usePlayerAlbumInfo } from '@/hooks/usePlayerAlbumInfo';
 import { usePlayerLyrics, type PlayerLyricsResult } from '@/hooks/usePlayerLyrics';
-import { playbackSettingsStore } from '@/store/playbackSettingsStore';
 import { moreOptionsStore } from '@/store/moreOptionsStore';
 import { playerStore } from '@/store/playerStore';
 import { mixHexColors } from '@/utils/colors';
@@ -503,15 +499,12 @@ const PlayerContent = memo(function PlayerContent({
   const retrying = playerStore((s) => s.retrying);
   const queueLength = playerStore((s) => s.queue.length);
 
-  const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
-  const showSleepTimer = playbackSettingsStore((s) => s.showSleepTimerButton);
   const { canSkipNext, canSkipPrevious } = useCanSkip();
 
   // Content-height budget (window minus header + top/bottom safe-area insets)
   // and the portrait width drive the responsive tier: smaller art/controls/
-  // fonts on short OR narrow screens, and the secondary controls row is dropped
-  // on the smallest tier so the essential transport controls always stay above
-  // the nav bar AND fit horizontally (800×480 is narrow in portrait).
+  // fonts on short OR narrow screens. The single transport row must remain
+  // above the nav bar and fit horizontally (800×480 is narrow in portrait).
   const availableHeight = windowHeight - insets.top - insets.bottom - HEADER_BAR_HEIGHT;
   const m = useMemo(
     () => getPlayerSize(availableHeight, windowWidth),
@@ -526,11 +519,6 @@ const PlayerContent = memo(function PlayerContent({
     const maxCenter = windowWidth - 2 * HERO_PADDING - 2 * sideMin;
     return Math.max(120, Math.min(m.transportWidth, maxCenter));
   }, [windowWidth, m.sideIcon, m.transportWidth]);
-  const secondaryCenterWidth = useMemo(() => {
-    const sideMin = m.sideIcon + 8;
-    const maxCenter = windowWidth - 2 * HERO_PADDING - 2 * sideMin;
-    return Math.max(120, Math.min(m.secondaryCenterWidth, maxCenter));
-  }, [windowWidth, m.sideIcon, m.secondaryCenterWidth]);
 
   // Shrink the hero to leave room for the controls; never below the tier floor.
   // Scaled to ~90% of the fitted size to give the controls a little more room.
@@ -631,7 +619,10 @@ const PlayerContent = memo(function PlayerContent({
               )}
             </Pressable>
           </View>
-          <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
+          <View style={styles.trackActionColumn}>
+            <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
+            <BookmarkButton style={styles.favoriteButton} />
+          </View>
         </View>
       </View>
 
@@ -650,10 +641,8 @@ const PlayerContent = memo(function PlayerContent({
         />
       </View>
 
-      {/* Three equal flex spacers (above the primary row, between the rows,
-          and below the secondary row) evenly distribute the controls in the
-          space under the progress bar — this centers the primary row between
-          the progress bar and the secondary row. */}
+      {/* Equal flexible spacers center the single transport row in the
+          available space below the progress bar. */}
       <View style={styles.playerSpacer} />
 
       {/* Playback controls */}
@@ -721,36 +710,6 @@ const PlayerContent = memo(function PlayerContent({
           <RepeatButton size={m.sideIcon} />
         </View>
       </View>
-
-      {/* Secondary controls row — dropped on the smallest tier
-          (m.showSecondaryRow === false) so the transport controls clear the nav
-          bar. When present, its own middle spacer keeps both rows
-          evenly distributed; when absent, the two remaining spacers center the
-          single primary row. */}
-      {m.showSecondaryRow && (
-        <>
-          <View style={styles.playerSpacer} />
-          <View style={styles.secondaryControls}>
-            <View style={[styles.controlSideLeft, styles.secondaryLeftInset]}>
-              {showSleepTimer && <SleepTimerButton />}
-            </View>
-            <View style={[styles.secondaryCenterRow, { width: secondaryCenterWidth }]}>
-              {showSkipInterval && (
-                <SkipIntervalButton direction="backward" size={32} />
-              )}
-              <View style={styles.secondaryRateSlot}>
-                <PlaybackRateButton />
-              </View>
-              {showSkipInterval && (
-                <SkipIntervalButton direction="forward" size={32} />
-              )}
-            </View>
-            <View style={styles.controlSideRight}>
-              <BookmarkButton style={styles.favoriteButton} />
-            </View>
-          </View>
-        </>
-      )}
 
       <View style={styles.playerSpacer} />
     </View>
@@ -995,6 +954,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  trackActionColumn: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   trackTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -1027,9 +990,6 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingVertical: 4,
   },
-  secondaryLeftInset: {
-    paddingLeft: 4,
-  },
   progressSection: {
     paddingHorizontal: HERO_PADDING,
     maxWidth: 464,
@@ -1056,30 +1016,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
     justifyContent: 'center',
-  },
-  secondaryCenterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-evenly',
-  },
-  secondaryRateSlot: {
-    width: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 40,
-    // No vertical margin: the three equal flex spacers (above the primary row,
-    // between the rows, and below the secondary row) own ALL the inter-row
-    // spacing. A fixed marginTop here is asymmetric — it inflates the gap above
-    // the secondary row but not below it, so on short screens (where the
-    // spacers shrink) the row gets pushed down against the tab bar.
-    paddingHorizontal: HERO_PADDING,
-    maxWidth: 464,
-    width: '100%',
-    alignSelf: 'center',
   },
   transportControls: {
     flexDirection: 'row',

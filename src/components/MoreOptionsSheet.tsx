@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { AlbumDetailsModal } from './AlbumDetailsModal';
 import { BottomSheet } from './BottomSheet';
+import { PlaybackSpeedSheet } from './PlaybackSpeedSheet';
 import { useRoutePickerStore } from './RoutePicker/useRoutePickerStore';
 import { TrackDetailsModal } from './TrackDetailsModal';
 import { CachedImage } from './CachedImage';
@@ -72,6 +73,7 @@ import { bumpDetailChanged } from '../db/detailNotifier';
 import { runWithOverlay } from '../store/processingOverlayStore';
 import { canUserShare, supports } from '../services/serverCapabilityService';
 import { setRatingStore } from '../store/setRatingStore';
+import { sleepTimerStore } from '../store/sleepTimerStore';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -305,6 +307,9 @@ export function MoreOptionsSheet() {
   });
 
   const [busy, setBusy] = useState(false);
+  // The overflow host is globally mounted; this sheet stays alive after the menu closes.
+  // Tablet PlaybackRateButton instances retain their existing local sheets.
+  const [playbackSpeedVisible, setPlaybackSpeedVisible] = useState(false);
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [detailsAlbum, setDetailsAlbum] = useState<AlbumID3 | null>(null);
   const [detailsTrack, setDetailsTrack] = useState<Child | null>(null);
@@ -331,6 +336,16 @@ export function MoreOptionsSheet() {
   const handleOpenAudioOutput = useCallback(async () => {
     await moreOptionsStore.getState().hideAndAwait();
     useRoutePickerStore.getState().open();
+  }, []);
+
+  const handleOpenSleepTimer = useCallback(async () => {
+    await moreOptionsStore.getState().hideAndAwait();
+    sleepTimerStore.getState().showSheet();
+  }, []);
+
+  const handleOpenPlaybackSpeed = useCallback(async () => {
+    await moreOptionsStore.getState().hideAndAwait();
+    setPlaybackSpeedVisible(true);
   }, []);
 
   const handleAddToPlaylist = useCallback(async () => {
@@ -616,6 +631,10 @@ export function MoreOptionsSheet() {
   if (!entity) {
     return (
       <>
+        <PlaybackSpeedSheet
+          visible={playbackSpeedVisible}
+          onClose={() => setPlaybackSpeedVisible(false)}
+        />
         {detailsAlbum && (
           <AlbumDetailsModal
             album={detailsAlbum}
@@ -651,6 +670,7 @@ export function MoreOptionsSheet() {
       entity.item.albumId in musicCacheStore.getState().cachedItems));
   const showAddToPlaylist = !offline && canAddToPlaylist(entity);
   const showAudioOutput = source === 'player-phone-portrait' && entity.type === 'song';
+  const showPhonePlaybackControls = source === 'player-phone-portrait' && entity.type === 'song';
   const showAddQueueToPlaylist = !offline && isPlayerSource;
   const showAddToQueue = !isPlayerSource && canAddToQueue(entity);
   // Play Next is song-only, and shows wherever Add to Queue does so both
@@ -766,6 +786,22 @@ export function MoreOptionsSheet() {
                   label={t('routeSelectOutput')}
                   onPress={handleOpenAudioOutput}
                 />
+              )}
+
+              {/* Phone NPS controls relocated from its secondary row. */}
+              {showPhonePlaybackControls && (
+                <>
+                  <MoreOptionsRow
+                    icon={<Ionicons name="moon-outline" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
+                    label={t('sleepTimer')}
+                    onPress={handleOpenSleepTimer}
+                  />
+                  <MoreOptionsRow
+                    icon={<Ionicons name="speedometer-outline" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
+                    label={t('playbackSpeed')}
+                    onPress={handleOpenPlaybackSpeed}
+                  />
+                </>
               )}
 
               {/* Set Rating */}
@@ -987,6 +1023,10 @@ export function MoreOptionsSheet() {
             </>
       </BottomSheet>
 
+      <PlaybackSpeedSheet
+        visible={playbackSpeedVisible}
+        onClose={() => setPlaybackSpeedVisible(false)}
+      />
       {detailsAlbum && (
         <AlbumDetailsModal
           album={detailsAlbum}

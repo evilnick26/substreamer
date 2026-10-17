@@ -50,7 +50,7 @@ const REGULAR: PlayerSize = {
   infoMarginBottom: 16, progressMarginBottom: 8, controlsPadV: 8,
   playButton: 64, playIcon: 32, transportIcon: 32, sideIcon: 28,
   transportWidth: 248, secondaryCenterWidth: 248,
-  showSecondaryRow: true, reserved: 342,
+  showSecondaryRow: true, reserved: 302,
 };
 
 const SMALL: PlayerSize = {
@@ -58,7 +58,7 @@ const SMALL: PlayerSize = {
   infoMarginBottom: 10, progressMarginBottom: 6, controlsPadV: 5,
   playButton: 56, playIcon: 28, transportIcon: 28, sideIcon: 26,
   transportWidth: 220, secondaryCenterWidth: 220,
-  showSecondaryRow: true, reserved: 300,
+  showSecondaryRow: true, reserved: 260,
 };
 
 const TINY: PlayerSize = {

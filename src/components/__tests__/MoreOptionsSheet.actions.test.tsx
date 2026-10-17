@@ -37,6 +37,7 @@ let mockCanGoBack = true;
 let mockQueue: unknown[] = [];
 
 const mockOpenRoutePicker = jest.fn();
+const mockShowSleepTimer = jest.fn();
 const mockRouterPush = jest.fn();
 const mockRouterBack = jest.fn();
 const mockAlert = jest.fn();
@@ -73,8 +74,8 @@ jest.mock('../../hooks/useTheme', () => ({
   }),
 }));
 
-// Children inline. Unmounting stands in for the real sheet's close-complete
-// signal, so `hideAndAwait` resolves as soon as the sheet is gone.
+// Children inline. A visible-to-hidden transition stands in for the real
+// sheet's close-complete signal after its native Modal has torn down.
 jest.mock('../BottomSheet', () => {
   const { View } = require('react-native');
   const { useEffect, useRef } = require('react');
@@ -90,11 +91,26 @@ jest.mock('../BottomSheet', () => {
     }) => {
       const signal = useRef(onCloseComplete);
       signal.current = onCloseComplete;
-      useEffect(() => () => signal.current?.(), []);
+      useEffect(() => {
+        if (!visible) signal.current?.();
+      }, [visible]);
       return visible ? <View testID="bottom-sheet">{children}</View> : null;
     },
   };
 });
+
+jest.mock('../PlaybackSpeedSheet', () => {
+  const { View } = require('react-native');
+  return {
+    PlaybackSpeedSheet: ({ visible }: { visible: boolean }) =>
+      visible ? <View testID="playback-speed-sheet" /> : null,
+  };
+});
+jest.mock('../../store/sleepTimerStore', () => ({
+  sleepTimerStore: {
+    getState: () => ({ showSheet: mockShowSleepTimer }),
+  },
+}));
 
 jest.mock('../CachedImage', () => {
   const { View } = require('react-native');
@@ -1208,6 +1224,48 @@ describe('MoreOptionsSheet — delete playlist', () => {
   });
 });
 
+
+describe('MoreOptionsSheet — phone Now Playing relocated controls', () => {
+  it('shows both entries for phone song overflow, including offline', () => {
+    mockOfflineMode = true;
+    open(songEntity, 'player-phone-portrait');
+    expect(screen.getByText('Sleep Timer')).toBeTruthy();
+    expect(screen.getByText('Playback speed')).toBeTruthy();
+  });
+
+  it.each([
+    'default', 'playlist-detail', 'player-tablet-portrait',
+    'player-tablet-splitview', 'player-tablet-landscape',
+  ] as const)('does not expose the relocated controls from %s', (source) => {
+    open(songEntity, source);
+    expect(screen.queryByText('Sleep Timer')).toBeNull();
+    expect(screen.queryByText('Playback speed')).toBeNull();
+  });
+
+  it('does not expose phone controls for a non-song entity', () => {
+    open(albumEntity, 'player-phone-portrait');
+    expect(screen.queryByText('Sleep Timer')).toBeNull();
+    expect(screen.queryByText('Playback speed')).toBeNull();
+  });
+
+  it('opens Sleep Timer only after closing More Options', async () => {
+    open(songEntity, 'player-phone-portrait');
+    fireEvent.press(screen.getByText('Sleep Timer'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('bottom-sheet')).toBeNull();
+      expect(mockShowSleepTimer).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('opens Playback Speed only after closing More Options', async () => {
+    open(songEntity, 'player-phone-portrait');
+    fireEvent.press(screen.getByText('Playback speed'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('bottom-sheet')).toBeNull();
+      expect(screen.getByTestId('playback-speed-sheet')).toBeTruthy();
+    });
+  });
+});
 
 describe('MoreOptionsSheet — phone Now Playing audio output', () => {
   it('shows Audio Output on the phone player', () => {
