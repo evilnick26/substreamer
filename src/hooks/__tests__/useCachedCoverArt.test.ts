@@ -63,6 +63,59 @@ it('re-resolves on an offline flip', async () => {
   expect(mockResolve).toHaveBeenLastCalledWith({ coverArt: 'ar-1', albumId: undefined }, 300, { offline: true });
 });
 
+it('immediately hides the previous URI when the artwork request changes', async () => {
+  mockResolve.mockImplementation(({ coverArt }: { coverArt: string }) =>
+    Promise.resolve({ coverArtId: coverArt, uri: `file:///covers/${coverArt}.jpg`, isRemote: false }),
+  );
+  const { result, rerender } = renderHook(
+    ({ cover, album }: { cover: string; album: string }) => useCachedCoverArt(cover, 300, album),
+    { initialProps: { cover: 'track-a', album: 'album-a' } },
+  );
+  await waitFor(() => expect(result.current).toBe('file:///covers/track-a.jpg'));
+
+  rerender({ cover: 'track-b', album: 'album-b' });
+  // This assertion runs before the new asynchronous resolver can publish B.
+  expect(result.current).toBeNull();
+  await waitFor(() => expect(result.current).toBe('file:///covers/track-b.jpg'));
+});
+
+it('ignores an old artwork resolution that finishes after the new track', async () => {
+  let finishOld!: (value: { coverArtId: string; uri: string; isRemote: boolean }) => void;
+  mockResolve.mockImplementation(({ coverArt }: { coverArt: string }) => {
+    if (coverArt === 'track-a') {
+      return new Promise((resolve) => { finishOld = resolve; });
+    }
+    return Promise.resolve({ coverArtId: 'track-b', uri: 'file:///covers/b.jpg', isRemote: false });
+  });
+  const { result, rerender } = renderHook(
+    ({ cover }: { cover: string }) => useCachedCoverArt(cover, 300),
+    { initialProps: { cover: 'track-a' } },
+  );
+  expect(result.current).toBeNull();
+  rerender({ cover: 'track-b' });
+  await waitFor(() => expect(result.current).toBe('file:///covers/b.jpg'));
+
+  await act(async () => {
+    finishOld({ coverArtId: 'track-a', uri: 'file:///covers/a.jpg', isRemote: false });
+  });
+  expect(result.current).toBe('file:///covers/b.jpg');
+  expect(mockSubscribedId).toBe('track-b');
+});
+
+it('does not reuse a URI when only the album identity changes', async () => {
+  mockResolve.mockImplementation(({ albumId }: { albumId: string }) =>
+    Promise.resolve({ coverArtId: albumId, uri: `file:///albums/${albumId}.jpg`, isRemote: false }),
+  );
+  const { result, rerender } = renderHook(
+    ({ album }: { album: string }) => useCachedCoverArt('shared-song-cover', 300, album),
+    { initialProps: { album: 'album-a' } },
+  );
+  await waitFor(() => expect(result.current).toBe('file:///albums/album-a.jpg'));
+  rerender({ album: 'album-b' });
+  expect(result.current).toBeNull();
+  await waitFor(() => expect(result.current).toBe('file:///albums/album-b.jpg'));
+});
+
 it('returns null without resolving when there is no cover', async () => {
   const { result } = renderHook(() => useCachedCoverArt(undefined, 300));
   expect(result.current).toBeNull();

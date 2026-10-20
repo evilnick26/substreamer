@@ -31,18 +31,26 @@ export function useCachedCoverArt(
 ): string | null {
   const offline = offlineModeStore((s) => s.offlineMode);
   const songCoverArtMode = layoutPreferencesStore((s) => s.songCoverArtMode);
-  const [resolved, setResolved] = useState<{ uri: string | null; token?: string }>({ uri: null });
+  // A URI is valid only for the exact request that resolved it. React renders
+  // with the previous state before the next effect runs, so comparing identities
+  // here prevents the previous album's URI leaking into the new track.
+  const requestKey = JSON.stringify([coverArtId ?? null, albumId ?? null, size, offline, songCoverArtMode]);
+  const [resolved, setResolved] = useState<{
+    requestKey: string;
+    uri: string | null;
+    token?: string;
+  } | null>(null);
   const [resolveToken, bumpResolve] = useReducer((x: number) => x + 1, 0);
 
   useEffect(() => {
     if (!coverArtId) {
-      setResolved({ uri: null });
+      setResolved(null);
       return;
     }
     let cancelled = false;
     resolveDisplayImage({ coverArt: coverArtId, albumId }, size, { offline }).then((r) => {
       if (cancelled) return;
-      setResolved({ uri: r.uri, token: r.coverArtId });
+      setResolved({ requestKey, uri: r.uri, token: r.coverArtId });
       if (r.coverArtId && (r.uri == null || r.isRemote)) {
         ensureCached(r.coverArtId).catch(() => {
           /* non-critical: caching failure falls back to the network URL */
@@ -52,13 +60,14 @@ export function useCachedCoverArt(
     return () => {
       cancelled = true;
     };
-  }, [coverArtId, albumId, size, offline, songCoverArtMode, resolveToken]);
+  }, [coverArtId, albumId, size, offline, songCoverArtMode, resolveToken, requestKey]);
 
-  // Re-resolve when a download/resize lands for the resolved cover.
+  // Never subscribe to the previous cover's cache updates after a track change.
+  const current = resolved?.requestKey === requestKey ? resolved : null;
   useEffect(() => {
-    if (!resolved.token) return;
-    return subscribeImageCacheUpdate(resolved.token, bumpResolve);
-  }, [resolved.token]);
+    if (!current?.token) return;
+    return subscribeImageCacheUpdate(current.token, bumpResolve);
+  }, [current?.token]);
 
-  return resolved.uri;
+  return current?.uri ?? null;
 }

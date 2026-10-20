@@ -6,6 +6,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { Palette } from 'expo-image-colors';
+import { clearArtworkPaletteCacheForTests } from '../../services/artworkPaletteService';
 
 const mockGetPalette = jest.fn<Promise<Palette | null>, [string]>();
 jest.mock('expo-image-colors', () => ({
@@ -52,6 +53,7 @@ const PALETTE_B: Palette = {
 let uris: Record<string, string | null>;
 
 beforeEach(() => {
+  clearArtworkPaletteCacheForTests();
   mockGetPalette.mockReset();
   mockWithTiming.mockClear();
   mockConstants.appOwnership = null;

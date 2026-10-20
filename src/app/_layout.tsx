@@ -58,6 +58,7 @@ import { useDownloadBackgroundNotification } from '../hooks/useDownloadBackgroun
 import { useDownloadKeepAwake } from '../hooks/useDownloadKeepAwake';
 import { useLayoutMode } from '../hooks/useLayoutMode';
 import { useTheme } from '../hooks/useTheme';
+import { ArtworkAccentController } from '../components/ArtworkAccentController';
 import {
   deferredDataSyncInit,
   onConnectivityRestored,
@@ -715,6 +716,7 @@ export default function RootLayout() {
       <I18nextProvider i18n={i18n}>
       <ThemeProvider value={navigationTheme}>
       <RootErrorBoundary colors={colors}>
+      <ArtworkAccentController />
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
       <SplitLayout
         animate={animatePanel}

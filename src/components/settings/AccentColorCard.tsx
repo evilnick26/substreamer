@@ -5,11 +5,12 @@ import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../hooks/useTheme';
 import { settingsStyles } from '../../styles/settingsStyles';
-import { DEFAULT_PRIMARY_COLOR } from '../../store/themeStore';
+import { ARTWORK_PRIMARY_COLOR, DEFAULT_PRIMARY_COLOR } from '../../store/themeStore';
 import { SettingsSectionTitle } from './SettingsSectionTitle';
 
 const ACCENT_COLORS: { labelKey: string; hex: string }[] = [
   { labelKey: 'colorBlueDefault', hex: '#1D9BF0' },
+  { labelKey: 'colorAlbumArtwork', hex: ARTWORK_PRIMARY_COLOR },
   { labelKey: 'colorRed', hex: '#E91429' },
   { labelKey: 'colorGreen', hex: '#00BA7C' },
   { labelKey: 'colorOrange', hex: '#FF6F00' },
@@ -44,7 +45,7 @@ export function AccentColorCard() {
           style={({ pressed }) => [styles.header, pressed && settingsStyles.pressed]}
         >
           <View style={styles.chip}>
-            <View style={[styles.dot, { backgroundColor: activePrimary }]} />
+            {activePrimary === ARTWORK_PRIMARY_COLOR ? <ArtworkSwatch /> : <View style={[styles.dot, { backgroundColor: activePrimary }]} />}
             <Text style={[styles.label, { color: colors.textPrimary }]}>{activeLabel}</Text>
           </View>
           <Ionicons
@@ -68,7 +69,7 @@ export function AccentColorCard() {
                   ]}
                 >
                   <View style={styles.chip}>
-                    <View style={[styles.dot, { backgroundColor: c.hex }]} />
+                    {c.hex === ARTWORK_PRIMARY_COLOR ? <ArtworkSwatch /> : <View style={[styles.dot, { backgroundColor: c.hex }]} />}
                     <Text style={[styles.label, { color: colors.textPrimary }]}>
                       {t(c.labelKey)}
                     </Text>
@@ -97,7 +98,18 @@ export function AccentColorCard() {
   );
 }
 
+function ArtworkSwatch() {
+  return (
+    <View style={styles.artworkSwatch}>
+      {['#E91429', '#FFB900', '#00BA7C', '#1D9BF0', '#7B61FF'].map((color) => (
+        <View key={color} style={{ flex: 1, backgroundColor: color }} />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  artworkSwatch: { width: 22, height: 22, borderRadius: 11, overflow: 'hidden', flexDirection: 'row' },
   dropdown: { borderRadius: 12, overflow: 'hidden' },
   header: {
     flexDirection: 'row',

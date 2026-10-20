@@ -19,7 +19,8 @@ import { useSharedValue, withTiming, type SharedValue } from 'react-native-reani
 
 import { useCachedCoverArt } from './useCachedCoverArt';
 import { useTheme } from './useTheme';
-import { getImagePaletteAsync, type Palette } from 'expo-image-colors';
+import type { Palette } from 'expo-image-colors';
+import { getSharedArtworkPalette } from '../services/artworkPaletteService';
 
 /** Sentinel value: pass as coverArtId to explicitly skip extraction. */
 export const SKIP_COLOR_EXTRACTION = '__SKIP_COLOR_EXTRACTION__';
@@ -60,7 +61,7 @@ export function useImagePalette(
     let cancelled = false;
     (async () => {
       try {
-        const result = await getImagePaletteAsync(cachedUri);
+        const result = await getSharedArtworkPalette(cachedUri);
         if (!cancelled) setPalette(result);
       } catch {
         // Transient extraction failure (file mid-rewrite during a resize, a
