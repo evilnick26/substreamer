@@ -2,9 +2,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, sanctifi]
   pull_request:
-    branches: [master]
+    branches: [master, sanctifi]
 
 jobs:
   typecheck-and-test:
@@ -22,6 +22,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Validate release signing plugin
+        run: node --test plugins/__tests__/with-sanctifi-release-signing*.test.cjs
 
       - name: Validate translations
         run: node scripts/validate-translations.js

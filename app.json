@@ -79,6 +79,7 @@
       "./plugins/set-gradle-version",
       "./plugins/with-gradle-memory",
       "./plugins/with-proguard-optimize",
+      "./plugins/with-sanctifi-release-signing",
       "./modules/expo-ssl-trust/plugin",
       "./modules/expo-backup-exclusions/plugin",
       [
