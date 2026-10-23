@@ -122,7 +122,7 @@ Before distributing anything:
 No extra npm dependencies are needed:
 
 ```bash
-node --test plugins/__tests__/with-sanctifi-release-signing.test.cjs
+node --test plugins/__tests__/with-sanctifi-release-signing*.test.cjs
 ```
 
 For runtime checks, point `GRADLE_BIN` to a trusted Gradle 8.14.3 installation:
@@ -136,8 +136,80 @@ Without `GRADLE_BIN`, the runtime group is explicitly skipped. The runtime harne
 uses isolated user/Gradle directories, dummy passwords and a text file that is not
 a keystore. It exercises the generated validation task and lifecycle dependency
 wiring; it does **not** run AGP, produce an APK, or prove native signing works.
-The existing GitHub Actions test workflow runs the Node checks; its Gradle runtime
-group is skipped unless a Gradle executable is explicitly supplied.
+The GitHub Actions workflow runs on PRs targeting `sanctifi` as well as `master`.
+It runs both test files; runtime groups explicitly skip without their prerequisites.
+
+### Real Android Gradle Plugin checks
+
+The fork installs Expo 57.0.8 and React Native 0.86.0. React Native's Gradle plugin
+catalog selects AGP 8.12.0; `plugins/set-gradle-version.js` pins Gradle 8.14.3.
+React Native's Android catalog defaults to compileSdk 36 and build-tools 36.0.0.
+The AGP test asserts the loaded AGP/Gradle versions, not just the dependency request.
+
+`with-sanctifi-release-signing.agp.test.cjs` applies the generated signing logic to
+a temporary minimal Android application using those versions. It checks actual
+nullable DSL fields, the debug assembly task graph, debug Java compilation, the
+release assembly task graph, and failure of real `preReleaseBuild`. It never
+executes APK assembly, signing or key generation, and checks for accidental APKs
+or keystores. It does not load React Native/Expo's entire native application.
+
+To run with an existing trusted Gradle, a full JDK (not a JRE), Android platform
+36 and build-tools 36.0.0 installed outside the checkout:
+
+```bash
+GRADLE_BIN=/absolute/path/to/gradle-8.14.3/bin/gradle \
+SANCTIFI_AGP_SDK=/absolute/path/to/android-sdk \
+  node --test plugins/__tests__/with-sanctifi-release-signing.agp.test.cjs
+```
+
+The test uses temporary project/Android-user directories and overrides signing
+properties with a nonexistent fixture path. It downloads AGP/AAPT dependencies
+from Google Maven and Maven Central as needed. `GRADLE_USER_HOME` can select a
+dedicated dependency cache; otherwise a temporary cache is used. An optional
+`SANCTIFI_AGP_INIT_SCRIPT` can supply the machine's supported Gradle networking
+configuration. No proxy credentials belong in this repository.
+
+The published [AGP 8.12.0 source artifact](https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/8.12.0/gradle-8.12.0-sources.jar)
+also explains the integration:
+
+- `internal/dsl/SigningConfig.kt` accepts nullable signing setters.
+- `internal/TaskManager.kt`, `createValidateSigningTask`, omits AGP's own signing
+  validation when `isSigningReady()` is false. Do not rely on that task alone.
+- `internal/tasks/factory/TaskActions.kt`, `VariantTaskCreationAction.configure`,
+  connects ordinary variant tasks to the variant's pre-build task. The real
+  `assembleRelease --dry-run` test verifies that our validator precedes
+  `preReleaseBuild` even with no AGP `validateSigningRelease` task present.
+
+These are AGP-level results. Futwick must still confirm the resolved AGP version
+and task graph in the complete Expo/React Native application after regeneration.
+
+### Futwick integration acceptance commands
+
+After review and regeneration, use the existing Android project and supported JDK
+environment. These commands do not assemble an APK or generate a signing key:
+
+```bash
+cd android
+./gradlew :app:buildEnvironment
+SF_CHECK_DIR="$(mktemp -d)" || exit 1
+SANCTIFI_SIGNING_PROPERTIES="$SF_CHECK_DIR/absent.properties" \
+  ./gradlew :app:assembleDebug --dry-run
+SANCTIFI_SIGNING_PROPERTIES="$SF_CHECK_DIR/absent.properties" \
+  ./gradlew :app:assembleRelease --dry-run
+SF_GRADLE_STATUS=0
+SANCTIFI_SIGNING_PROPERTIES="$SF_CHECK_DIR/absent.properties" \
+  ./gradlew :app:preReleaseBuild || SF_GRADLE_STATUS=$?
+printf 'preReleaseBuild exit status: %s (expected nonzero)\n' "$SF_GRADLE_STATUS"
+rmdir "$SF_CHECK_DIR"
+```
+
+Confirm `buildEnvironment` resolves AGP 8.12.0 (report any override). The debug
+graph must exclude `:app:validateSanctifiReleaseSigning`; the release graph must
+include it before `:app:preReleaseBuild` and `:app:assembleRelease`. The last
+Gradle command must fail at `:app:validateSanctifiReleaseSigning` with the missing
+properties message and a nonzero recorded exit status. A dry run's `SKIPPED` lines
+describe graph membership and ordering, not executed validation. Full debug APK
+assembly, release signing and device upgrade acceptance remain separate steps.
 
 ## Native acceptance on futwick — still required
 

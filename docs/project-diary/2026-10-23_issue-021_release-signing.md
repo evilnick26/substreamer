@@ -48,3 +48,38 @@ builds, permanent-key generation and recovery, certificate comparison, and signe
 in-place upgrades.
 No permanent key has been created, no local credentials changed, and no production
 release build attempted. Release readiness is not established by this PR.
+
+### PR review follow-up: actual Android plugin integration
+
+Carl requested evidence that an incomplete release signer permits debug work and
+that actual release assembly reaches our validator. No signing-plugin change was
+needed. Added a real-AGP regression test using a temporary minimal Android project:
+Expo 57.0.8 / React Native 0.86.0 select AGP 8.12.0; the fork pins Gradle 8.14.3.
+React Native's catalog defaults to compileSdk 36 and build-tools 36.0.0. The probe
+asserts loaded AGP/Gradle versions.
+
+The six real-AGP checks passed: nullable release fields with unchanged debug
+signer; debug assembly graph without release validation; actual debug Java
+compilation; release assembly graph ordering our validator before preReleaseBuild;
+real preReleaseBuild failure at our validator; and absence of generated APKs or
+signing keys. Node counts these six checks plus their parent as seven passed.
+
+AGP source and runtime agree: AGP omits validateSigningRelease when signing fields
+are incomplete, so the preReleaseBuild dependency is necessary. The new tests
+exercise actual AGP tasks rather than the original empty lifecycle harness.
+The first compilation attempt exposed a JRE-only cloud installation; installing
+a checksum-verified temporary JDK 21 resolved it. Android platform/build-tools
+archives were checked against Google's published repository checksums. No keys or
+production credentials were used.
+
+CI now includes sanctifi push/PR targets and discovers both signing test files.
+Real-AGP checks explicitly skip without their Gradle/SDK prerequisites. Full app
+AGP resolution/task graphs after regeneration, debug APK packaging, actual release
+signing, key recovery and device upgrades remain futwick acceptance work; exact
+credential-free graph/validation commands are in the signing guide. The earlier
+full Jest/TypeScript results above belong to the initial implementation; this
+follow-up changes tests, CI and documentation only.
+
+Final combined signing run: 28 tests passed, none skipped or failed. Without
+runtime prerequisites (CI mode): 12 passed, two runtime groups explicitly skipped.
+Whitespace checks passed. The signing plugin itself is unchanged from c1c1581a.
