@@ -11,7 +11,7 @@ const revision = '1'.repeat(40);
 const bytes = Buffer.from('Synthetic APK bytes for filesystem tests; not a signed APK.');
 const checksum = crypto.createHash('sha256').update(bytes).digest('hex');
 const manifest = () => ({ schemaVersion: 1, versionCode: 80000186, versionName: '8.1.8',
-  apkUrl: 'https://sancti.fi/updates/apks/sanctifi-80000186.apk', sha256: checksum });
+  apkUrl: 'https://updates.sancti.fi/client/apks/sanctifi-80000186.apk', sha256: checksum });
 
 // SDK process outputs are simulated; no keys or signed APKs are created.
 function sdk({ code = '80000186', name = '8.1.8', packageName = 'fi.sancti.client', cert = CERTIFICATE } = {}) {
@@ -62,15 +62,18 @@ for (const [name, value] of [
 }
 
 for (const url of [
-  'http://sancti.fi/updates/apks/sanctifi-80000186.apk',
-  'https://other.example/updates/apks/sanctifi-80000186.apk',
-  'https://sancti.fi/updates/apks/sanctifi-80000185.apk',
-  'https://sancti.fi/updates/apks/app-release.apk',
-  'https://user:pass@sancti.fi/updates/apks/sanctifi-80000186.apk',
-  'https://sancti.fi:444/updates/apks/sanctifi-80000186.apk',
-  'https://sancti.fi/updates/apks/sanctifi-80000186.apk?x=1',
-  'https://sancti.fi/updates/apks/sanctifi-80000186.apk#fragment',
-  'https://sancti.fi/updates/apks/../apks/sanctifi-80000186.apk',
+  'https://sancti.fi/updates/apks/sanctifi-80000186.apk',
+  'https://sancti.fi/client/apks/sanctifi-80000186.apk',
+  'https://updates.sancti.fi/updates/apks/sanctifi-80000186.apk',
+  'http://updates.sancti.fi/client/apks/sanctifi-80000186.apk',
+  'https://other.example/client/apks/sanctifi-80000186.apk',
+  'https://updates.sancti.fi/client/apks/sanctifi-80000185.apk',
+  'https://updates.sancti.fi/client/apks/app-release.apk',
+  'https://user:pass@updates.sancti.fi/client/apks/sanctifi-80000186.apk',
+  'https://updates.sancti.fi:444/client/apks/sanctifi-80000186.apk',
+  'https://updates.sancti.fi/client/apks/sanctifi-80000186.apk?x=1',
+  'https://updates.sancti.fi/client/apks/sanctifi-80000186.apk#fragment',
+  'https://updates.sancti.fi/client/apks/../apks/sanctifi-80000186.apk',
 ]) {
   test(`rejects noncanonical URL ${url}`, () => assert.throws(() => validateManifest({ ...manifest(), apkUrl: url })));
 }

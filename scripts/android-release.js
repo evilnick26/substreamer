@@ -29,7 +29,7 @@ function validateManifest(value) {
   check(Object.keys(value).every((key) => [...required, 'releaseNotes'].includes(key)), 'Unknown manifest field');
   check(value.schemaVersion === 1, 'Unsupported schemaVersion');
   validateVersion(value.versionCode, value.versionName);
-  check(value.apkUrl === `https://sancti.fi/updates/apks/sanctifi-${value.versionCode}.apk`,
+  check(value.apkUrl === `https://updates.sancti.fi/client/apks/sanctifi-${value.versionCode}.apk`,
     'apkUrl must use the canonical HTTPS archive URL matching versionCode');
   check(typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.sha256),
     'sha256 must contain 64 lowercase hexadecimal characters');
