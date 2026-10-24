@@ -28,7 +28,7 @@ export default function PlayDeepLinkRoute() {
     dispatchedRef.current = true;
     const request = buildMediaSearchRequest(params);
     if (request) void dispatchVoiceSearchRequest(request);
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/library');
   }, [params]);
 
   return null;

@@ -77,7 +77,7 @@ export function LoginScreen() {
         // _layout (runs whenever logged-in + hydrated), so no proxy call here.
         const info = await fetchServerInfo();
         if (info) serverInfoStore.getState().setServerInfo(info);
-        router.replace('/');
+        router.replace('/(tabs)/library');
       } else {
         setError(result.error || t('connectionFailedAfterTrust'));
       }
@@ -97,7 +97,7 @@ export function LoginScreen() {
   }, [t]);
 
   if (isLoggedIn) {
-    return <Redirect href="/" />;
+    return <Redirect href="/(tabs)/library" />;
   }
 
   const handleManualCertTrust = async () => {
@@ -178,7 +178,7 @@ export function LoginScreen() {
       if (!onboardingStore.getState().hasCompleted) {
         onboardingStore.getState().show();
       }
-      router.replace('/');
+      router.replace('/(tabs)/library');
       return;
     }
 

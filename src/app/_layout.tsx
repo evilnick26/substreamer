@@ -5,7 +5,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Appearance, AppState, BackHandler, Dimensions, LogBox, Platform, StyleSheet, View } from 'react-native';
+import { Appearance, AppState, Dimensions, LogBox, Platform, StyleSheet, View } from 'react-native';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -58,6 +58,7 @@ import { useDownloadBackgroundNotification } from '../hooks/useDownloadBackgroun
 import { useDownloadKeepAwake } from '../hooks/useDownloadKeepAwake';
 import { useLayoutMode } from '../hooks/useLayoutMode';
 import { useTheme } from '../hooks/useTheme';
+import { useAndroidTabBack } from '../hooks/useAndroidTabBack';
 import { ArtworkAccentController } from '../components/ArtworkAccentController';
 import { ClientUpdateBanner } from '../components/ClientUpdateBanner';
 import {
@@ -96,7 +97,6 @@ import { initSslTrustStore, syncProxyUpstreams, trustCertificateForHost } from '
 import { runAutoBackupIfNeeded } from '../services/backupService';
 import { startAutoOffline, stopAutoOffline } from '../services/autoOfflineService';
 import { excludeFromBackup } from 'expo-backup-exclusions';
-import { moveToBack } from 'expo-move-to-back';
 import { flushAllPersistStorages } from '../store/persistence';
 import { awaitKvHydration, rehydrateAllStores } from '../store/persistence/rehydrate';
 import { albumListsStore } from '../store/albumListsStore';
@@ -315,6 +315,11 @@ async function runDeferredStartup(getCancelled: () => boolean): Promise<void> {
  * refreshes both bypass it.
  */
 const FOREGROUND_REFRESH_THRESHOLD_MS = 10 * 60_000;
+
+// Resolve / through IndexScreen rather than the retained Home route.
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 export default function RootLayout() {
   const [splashVisible, setSplashVisible] = useState(true);
@@ -608,31 +613,7 @@ export default function RootLayout() {
     restorePersistedQueueAfterBoot();
   }, [rehydrated, isLoggedIn, startupBlocked]);
 
-  // --- Android: background the app instead of killing it at the root ---
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-
-    const handler = () => {
-      // Intercept back on all root tab screens to prevent react-native-screens
-      // from calling canNavigateBack() on a tab fragment (not a ScreenStack),
-      // which throws IllegalStateException.
-      if (segments[0] === '(tabs)') {
-        const tab = (segments as string[])[1];
-        if (!tab || tab === 'index') {
-          // Already on the home tab — background the app
-          moveToBack();
-        } else {
-          // On another tab — navigate to the home tab first
-          router.navigate('/(tabs)');
-        }
-        return true;
-      }
-      return false;
-    };
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', handler);
-    return () => subscription.remove();
-  }, [segments, router]);
+  useAndroidTabBack();
 
   // --- Auth-based navigation ---
   // Use router.replace inside useEffect instead of <Redirect> so the
@@ -649,7 +630,7 @@ export default function RootLayout() {
       if (router.canDismiss()) router.dismissAll();
       router.replace('/login');
     } else if (isLoggedIn && onLoginScreen) {
-      router.replace('/');
+      router.replace('/(tabs)/library');
     }
   }, [rehydrated, isLoggedIn, splashVisible, segments, router]);
 
