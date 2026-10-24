@@ -114,3 +114,80 @@ unvalidated. No production APK build, native regeneration,
 release publication, infrastructure change, signing change or version-number
 change was performed. Issue 023 remains subject to physical acceptance and PR
 review; the PR must not be merged by Codex.
+
+### Owner physical-device acceptance — evening of 24 October 2026
+
+This section records subsequent owner validation after PR #36 was reviewed and
+merged into `sanctifi`. It supersedes the earlier statement that no physical
+Android execution or screenshots were available **at implementation time**;
+the earlier investigation and automated-test record above is retained as
+historical evidence.
+
+- On futwick, `npm ci` succeeded and the existing generated Android project
+  was used without native regeneration or a Gradle clean. A temporary,
+  **local-only** versionCode increase from published Alpha `80000186` to
+  `80000187` was made in `app.json` and generated
+  `android/app/build.gradle` for acceptance testing. Display versionName
+  remained `8.1.8`; sancti.fi client display version remained `0.1.1`.
+- After a reboot, the initial build attempts were blocked by missing
+  `JAVA_HOME` and `ANDROID_HOME`, not source-code errors. The existing
+  Temurin JDK `17.0.20.1+1` was located at
+  `/media/data/Complete/Sanctifi/Development/Android/jdk/jdk-17.0.20.1+1`
+  and the existing SDK at
+  `/media/data/Complete/Sanctifi/Development/Android/sdk`. Both variables
+  and their relevant executable paths were added to the owner's
+  `~/.bashrc`. A fresh terminal confirmed Java, ADB, Android API 36 and
+  Build Tools 36.0.0 are available. This setup assumes `/media/data`
+  remains mounted.
+- `NODE_ENV=production ./gradlew :app:assembleRelease` succeeded:
+  **BUILD SUCCESSFUL in 1h 24m**, 1,518 actionable tasks (1,037 executed,
+  481 up-to-date). The resulting APK was approximately 76 MB at
+  `android/app/build/outputs/apk/release/app-release.apk`.
+- `apksigner verify --verbose --print-certs` succeeded with APK Signature
+  Scheme v2 and one signer. Signing certificate SHA-256:
+  `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c`,
+  matching the permanent sancti.fi Android release identity.
+  `aapt dump badging` confirmed package `fi.sancti.client`,
+  versionCode `80000187`, versionName `8.1.8`, compileSdk 36.
+  Local test APK SHA-256:
+  `ab469dcf90ef14ee4d7df2bebcb7ed6da3b3c64cf1fe7eff2c4bfb520657952b`.
+- `adb devices` showed the phone as an authorised device; `adb install -r`
+  returned **Success**. The existing app was upgraded in place without
+  uninstalling or deliberately clearing app data. This verifies install
+  acceptance, not a full post-upgrade data-integrity audit.
+- **PASS — manual update check / no downgrade:** the on-device Settings
+  screenshot displayed: “Installed build 80000187 is newer than the Alpha
+  release. No downgrade offered.” This validates the actual installed-build
+  comparison against the published `80000186` Alpha for the older-release
+  case. No download was offered.
+- **PASS — inherited Developer Options unlock:** a second on-device
+  screenshot after the five-tap gesture showed the additional **File
+  Explorer** and **Logging** Settings entries. The sancti.fi update-check
+  label and inherited `Version 8.1.8 (187)` footer were both visible.
+- **Visual observation:** the manual result text remained visible below the
+  sancti.fi version label after Developer Options was unlocked. This was
+  accepted for Alpha; any future presentation adjustment is optional and
+  should be separately scoped.
+- **Local cleanup:** the temporary tracked `app.json` versionCode change
+  was restored with `git restore -- app.json`; generated
+  `android/app/build.gradle` was also changed back to `80000186`.
+  The command output confirmed the generated-file restoration; a final
+  `git status --short` result was not shown. The installed phone build
+  remains `80000187`. **Do not publish the local test APK** or alter the
+  live Alpha manifest to test a newer release.
+
+### Remaining Issue 023 acceptance after physical-device tests
+
+- Automatic startup check behaviour, including silent offline/timeout errors
+  and lack of disruption to navigation or playback.
+- Manual offline/error feedback and retry.
+- Controlled **newer** manifest: automatic banner, dismissal, process-level
+  deduplication, manual release-details dialog, explicit Download action,
+  correct external browser URL and browser failure handling.
+- Repeat manual checks and platform cache/freshness behaviour.
+- Final clean-working-tree confirmation and, when acceptance is complete,
+  issue status update. No claim of complete Issue 023 acceptance is made yet.
+
+Issue #035 (legacy Home-tab removal) remains separate and is deferred for
+the next development session; no #035 code was merged as part of this
+physical acceptance.
