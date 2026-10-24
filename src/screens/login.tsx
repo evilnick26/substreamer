@@ -282,6 +282,7 @@ export function LoginScreen() {
               setError(null);
             }}
             secureTextEntry
+            autoCapitalize="none"
             editable={!loading}
             returnKeyType="go"
             onSubmitEditing={handleSubmit}
