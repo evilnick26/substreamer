@@ -6,9 +6,12 @@ This procedure prepares files locally. It does not build/sign APKs, upload files
 change versions, install updates or implement the client checks owned by Issue 023.
 Nick's hosting investigation confirmed that the existing Caddy container serves
 `https://updates.sancti.fi/` from host root `/opt/updates-site`, and that the website
-responds successfully over HTTPS. These are owner-reported hosting findings, not
-independent deployment validation by this tooling. No live client release is
-established by this PR.
+responds successfully over HTTPS. Nick subsequently confirmed the first live
+Alpha publication on **24 October 2026**: `alpha.json` and the immutable
+`sanctifi-80000186.apk` both return HTTP/2 200, and the complete public APK download
+matches the checksum on futwick and the host. These are owner-reported deployment
+results, recorded in the [Alpha publication diary](project-diary/2026-10-24_issue-022_alpha-publication.md),
+not checks repeated or a deployment performed by this documentation update.
 
 Public layout:
 
@@ -21,24 +24,32 @@ https://updates.sancti.fi/client/apks/sanctifi-<versionCode>.apk
 
 The approved client distribution directory is `/opt/updates-site/client/`.
 Existing `index.html`, `assets/`, `files/` and `quickstart/` content under the
-hosting root must remain untouched. The directory tree is predominantly
-root-owned: establish suitable, narrowly scoped publishing permissions for the
-client subtree before deployment, rather than changing ownership or permissions
-of the whole site. Do not use broad world-writable permissions.
+hosting root must remain untouched. The verified directories are `root:root`,
+mode `755`; published files are `root:root`, mode `644`. The successful manual
+procedure transfers to `/tmp/` on obscurity and uses privileged installation into
+the publication directory. Future publishers need suitable scoped privileges;
+this does not establish direct unprivileged write access. Do not change ownership
+or permissions of the whole site or use broad world-writable permissions.
 
 This contract supersedes the earlier `https://sancti.fi/updates/` layout; the
 validator accepts only the new exact APK URL. There are no alternate allowed
-hosts or runtime URL configuration options. Confirm the mapping of the client
-subtree, actual permissions, cache behaviour, same-filesystem atomic replacement
-and complete public APK downloads during live acceptance. Website HTTPS success
-alone does not establish those properties. This PR creates no remote directories,
-changes no Caddy configuration and publishes no APKs or manifests.
+hosts or runtime URL configuration options. The first Alpha publication confirms
+the client mapping, reported permissions, complete public APK download and a
+successful same-directory manifest rename. Cache policy and failure/concurrency
+behaviour still need separate consideration. Existing Caddy served the files
+without configuration changes. No remote operations are performed by this update.
 
 Each JSON URL is a channel pointer. Channel is not an APK property. Promote the
 same artifact by changing a manifest only: never rebuild, resign or duplicate it.
-Initially publish Alpha; leave Beta/Stable unavailable (404, not dummy manifests)
-until approved for promotion. Demonstrate multiple-channel references in tests or
+Alpha is published; Beta/Stable remain unavailable (both returned 404 on
+24 October), not dummy manifests, until approved for promotion. Demonstrate multiple-channel references in tests or
 staging without inadvertently advertising a production Stable release.
+
+The published APK is **79,545,302 bytes**, package `fi.sancti.client`, versionCode
+`80000186`, versionName `8.1.8`. Its SHA-256 is
+`42f7945d52433a993765a42fb3416e65e996507bfce2f635f4958877673d222f`.
+The 297-byte Alpha manifest passed local schema validation and references that
+artifact, version metadata and checksum. Preserve this APK's bytes and metadata.
 
 ## Manifest contract: schemaVersion 1
 
@@ -200,10 +211,15 @@ APK still requires manifest versionName `8.1.8`; advertising it as `0.1.1` or
    when authorised, then stage the verified APK as above. Copy its recorded
    metadata/checksum into the ledger and candidate manifest. Never use Settings
    text as a substitute for APK inspection.
-2. Transfer the staged APK to a temporary, noncanonical upload name on sancti.fi.
-   Only after transfer completes expose its permanent archive filename. Refuse
-   an existing different artifact; compare a full download if the name already
-   exists. Identical bytes make retry safe. Never overwrite an archive URL.
+2. Follow the successful manual transfer pattern: SCP the staged APK from futwick
+   to `/tmp/` on obscurity, verify its checksum there, then use privileged
+   installation into `/opt/updates-site/client/apks/`. Verify the installed file's
+   checksum and ownership/mode before advertising it. The first deployment's
+   hashes matched at all these stages. **Before installation, guard the immutable
+   destination filename:** if it exists, compare its bytes/checksum and reuse an
+   identical artifact without overwriting; stop on any difference. Use exclusive
+   creation or a checked single-publisher procedure, never a blind overwriting
+   install command. Temporary transfers do not constitute publication.
 3. Perform a **complete GET** of the final APK URL to a temporary local file.
    Require HTTP 200, HTTPS with normal certificate verification, no login/cross-
    host redirect or HTML response, and the exact checksum. A HEAD request or
@@ -222,8 +238,10 @@ APK still requires manifest versionName `8.1.8`; advertising it as `0.1.1` or
    a separate temporary file, validate its transferred contents, then replace
    `alpha.json` using an atomic rename on the same filesystem or a confirmed
    equivalent. Never stream an overwrite into live JSON. The target directory is
-   `/opt/updates-site/client/`; exact transfer/rename commands, publishing
-   permissions and filesystem guarantees still require live validation.
+   `/opt/updates-site/client/`. The first deployment transferred the manifest to
+   a temporary location, installed it as `.alpha.json.new` in that destination
+   directory, then renamed it to `alpha.json`. Preserve this temporary-file /
+   same-directory replacement pattern and validate each candidate before renaming.
 6. Fetch the live manifest and referenced APK over public HTTPS again and rerun
    the artifact comparison. Check ordinary requests as well as a cache-bypassing
    request. If it fails, restore the last known-good manifest and investigate.
@@ -236,10 +254,18 @@ publisher can bypass a manual checklist. Live acceptance must prove failed
 uploads leave current channel pointers unchanged and temporary files are not
 served as final artifacts. Use one publisher at a time initially.
 
-Recommended hosting: manifests `Cache-Control: no-store`; immutable APKs
-`Cache-Control: public, max-age=31536000, immutable`. Confirm actual Caddy headers,
-permissions, public GETs, cache/error handling and rename semantics before Alpha
-publication. No hosting configuration is changed here.
+First-publication HTTP observations: the APK returned HTTP/2 200 with the correct
+Android APK MIME type, `Accept-Ranges: bytes`, `ETag` and `Last-Modified`. Alpha
+JSON returned HTTP/2 200, `Content-Type: application/json`, `ETag` and
+`Last-Modified`. **Neither response included explicit `Cache-Control`.**
+
+An explicit cache policy remains a future consideration, particularly for Issue
+023's client update checks. The earlier recommendations (manifest `no-store`,
+immutable APK `public, max-age=31536000, immutable`) are not deployed guarantees.
+Absence of explicit headers does not prove absence of caching. Agree and validate
+freshness/conditional-request behaviour before relying on it in client checks.
+No Caddy configuration changes are made here; failed-upload safety, cache effects
+and concurrent-reader behaviour are not established by the successful publication.
 
 ## Promotion, withdrawal and client channel assignment
 
