@@ -83,3 +83,10 @@ follow-up changes tests, CI and documentation only.
 Final combined signing run: 28 tests passed, none skipped or failed. Without
 runtime prerequisites (CI mode): 12 passed, two runtime groups explicitly skipped.
 Whitespace checks passed. The signing plugin itself is unchanged from c1c1581a.
+
+### 24 October validation follow-up
+
+The futwick results reported by Nick on 24 October are recorded in
+[the dated validation entry](2026-10-24_issue-021_futwick-validation.md).
+That entry updates the outstanding-work status above without rewriting the
+investigation, implementation or cloud-validation history.
