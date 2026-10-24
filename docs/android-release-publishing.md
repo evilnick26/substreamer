@@ -4,17 +4,35 @@
 
 This procedure prepares files locally. It does not build/sign APKs, upload files,
 change versions, install updates or implement the client checks owned by Issue 023.
-Hosting document roots, deployment access, atomic renames and cache behaviour
-still need verification on sancti.fi. No live release is established by this PR.
+Nick's hosting investigation confirmed that the existing Caddy container serves
+`https://updates.sancti.fi/` from host root `/opt/updates-site`, and that the website
+responds successfully over HTTPS. These are owner-reported hosting findings, not
+independent deployment validation by this tooling. No live client release is
+established by this PR.
 
 Public layout:
 
 ```text
-https://sancti.fi/updates/alpha.json
-https://sancti.fi/updates/beta.json
-https://sancti.fi/updates/release.json
-https://sancti.fi/updates/apks/sanctifi-<versionCode>.apk
+https://updates.sancti.fi/client/alpha.json
+https://updates.sancti.fi/client/beta.json
+https://updates.sancti.fi/client/release.json
+https://updates.sancti.fi/client/apks/sanctifi-<versionCode>.apk
 ```
+
+The approved client distribution directory is `/opt/updates-site/client/`.
+Existing `index.html`, `assets/`, `files/` and `quickstart/` content under the
+hosting root must remain untouched. The directory tree is predominantly
+root-owned: establish suitable, narrowly scoped publishing permissions for the
+client subtree before deployment, rather than changing ownership or permissions
+of the whole site. Do not use broad world-writable permissions.
+
+This contract supersedes the earlier `https://sancti.fi/updates/` layout; the
+validator accepts only the new exact APK URL. There are no alternate allowed
+hosts or runtime URL configuration options. Confirm the mapping of the client
+subtree, actual permissions, cache behaviour, same-filesystem atomic replacement
+and complete public APK downloads during live acceptance. Website HTTPS success
+alone does not establish those properties. This PR creates no remote directories,
+changes no Caddy configuration and publishes no APKs or manifests.
 
 Each JSON URL is a channel pointer. Channel is not an APK property. Promote the
 same artifact by changing a manifest only: never rebuild, resign or duplicate it.
@@ -31,7 +49,7 @@ Required fields:
 | `schemaVersion` | Integer `1`; reject unsupported versions. |
 | `versionCode` | Integer from 1 through 2100000000; order Android updates using this value only. |
 | `versionName` | Nonempty string, at most 128 characters, without surrounding whitespace; exactly match the APK. |
-| `apkUrl` | Exactly `https://sancti.fi/updates/apks/sanctifi-<versionCode>.apk`; no query, fragment, userinfo, alternate host/port or encoded path variants. |
+| `apkUrl` | Exactly `https://updates.sancti.fi/client/apks/sanctifi-<versionCode>.apk`; no query, fragment, userinfo, alternate host/port or encoded path variants. |
 | `sha256` | The APK bytes' SHA-256: exactly 64 lowercase hexadecimal characters. |
 | `releaseNotes` | Optional plain-text string, at most 4000 characters; render as text, never executable markup. |
 
@@ -203,8 +221,9 @@ APK still requires manifest versionName `8.1.8`; advertising it as `0.1.1` or
 5. Retain the old live manifest outside the public URL. Upload the candidate to
    a separate temporary file, validate its transferred contents, then replace
    `alpha.json` using an atomic rename on the same filesystem or a confirmed
-   equivalent. Never stream an overwrite into live JSON. Exact server paths and
-   commands must be agreed after inspecting the hosting environment.
+   equivalent. Never stream an overwrite into live JSON. The target directory is
+   `/opt/updates-site/client/`; exact transfer/rename commands, publishing
+   permissions and filesystem guarantees still require live validation.
 6. Fetch the live manifest and referenced APK over public HTTPS again and rerun
    the artifact comparison. Check ordinary requests as well as a cache-bypassing
    request. If it fails, restore the last known-good manifest and investigate.

@@ -31,3 +31,7 @@
 ## Outstanding work
 - Finish #022 manifest contract and publishing procedure; implement client update checks in #023.
 - Optionally investigate Library order persistence under a separate low-priority issue; not an Alpha blocker.
+
+The hosting layout noted above was subsequently superseded by
+`https://updates.sancti.fi/client/`; see the
+[distribution URL follow-up](2026-10-24_issue-022_distribution-url.md).
