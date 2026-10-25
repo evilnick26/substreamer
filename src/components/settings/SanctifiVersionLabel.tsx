@@ -1,17 +1,22 @@
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../hooks/useTheme';
-import { SANCTIFI_VERSION } from '../../config/sanctifiVersion';
 import { clientUpdateChecker } from '../../services/clientUpdateService';
 import { useClientUpdateFeedback } from '../../hooks/useClientUpdateFeedback';
 
-/** Additive sancti.fi identity above Substreamer's untouched version footer. */
+/** The sancti.fi identity and manual update target, separate from the upstream footer. */
 export function SanctifiVersionLabel() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const showUpdate = useClientUpdateFeedback();
+  const configuredVersion = Constants.expoConfig?.extra?.sanctifiVersion;
+  const version = typeof configuredVersion === 'string' && configuredVersion.length > 0
+    ? configuredVersion : t('unknown');
+  const build = Application.nativeBuildVersion || t('unknown');
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const busy = useRef(false);
@@ -42,38 +47,41 @@ export function SanctifiVersionLabel() {
   }
 
   return (
-    <View style={styles.container}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('clientUpdateCheck')}
-        accessibilityState={{ busy: checking, disabled: checking }}
-        disabled={checking}
-        onPress={checkForUpdates}
-      >
-        <Text style={[styles.version, { color: colors.textSecondary }]}>
-          {`sancti.fi client Version ${SANCTIFI_VERSION}`}
-        </Text>
-      </Pressable>
-      <Text style={[styles.basedOn, { color: colors.textSecondary }]}>Based on Substreamer</Text>
+    <Pressable
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={t('clientUpdateCheck')}
+      accessibilityHint={t('clientUpdateCheckHint')}
+      accessibilityValue={{ text: `${t('clientVersionLabel', { version })}, ${t('clientBuildLabel', { build })}` }}
+      accessibilityState={{ busy: checking, disabled: checking }}
+      disabled={checking}
+      onPress={checkForUpdates}
+    >
+      <Text style={[styles.title, { color: colors.textPrimary }]}>sancti.fi Client</Text>
+      <Text style={[styles.version, { color: colors.textSecondary }]}>{t('clientVersionLabel', { version })}</Text>
+      <Text style={[styles.version, { color: colors.textSecondary }]}>{t('clientBuildLabel', { build })}</Text>
+      <Text style={[styles.hint, { color: colors.primary }]}>{t('clientUpdateTapHint')}</Text>
       {message !== null && (
         <Text accessibilityLiveRegion="polite" style={[styles.version, { color: colors.textSecondary }]}>
           {message}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    alignSelf: 'stretch',
     alignItems: 'center',
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
   },
-  version: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  basedOn: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
+  pressed: { opacity: 0.7 },
+  title: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  version: { fontSize: 14, textAlign: 'center' },
+  hint: { fontSize: 13, textAlign: 'center' },
 });

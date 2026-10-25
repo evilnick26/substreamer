@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { SettingsLinkRow } from '../components/settings/SettingsLinkRow';
@@ -9,6 +9,7 @@ import { VersionFooter } from '../components/settings/VersionFooter';
 import { devOptionsStore } from '../store/devOptionsStore';
 import { onboardingStore } from '../store/onboardingStore';
 import { searchStore } from '../store/searchStore';
+import { useTheme } from '../hooks/useTheme';
 
 import type { IoniconsName } from '../utils/iconNames';
 
@@ -34,6 +35,7 @@ const DEV_SETTINGS_LINKS: typeof SETTINGS_LINKS = [
 export function SettingsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { colors } = useTheme();
   const headerHeight = searchStore((s) => s.headerHeight);
   const devEnabled = devOptionsStore((s) => s.enabled);
 
@@ -68,14 +70,19 @@ export function SettingsScreen() {
         icon="help-circle-outline"
         onPress={handleShowOnboarding}
       />
-      <SanctifiVersionLabel />
-      <VersionFooter />
+      <View style={styles.versionFooter}>
+        <SanctifiVersionLabel />
+        <Text style={[styles.attribution, { color: colors.textSecondary }]}>{t('basedOnSubstreamer')}</Text>
+        <VersionFooter />
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  versionFooter: { gap: 4 },
+  attribution: { fontSize: 12, textAlign: 'center' },
   content: {
     padding: 16,
     paddingBottom: 32,
