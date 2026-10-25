@@ -172,56 +172,45 @@ produce `80000186` again, pushes tags and targets `master` for GitHub releases.
 EAS `production.autoIncrement` in `eas.json` is likewise outside this manual
 workflow. Neither inherited tool is modified or authorised by this PR.
 
-## Proposed human-readable numbering — approval required
+## sancti.fi semantic identity and deferred native migration
 
-Investigation of the current sources:
+Current version sources:
 
 | Identifier | Current source/value |
 | --- | --- |
 | Android versionCode | `app.json`, `expo.android.versionCode`: `80000187` (25 October 2026). |
 | Android versionName source | `app.json`, `expo.version`: `8.1.8`; `app.config.js` preserves it. Generated native files can be stale until regeneration. The built APK is authoritative for an existing artifact. |
-| sancti.fi Settings label | `src/config/sanctifiVersion.ts`, `SANCTIFI_VERSION`: `0.1.1`; consumed by `SanctifiVersionLabel.tsx`. |
+| sancti.fi semantic version | `app.json`, `expo.extra.sanctifiVersion`: `0.1.0`; Settings reads the resolved application configuration. |
+| sancti.fi Settings build | `Application.nativeBuildVersion`: full installed build, separate from the semantic version. |
 | Inherited Settings footer | `VersionFooter.tsx` reads `Constants.expoConfig.version`; its Android build label uses versionCode modulo 1000, not the full update-ordering value. |
 | npm package version | `package.json`: `8.1.8`; private package metadata, not the current sancti.fi Settings source. |
 | Release manifest | Must copy verified APK metadata, not the Settings string or current source configuration. |
 
-**Proposal, not implemented:** use channel-independent `MAJOR.MINOR.PATCH`
-sancti.fi versions. Suggest `0.1.2` for the first unified release after the
-existing Settings `0.1.1`, subject to Nick/Carl approval. Patch increments cover
-compatible fixes, minor increments cover new features (and breaking changes
-during 0.x), and major increments mark a stable incompatible release after 1.0.
-Do not append Alpha/Beta/Stable to versionName: promotion must preserve the APK.
-Android's independent globally increasing versionCode remains the sole update
-ordering key; a new build of the same human version still needs a new code if
-distributed as different APK bytes.
+Under Issue 043, Nick approved **`0.1.0`** as the initial sancti.fi semantic
+version, with **`app.json` / `expo.extra.sanctifiVersion`** as its authoritative
+source. Settings reads it from resolved Expo configuration; there is no separate
+display-only version constant. MAJOR.MINOR.PATCH advances when the owner chooses
+a release version, not automatically on every APK build.
 
-Use **`app.json` / `expo.version` as the single human-version authority**. In a
-separately approved migration, replace the independent hard-coded Settings
-version with a value derived from resolved Expo config, as the inherited footer
-already does. Preserve existing footer interactions; review its abbreviated
-build label separately if a full build number is needed. If package.json's
-version is aligned, treat it as a checked mirror, never another allocator.
-No new dependency or release service is needed. Add a consistency check in that
-migration so accidental duplicate literals cannot drift.
+Android versionCode remains the independent, globally increasing update-ordering
+key. Every new distributed artifact needs a new code even if its sancti.fi semantic
+version is unchanged. This UI/config patch does not allocate another Android code
+or change signing, publication, the updater comparator or the manifest contract.
 
-Approval and migration sequence:
+**Native semantic-version migration is explicitly deferred.** `expo.version`
+remains `8.1.8`, so Android versionName and the inherited footer remain `8.1.8`.
+Manifest versionName must still copy the verified APK's actual metadata, not the
+new Settings semantic label. Both retained `80000186` and `80000187` APKs remain
+`8.1.8`; advertising either as `0.1.0` would misrepresent its metadata and fail
+local artifact validation.
 
-1. Approve the convention, the first unified human version (proposed `0.1.2`),
-   and the Settings derivation change before implementation.
-2. In a separate PR, update the authoritative human version, derive the Settings
-   label from it, and allocate a new global Android code above `80000187` and any
-   later reservations. Do not change the key or package identity.
-   The human-readable move from inherited `8.1.8` to proposed `0.1.2` is
-   intentional; numeric versionCode still increases and determines update order.
-3. Regenerate native Android files, build on futwick and verify final metadata.
-   Confirm the Settings display and manifest match that APK's actual versionName.
-4. Publish that new artifact under its new code. Never relabel, rebuild, resign
-   or overwrite the existing `80000186` or `80000187` APK to implement this migration.
-
-Documentation changes do not alter version identifiers. Both retained `80000186`
-and `80000187` APKs require manifest versionName `8.1.8`; advertising either as
-`0.1.1` or `0.1.2` would misrepresent its metadata and fails local artifact
-validation.
+The earlier unapproved `0.1.2`/unified-native-version proposal remains recorded in
+the [Issue 022 diary](project-diary/2026-10-24_issue-022_manifest-and-staging.md).
+It is not the approved Settings identity or an instruction to migrate native
+metadata now. Any future native alignment requires separate approval, a newly
+allocated higher Android code, actual APK verification and its own release record.
+Never rebuild, relabel, resign or overwrite an existing immutable APK to perform
+that migration.
 
 ## Manual publishing checklist
 

@@ -1184,5 +1184,10 @@
   "clientUpdateError_timeout": "The update check timed out. Please try again.",
   "clientUpdateError_manifest": "The Alpha release information is invalid. Please try again later.",
   "clientUpdateDownload": "Download APK",
-  "clientUpdateBrowserFailed": "Unable to open the APK link in your browser. Please try again."
+  "clientUpdateBrowserFailed": "Unable to open the APK link in your browser. Please try again.",
+  "clientVersionLabel": "Version {{version}}",
+  "clientBuildLabel": "Build {{build}}",
+  "clientUpdateTapHint": "Tap to check for updates",
+  "clientUpdateCheckHint": "Checks for a newer sancti.fi Client release.",
+  "basedOnSubstreamer": "Based on Substreamer"
 }

@@ -44,13 +44,8 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 
-test('only the sancti.fi version line checks; attribution remains plain text', async () => {
+test('the sancti.fi block checks without enabling Developer Options', async () => {
   render(<View><SanctifiVersionLabel /><VersionFooter /></View>);
-  const attribution = screen.getByText('Based on Substreamer');
-  expect(attribution.type).toBe('Text');
-  expect(attribution.parent?.props.onPress).toBeUndefined();
-  fireEvent.press(attribution);
-  expect(clientUpdateChecker.check).not.toHaveBeenCalled();
   fireEvent.press(screen.getByRole('button', { name: 'Check for updates' }));
   await screen.findByText('Up to date (installed build 80000186).');
   expect(clientUpdateChecker.check).toHaveBeenCalledTimes(1);
