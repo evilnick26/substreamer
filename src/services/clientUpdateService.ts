@@ -31,6 +31,9 @@ interface Dependencies {
 export function createClientUpdateChecker({ fetchManifest, installedBuild, isAndroid, timeoutMs }: Dependencies) {
   let inFlight: Promise<UpdateResult> | null = null;
   let automatic: Promise<UpdateResult> | null = null;
+  let automaticAttempts = 0;
+  let automaticMayRetry = false;
+  const retryDelays = [2000, 5000];
   const prompted = new Set<number>();
 
   async function perform(): Promise<UpdateResult> {
@@ -90,8 +93,20 @@ export function createClientUpdateChecker({ fetchManifest, installedBuild, isAnd
   return {
     check,
     checkAutomatic(): Promise<UpdateResult> {
-      if (!automatic) automatic = Promise.resolve().then(check);
+      if (!automatic || (automaticMayRetry && automaticAttempts <= retryDelays.length)) {
+        automaticMayRetry = false;
+        automaticAttempts++;
+        automatic = Promise.resolve().then(check).then((result) => {
+          automaticMayRetry = result.status === 'error' &&
+            (result.reason === 'network' || result.reason === 'timeout');
+          return result;
+        });
+      }
       return automatic;
+    },
+    getAutomaticRetryDelay(): number | null {
+      return automaticMayRetry && automaticAttempts <= retryDelays.length
+        ? retryDelays[automaticAttempts - 1] : null;
     },
     claimPrompt(versionCode: number): boolean {
       if (prompted.has(versionCode)) return false;
