@@ -91,6 +91,7 @@ export default function TabLayout() {
           name="favorites"
           options={{
             title: t('favorites'),
+            tabBarLabel: t('shelf'),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="heart" size={size} color={color} />
             ),
