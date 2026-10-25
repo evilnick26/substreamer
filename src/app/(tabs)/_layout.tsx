@@ -37,6 +37,8 @@ export default function TabLayout() {
   return (
     <GradientBackground>
       <Tabs
+        initialRouteName="library"
+        backBehavior="initialRoute"
         tabBar={renderTabBar}
         screenListeners={{
           tabPress: () => Keyboard.dismiss(),
@@ -69,6 +71,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
+            href: null,
             title: t('home'),
             tabBarIcon: ({ color, size }) => (
               <WaveformLogo size={size} color={color} />

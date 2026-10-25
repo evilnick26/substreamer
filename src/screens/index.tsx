@@ -9,5 +9,5 @@ export function IndexScreen() {
     return <Redirect href="/login" />;
   }
 
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/(tabs)/library" />;
 }
