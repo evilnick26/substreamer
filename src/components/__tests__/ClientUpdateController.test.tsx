@@ -242,7 +242,7 @@ test('manual checking stays immediate during automatic backoff and suppresses du
   cancelDialog();
   await advance(2000);
   expect(themedAlertStore.getState().visible).toBe(false);
-  expect(fetchManifest).toHaveBeenCalledTimes(3);
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
 });
 
 test.each(['current', 'older', 'invalid'])('automatic %s stays quiet and does not retry', async (scenario) => {
@@ -266,4 +266,20 @@ test('manual checking can rediscover an update after automatic dismissal', async
   await settle();
   expect(fetchManifest).toHaveBeenCalledTimes(2);
   expect(themedAlertStore.getState().visible).toBe(true);
+});
+
+test('manual success after Settings unmount remains available to the automatic prompt without refetching', async () => {
+  fetchManifest.mockRejectedValueOnce(new Error('offline'));
+  const { rerender } = render(<><ClientUpdateController ready /><SanctifiVersionLabel /></>);
+  await settle();
+  let finish!: (value: unknown) => void;
+  fetchManifest.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  fireEvent.press(screen.getByRole('button', { name: 'Check for updates' }));
+  await settle();
+  rerender(<><ClientUpdateController ready /></>);
+  await act(async () => finish(response()));
+  expect(themedAlertStore.getState().visible).toBe(false);
+  await advance(2000);
+  expect(themedAlertStore.getState().visible).toBe(true);
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
 });

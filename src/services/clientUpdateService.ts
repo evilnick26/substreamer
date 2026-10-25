@@ -86,7 +86,14 @@ export function createClientUpdateChecker({ fetchManifest, installedBuild, isAnd
 
   function check(): Promise<UpdateResult> {
     // Defer work until both guards are assigned, including synchronous fetch mocks.
-    if (!inFlight) inFlight = Promise.resolve().then(perform).finally(() => { inFlight = null; });
+    if (!inFlight) inFlight = Promise.resolve().then(perform).then((result) => {
+      // A validated manual result settles pending automatic recovery too.
+      if (automaticMayRetry && result.status !== 'error') {
+        automaticMayRetry = false;
+        automatic = Promise.resolve(result);
+      }
+      return result;
+    }).finally(() => { inFlight = null; });
     return inFlight;
   }
 

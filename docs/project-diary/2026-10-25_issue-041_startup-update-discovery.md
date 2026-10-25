@@ -136,3 +136,29 @@ dismissal and manual rediscovery, native modal visibility and continued browsing
 playback. No before/after native screenshots were captured; a connected Android
 runtime/React Native visual renderer was unavailable. This PR must remain
 unmerged for review; it does not claim Issue 041 complete.
+
+### PR review follow-up — 25 October 2026
+
+The reviewer noted that a successful manual check during automatic backoff still
+allowed the scheduled callback to make an unnecessary third HTTP request. The
+small service-level adjustment lets a validated manual result settle an existing
+retry-eligible automatic cycle. Available/current/older results are all definitive
+comparisons; errors leave automatic recovery eligible within its original bound.
+
+No timer subscription or controller/Settings coupling is added. A callback already
+scheduled may wake once, but it reads the settled cached result without fetching
+or scheduling another retry. This also retains the available result for automatic
+presentation if the manual Settings component unmounted before showing it.
+Attempt counts are not reset. Manual requests remain fresh and responsive;
+in-flight sharing, prompt claims and dismissal rules are unchanged.
+
+Before this adjustment, regressions for all three successful manual outcomes
+failed as expected; failed-manual continuation already passed. Updated checks:
+**248 focused tests passed**, with service coverage still **100%**. Full Jest:
+**632 suites / 11,168 tests passed**, with the existing 2 suites / 8 private-fixture
+tests skipped. TypeScript, repository validators, documentation and diff checks
+passed; Madge retains only its three existing vector-icon resolution warnings.
+The controller implementation is unchanged. Tests also verify that a manual
+success arriving after Settings unmount remains available to the automatic dialog
+without refetching. Physical Android acceptance remains outstanding; no version,
+signing, manifest or APK change is included in this follow-up.

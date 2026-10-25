@@ -215,3 +215,32 @@ test('a genuinely new checker/process gets a fresh automatic budget', async () =
   expect(await fresh.checker.checkAutomatic()).toMatchObject({ status: 'available' });
   expect(fresh.fetchManifest).toHaveBeenCalledTimes(1);
 });
+
+test.each([[80000187, 'available'], [80000186, 'current'], [80000185, 'older']] as const)('manual success %s settles pending automatic recovery', async (versionCode, status) => {
+  const { checker, fetchManifest } = setup();
+  fetchManifest.mockResolvedValue(response(JSON.stringify(release(versionCode))));
+  fetchManifest.mockRejectedValueOnce(new Error('offline'));
+  await checker.checkAutomatic();
+  const manual = await checker.check();
+  expect(manual.status).toBe(status);
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  for (let i = 0; i < 3; i++) expect(await checker.checkAutomatic()).toBe(manual);
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
+  await checker.check();
+  expect(fetchManifest).toHaveBeenCalledTimes(3);
+});
+
+test('manual failure does not cancel recovery, consume its attempt budget or reset its bound', async () => {
+  const { checker, fetchManifest } = setup();
+  fetchManifest.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+    .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
+  await checker.checkAutomatic();
+  expect(await checker.check()).toMatchObject({ status: 'error' });
+  expect(checker.getAutomaticRetryDelay()).toBe(2000);
+  await checker.checkAutomatic();
+  expect(checker.getAutomaticRetryDelay()).toBe(5000);
+  await checker.checkAutomatic();
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
+  expect(fetchManifest).toHaveBeenCalledTimes(4);
+});

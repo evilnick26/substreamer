@@ -110,7 +110,7 @@ unaltered real HTTPS adapter as well.
 | Startup dialog busy | On first login, leave the normal onboarding guide open while a newer result arrives. Close it: the update dialog should then appear. Never force a database migration to manufacture an overlay; migration/readiness branches are covered by automated tests. |
 | Current / older | `current` and `older`, then the unmodified live endpoint where appropriate. No automatic offer or downgrade, one automatic request, no retry. Manual feedback remains correct. |
 | Invalid manifest | `invalid`: no automatic dialog, no retry loop; a manual check reports the invalid-manifest error. |
-| Manual during backoff | After transient failure, invoke Settings check before the retry. It must not wait for automatic backoff; concurrent requests share an active fetch. A manual offer suppresses duplicate automatic prompting for that same build. |
+| Manual during backoff | After transient failure, invoke Settings check before the retry. It must not wait for automatic backoff; concurrent requests share an active fetch. A validated manual success settles the pending automatic cycle: no redundant HTTP retry, and no duplicate prompt for a manually offered build. A failed manual check leaves bounded automatic recovery eligible. |
 
 Automatic recovery is bounded, not a network watcher: if all three attempts fail,
 a late reconnection alone does not start a fourth attempt in that JS session.
