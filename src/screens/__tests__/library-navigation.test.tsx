@@ -1,11 +1,12 @@
 import React from 'react';
 import { Platform, Text } from 'react-native';
-import { renderRouter, screen, fireEvent, act, waitFor } from 'expo-router/testing-library';
+import { renderRouter, screen, fireEvent, act, waitFor, within } from 'expo-router/testing-library';
 import { router, Stack, Tabs } from 'expo-router';
 import { store, storeRef } from 'expo-router/build/global-state/store';
 
 import TabLayout from '../../app/(tabs)/_layout';
 import HomeTab from '../../app/(tabs)/index';
+import FavoritesTab from '../../app/(tabs)/favorites';
 import { IndexScreen } from '../../screens/index';
 
 jest.mock('../../hooks/useTheme', () => ({ useTheme: () => ({ colors: {
@@ -20,6 +21,10 @@ jest.mock('../../components/WaveformLogo', () => ({ __esModule: true, default: (
 jest.mock('../../screens/home', () => {
   const { Text } = require('react-native');
   return { HomeScreen: () => <Text>Retained Home screen</Text> };
+});
+jest.mock('../../screens/favorites', () => {
+  const { Text } = require('react-native');
+  return { FavoritesScreen: () => <Text>Favourites screen</Text> };
 });
 jest.mock('../../store/searchStore', () => ({ searchStore: { getState: () => ({ setHeaderHeight: jest.fn() }) } }));
 jest.mock('../../store/authStore', () => ({ authStore: (select: (state: { isLoggedIn: boolean }) => unknown) => select({ isLoggedIn: mockLoggedIn }) }));
@@ -38,7 +43,7 @@ const routes = {
   '(tabs)/_layout': TabLayout,
   '(tabs)/index': HomeTab,
   '(tabs)/library': () => <Text>Library screen</Text>,
-  '(tabs)/favorites': () => <Text>Favourites screen</Text>,
+  '(tabs)/favorites': FavoritesTab,
   '(tabs)/search': () => <Text>Search screen</Text>,
   '(tabs)/settings': () => <Text>Settings screen</Text>,
 };
@@ -53,7 +58,7 @@ test('authenticated cold startup lands on Library and only the four retained tab
   renderRouter(routes, { initialUrl: '/' });
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/library'));
   expect(screen.getByRole(tabRole, { name: /Library/ })).toBeTruthy();
-  expect(screen.getByRole(tabRole, { name: /Favourites|Favorites/ })).toBeTruthy();
+  expect(screen.getByRole(tabRole, { name: /Shelf/ })).toBeTruthy();
   expect(screen.getByRole(tabRole, { name: /Search/ })).toBeTruthy();
   expect(screen.getByRole(tabRole, { name: /Settings/ })).toBeTruthy();
   expect(screen.queryByRole(tabRole, { name: /Home/ })).toBeNull();
@@ -82,7 +87,7 @@ test('the hidden Home route remains reachable without being advertised as a tab'
 });
 
 test.each([['Search', '/search', 'Search screen'], ['Settings', '/settings', 'Settings screen'],
-  ['Favorites', '/favorites', 'Favourites screen']] as const)('%s remains navigable', async (name, pathname, content) => {
+  ['Shelf', '/favorites', 'Favourites screen']] as const)('%s remains navigable', async (name, pathname, content) => {
   renderRouter(routes, { initialUrl: '/library' });
   fireEvent.press(screen.getByRole(tabRole, { name: new RegExp(name) }));
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe(pathname));
@@ -124,4 +129,21 @@ test.each([['/album/123', 'Album detail screen'], ['/player', 'Now Playing scree
   act(() => router.back());
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/search'));
   expect(screen.getByText('Search screen')).toBeTruthy();
+});
+
+test('Shelf keeps the heart, original title, route, order and selection semantics', async () => {
+  renderRouter(routes, { initialUrl: '/library' });
+  const before = screen.getByRole(tabRole, { name: /Shelf/, selected: false });
+  expect(within(before).getAllByTestId('icon-heart').length).toBeGreaterThan(0);
+  const declarations = screen.UNSAFE_getByType(Tabs).props.children;
+  expect(declarations.map((child: React.ReactElement<{ name: string }>) => child.props.name))
+    .toEqual(['index', 'library', 'favorites', 'search', 'settings']);
+  const favoriteOptions = declarations.find((child: React.ReactElement<{ name: string }>) => child.props.name === 'favorites').props.options;
+  expect(favoriteOptions.title).toBe('Favorites');
+  expect(favoriteOptions.tabBarAccessibilityLabel).toBeUndefined();
+  fireEvent.press(before);
+  await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/favorites'));
+  expect(screen.getByRole(tabRole, { name: /Shelf/, selected: true })).toBeTruthy();
+  expect(screen.queryByRole(tabRole, { name: /Favourites|Favorites/ })).toBeNull();
+  expect(screen.getByText('Favourites screen')).toBeTruthy();
 });
