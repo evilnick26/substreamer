@@ -31,6 +31,9 @@ interface Dependencies {
 export function createClientUpdateChecker({ fetchManifest, installedBuild, isAndroid, timeoutMs }: Dependencies) {
   let inFlight: Promise<UpdateResult> | null = null;
   let automatic: Promise<UpdateResult> | null = null;
+  let automaticAttempts = 0;
+  let automaticMayRetry = false;
+  const retryDelays = [2000, 5000];
   const prompted = new Set<number>();
 
   async function perform(): Promise<UpdateResult> {
@@ -83,15 +86,34 @@ export function createClientUpdateChecker({ fetchManifest, installedBuild, isAnd
 
   function check(): Promise<UpdateResult> {
     // Defer work until both guards are assigned, including synchronous fetch mocks.
-    if (!inFlight) inFlight = Promise.resolve().then(perform).finally(() => { inFlight = null; });
+    if (!inFlight) inFlight = Promise.resolve().then(perform).then((result) => {
+      // A validated manual result settles pending automatic recovery too.
+      if (automaticMayRetry && result.status !== 'error') {
+        automaticMayRetry = false;
+        automatic = Promise.resolve(result);
+      }
+      return result;
+    }).finally(() => { inFlight = null; });
     return inFlight;
   }
 
   return {
     check,
     checkAutomatic(): Promise<UpdateResult> {
-      if (!automatic) automatic = Promise.resolve().then(check);
+      if (!automatic || (automaticMayRetry && automaticAttempts <= retryDelays.length)) {
+        automaticMayRetry = false;
+        automaticAttempts++;
+        automatic = Promise.resolve().then(check).then((result) => {
+          automaticMayRetry = result.status === 'error' &&
+            (result.reason === 'network' || result.reason === 'timeout');
+          return result;
+        });
+      }
       return automatic;
+    },
+    getAutomaticRetryDelay(): number | null {
+      return automaticMayRetry && automaticAttempts <= retryDelays.length
+        ? retryDelays[automaticAttempts - 1] : null;
     },
     claimPrompt(versionCode: number): boolean {
       if (prompted.has(versionCode)) return false;

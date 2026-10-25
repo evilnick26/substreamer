@@ -1184,7 +1184,5 @@
   "clientUpdateError_timeout": "The update check timed out. Please try again.",
   "clientUpdateError_manifest": "The Alpha release information is invalid. Please try again later.",
   "clientUpdateDownload": "Download APK",
-  "clientUpdateBrowserFailed": "Unable to open the APK link in your browser. Please try again.",
-  "clientUpdateDismiss": "Dismiss",
-  "clientUpdateDetails": "View update"
+  "clientUpdateBrowserFailed": "Unable to open the APK link in your browser. Please try again."
 }

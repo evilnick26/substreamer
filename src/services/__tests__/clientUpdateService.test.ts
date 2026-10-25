@@ -106,13 +106,18 @@ describe('update checking', () => {
     expect(fetchManifest).toHaveBeenCalledTimes(1);
   });
 
-  test('automatic failure is retained but manual retry is allowed', async () => {
+  test('automatic retries have a process-wide bound and manual retry remains allowed', async () => {
     const { checker, fetchManifest } = setup();
-    fetchManifest.mockRejectedValueOnce(new Error('offline'));
-    expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
-    expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
-    expect(fetchManifest).toHaveBeenCalledTimes(1);
+    fetchManifest.mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
+    for (const delay of [2000, 5000, null]) {
+      expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
+      expect(checker.getAutomaticRetryDelay()).toBe(delay);
+    }
+    for (let i = 0; i < 5; i++) expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
+    expect(fetchManifest).toHaveBeenCalledTimes(3);
     expect(await checker.check()).toMatchObject({ status: 'available' });
+    expect(fetchManifest).toHaveBeenCalledTimes(4);
   });
 
   test('prompt identities are deduplicated within this process only', () => {
@@ -153,4 +158,89 @@ test('the production singleton uses the native installed build, not a display or
     nativeBuild.restore();
     platform.restore();
   }
+});
+
+test.each(['offline', 'HTTP failure'])('a first automatic %s can recover within the same process', async (failure) => {
+  const { checker, fetchManifest } = setup();
+  if (failure === 'offline') fetchManifest.mockRejectedValueOnce(new TypeError('startup network unavailable'));
+  else fetchManifest.mockResolvedValueOnce(response('', { ok: false }));
+  expect(await checker.checkAutomatic()).toEqual({ status: 'error', reason: 'network' });
+  expect(await checker.checkAutomatic()).toMatchObject({ status: 'available' });
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
+});
+
+test('concurrent automatic recovery and manual calls still share one request', async () => {
+  const { checker, fetchManifest } = setup();
+  fetchManifest.mockRejectedValueOnce(new Error('offline'));
+  await checker.checkAutomatic();
+  const retry = checker.checkAutomatic();
+  expect(checker.checkAutomatic()).toBe(retry);
+  const manual = checker.check();
+  expect(await retry).toBe(await manual);
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  expect(await checker.checkAutomatic()).toMatchObject({ status: 'available' });
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
+});
+
+test('automatic timeout is retryable and a later success stops retrying', async () => {
+  jest.useFakeTimers();
+  try {
+    const { checker, fetchManifest } = setup();
+    fetchManifest.mockImplementationOnce(() => new Promise(() => {}));
+    const first = checker.checkAutomatic();
+    await jest.advanceTimersByTimeAsync(100);
+    expect(await first).toEqual({ status: 'error', reason: 'timeout' });
+    expect(checker.getAutomaticRetryDelay()).toBe(2000);
+    expect(await checker.checkAutomatic()).toMatchObject({ status: 'available' });
+    expect(checker.getAutomaticRetryDelay()).toBeNull();
+    expect(fetchManifest).toHaveBeenCalledTimes(2);
+  } finally { jest.useRealTimers(); }
+});
+
+test.each(['manifest', 'build', 'unsupported'])('non-transient %s failure is not retried automatically', async (reason) => {
+  const fetchManifest = jest.fn().mockResolvedValue(response('{'));
+  const checker = createClientUpdateChecker({ fetchManifest, installedBuild: () => reason === 'build' ? null : '80000186', isAndroid: () => reason !== 'unsupported', timeoutMs: 100 });
+  for (let i = 0; i < 5; i++) expect(await checker.checkAutomatic()).toEqual({ status: 'error', reason });
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  expect(fetchManifest).toHaveBeenCalledTimes(reason === 'manifest' ? 1 : 0);
+});
+
+test('a genuinely new checker/process gets a fresh automatic budget', async () => {
+  const first = setup();
+  first.fetchManifest.mockRejectedValue(new Error('offline'));
+  for (let i = 0; i < 5; i++) await first.checker.checkAutomatic();
+  expect(first.fetchManifest).toHaveBeenCalledTimes(3);
+  const fresh = setup();
+  expect(await fresh.checker.checkAutomatic()).toMatchObject({ status: 'available' });
+  expect(fresh.fetchManifest).toHaveBeenCalledTimes(1);
+});
+
+test.each([[80000187, 'available'], [80000186, 'current'], [80000185, 'older']] as const)('manual success %s settles pending automatic recovery', async (versionCode, status) => {
+  const { checker, fetchManifest } = setup();
+  fetchManifest.mockResolvedValue(response(JSON.stringify(release(versionCode))));
+  fetchManifest.mockRejectedValueOnce(new Error('offline'));
+  await checker.checkAutomatic();
+  const manual = await checker.check();
+  expect(manual.status).toBe(status);
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  for (let i = 0; i < 3; i++) expect(await checker.checkAutomatic()).toBe(manual);
+  expect(fetchManifest).toHaveBeenCalledTimes(2);
+  await checker.check();
+  expect(fetchManifest).toHaveBeenCalledTimes(3);
+});
+
+test('manual failure does not cancel recovery, consume its attempt budget or reset its bound', async () => {
+  const { checker, fetchManifest } = setup();
+  fetchManifest.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+    .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
+  await checker.checkAutomatic();
+  expect(await checker.check()).toMatchObject({ status: 'error' });
+  expect(checker.getAutomaticRetryDelay()).toBe(2000);
+  await checker.checkAutomatic();
+  expect(checker.getAutomaticRetryDelay()).toBe(5000);
+  await checker.checkAutomatic();
+  expect(checker.getAutomaticRetryDelay()).toBeNull();
+  expect(await checker.checkAutomatic()).toMatchObject({ status: 'error' });
+  expect(fetchManifest).toHaveBeenCalledTimes(4);
 });

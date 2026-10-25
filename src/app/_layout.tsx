@@ -60,7 +60,7 @@ import { useLayoutMode } from '../hooks/useLayoutMode';
 import { useTheme } from '../hooks/useTheme';
 import { useAndroidTabBack } from '../hooks/useAndroidTabBack';
 import { ArtworkAccentController } from '../components/ArtworkAccentController';
-import { ClientUpdateBanner } from '../components/ClientUpdateBanner';
+import { ClientUpdateController } from '../components/ClientUpdateController';
 import {
   deferredDataSyncInit,
   onConnectivityRestored,
@@ -330,6 +330,7 @@ export default function RootLayout() {
   // pass is done, so startup proceeds behind it while the user reads it and taps on.
   // Only a run still in flight (or waiting on the user's answer) holds the app back.
   const migrationGateBlocking = migrationGateStore((s) => s.visible && s.mode !== 'complete');
+  const migrationGateVisible = migrationGateStore((s) => s.visible);
   const startupBlocked = splashVisible || migrationGateBlocking;
   const rehydrated = authStore((s) => s.rehydrated);
   const isLoggedIn = authStore((s) => s.isLoggedIn);
@@ -699,7 +700,8 @@ export default function RootLayout() {
       <ThemeProvider value={navigationTheme}>
       <RootErrorBoundary colors={colors}>
       <ArtworkAccentController />
-      <ClientUpdateBanner />
+      <ClientUpdateController ready={rehydrated && isLoggedIn && !startupBlocked && !migrationGateVisible &&
+        segments.length > 0 && segments[0] !== 'login'} />
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
       <SplitLayout
         animate={animatePanel}
