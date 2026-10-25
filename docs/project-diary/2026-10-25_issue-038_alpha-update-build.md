@@ -165,3 +165,87 @@ up-to-date manual result without another update offer. Record any failures and
 cache/freshness observations in the diary. A successful build, structural manifest
 validation or source-level comparison is not evidence of this physical acceptance.
 The PR remains unmerged for review; all live and device steps remain outstanding.
+
+### Final release and physical-device acceptance — 25 October 2026
+
+Nick confirmed that Issue 038 is complete and closed following successful live
+publication and the browser-led in-place upgrade below. These are owner-reported
+results, not a build, deployment, download or device test repeated by Codex. This
+follow-up supersedes the preparation-time outstanding status above; the original
+investigation, implementation and planned acceptance procedure are preserved.
+Documentation work starts from refreshed `sanctifi` commit
+`3010cf5ca0a0443e99fe1c644666b747dd927506`.
+
+#### Verified release identity
+
+| Property | Owner-confirmed result |
+| --- | --- |
+| Built source revision | `3010cf5ca0a0443e99fe1c644666b747dd927506` |
+| Android package | `fi.sancti.client` |
+| Previous installed versionCode | `80000186` |
+| New installed versionCode | `80000187` |
+| Android versionName | `8.1.8` |
+| Release certificate SHA-256 | `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c` |
+| APK SHA-256 | `95e388228dc644a4fbca069ca205a856f376dab534b61123cf13445efa9ed3cc` |
+| APK size | 79,561,254 bytes |
+| Gradle release build | SUCCESS in 13m 54s |
+| Immutable APK URL | `https://updates.sancti.fi/client/apks/sanctifi-80000187.apk` |
+| Alpha manifest URL | `https://updates.sancti.fi/client/alpha.json` |
+
+This is the final published artifact, distinct from the earlier temporary local
+80000187 test APK recorded under Issue 023. Its actual source and checksum above
+must be used for release traceability, not the earlier test artifact's metadata.
+
+#### Verified publication sequence
+
+- Published the immutable APK **before** promoting the manifest.
+- Verified the public HTTPS APK download checksum.
+- Validated the candidate manifest against the signed local APK using
+  `scripts/android-release.js validate`.
+- Promoted the manifest atomically.
+- Verified that the public Alpha manifest advertises **80000187**.
+
+The [release ledger](../android-release-ledger.md) records this artifact and
+acceptance. No exact publication clock time was supplied and none is inferred.
+
+#### Physical Android acceptance — all passed
+
+1. Confirmed the existing installation at **80000186** before testing.
+2. Manual Settings update check detected the new release.
+3. The update dialog displayed the correct build number and release notes.
+4. Cancelling the dialog allowed subsequent manual rediscovery.
+5. Automatic startup discovery worked, **observed after several relaunches**;
+   this does not establish consistent discovery on the first launch.
+6. Download APK successfully obtained `sanctifi-80000187.apk`.
+7. Android updated the existing application in place from 80000186 to 80000187.
+8. A subsequent Settings update check reported **Up to Date**.
+9. Existing Favourites survived.
+10. Existing offline music survived.
+11. Online playback worked after installation.
+12. Offline playback worked after installation.
+
+These observations establish the requested end-to-end Alpha update path and the
+specific data/playback checks listed. They do not claim exhaustive validation of
+every preference or subsystem.
+
+#### Follow-up improvements — not Issue 038 failures
+
+- Enlarge the manual-check target to the entire sancti.fi Settings version-
+  information block and provide a clearer update-check affordance. The current
+  small first-line target has not been changed by this documentation.
+- Display sancti.fi's own human-readable identity rather than inherited
+  Substreamer versionName 8.1.8, retaining full Android versionCode for update
+  comparisons. No human-version migration is implemented here.
+- Investigate startup-check timing/reliability. Eventual successful discovery
+  after several relaunches does not resolve the inconsistent initial observation;
+  no root cause or timing fix is asserted.
+
+Issue 038 acceptance is complete per Nick's report. The improvements above remain
+separate future work. This follow-up changes documentation only and records no
+private signing credentials, keystore material or recovery secrets.
+
+Documentation checks passed: the original entry is preserved byte-for-byte; the
+twelve supplied acceptance results, source, hashes and size are consistent across
+the updated documents; relative links, fenced blocks, whitespace and docs-only
+scope were checked. Remaining obsolete-URL mentions are explicitly historical.
+Application tests and builds were not run for this documentation-only follow-up.
