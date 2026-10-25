@@ -13,6 +13,19 @@ matches the checksum on futwick and the host. These are owner-reported deploymen
 results, recorded in the [Alpha publication diary](project-diary/2026-10-24_issue-022_alpha-publication.md),
 not checks repeated or a deployment performed by this documentation update.
 
+On **25 October 2026**, Nick confirmed publication and end-to-end acceptance of
+Alpha **80000187**, versionName **8.1.8**, built from
+`3010cf5ca0a0443e99fe1c644666b747dd927506`. APK publication preceded atomic manifest
+promotion; the public HTTPS download checksum and the manifest's advertised build
+were verified. Manual discovery, browser download, Android in-place installation
+and the subsequent Up to Date result passed, with Favourites/offline media and
+online/offline playback preserved. Automatic discovery was observed after several
+relaunches; consistent first-launch timing remains a follow-up, not a guarantee.
+See the [acceptance diary](project-diary/2026-10-25_issue-038_alpha-update-build.md)
+and [release ledger](android-release-ledger.md) for the exact artifact identity and
+results. The larger Settings tap target and sancti.fi human-version migration are
+also future work; none is implemented by this documentation.
+
 Public layout:
 
 ```text
@@ -45,11 +58,15 @@ Alpha is published; Beta/Stable remain unavailable (both returned 404 on
 24 October), not dummy manifests, until approved for promotion. Demonstrate multiple-channel references in tests or
 staging without inadvertently advertising a production Stable release.
 
-The published APK is **79,545,302 bytes**, package `fi.sancti.client`, versionCode
-`80000186`, versionName `8.1.8`. Its SHA-256 is
+The first published APK (24 October) is **79,545,302 bytes**, package
+`fi.sancti.client`, versionCode `80000186`, versionName `8.1.8`. Its SHA-256 is
 `42f7945d52433a993765a42fb3416e65e996507bfce2f635f4958877673d222f`.
-The 297-byte Alpha manifest passed local schema validation and references that
-artifact, version metadata and checksum. Preserve this APK's bytes and metadata.
+The first Alpha manifest (297 bytes) passed local schema validation and references
+that artifact, version metadata and checksum. Preserve this APK's bytes and metadata.
+The current Alpha pointer now offers `sanctifi-80000187.apk` (79,561,254 bytes),
+with SHA-256
+`95e388228dc644a4fbca069ca205a856f376dab534b61123cf13445efa9ed3cc`.
+Its actual versionName remains `8.1.8`; prior immutable artifacts remain unchanged.
 
 ## Manifest contract: schemaVersion 1
 
@@ -140,8 +157,8 @@ publication rule, not protection against its owner's manual edits.
 
 ## Global build-number allocation and traceability
 
-Known distributed high-water mark: `80000186`. For a **new** distributed artifact,
-allocate above every previously reserved/distributed code, normally `80000187`
+Known distributed high-water mark: `80000187`. For a **new** distributed artifact,
+allocate above every previously reserved/distributed code, normally `80000188`
 next after confirming no other allocation. Never reset the sequence, allocate
 per channel, or derive it from a human-readable version. Record reservations and
 failed/withdrawn releases in the [ledger](android-release-ledger.md); do not reuse
@@ -161,12 +178,12 @@ Investigation of the current sources:
 
 | Identifier | Current source/value |
 | --- | --- |
-| Android versionCode | `app.json`, `expo.android.versionCode`: `80000186`. |
+| Android versionCode | `app.json`, `expo.android.versionCode`: `80000187` (25 October 2026). |
 | Android versionName source | `app.json`, `expo.version`: `8.1.8`; `app.config.js` preserves it. Generated native files can be stale until regeneration. The built APK is authoritative for an existing artifact. |
 | sancti.fi Settings label | `src/config/sanctifiVersion.ts`, `SANCTIFI_VERSION`: `0.1.1`; consumed by `SanctifiVersionLabel.tsx`. |
 | Inherited Settings footer | `VersionFooter.tsx` reads `Constants.expoConfig.version`; its Android build label uses versionCode modulo 1000, not the full update-ordering value. |
 | npm package version | `package.json`: `8.1.8`; private package metadata, not the current sancti.fi Settings source. |
-| Future release manifest | Must copy verified APK metadata, not the Settings string or current source configuration. |
+| Release manifest | Must copy verified APK metadata, not the Settings string or current source configuration. |
 
 **Proposal, not implemented:** use channel-independent `MAJOR.MINOR.PATCH`
 sancti.fi versions. Suggest `0.1.2` for the first unified release after the
@@ -192,18 +209,19 @@ Approval and migration sequence:
 1. Approve the convention, the first unified human version (proposed `0.1.2`),
    and the Settings derivation change before implementation.
 2. In a separate PR, update the authoritative human version, derive the Settings
-   label from it, and allocate a new global Android code above `80000186` and any
+   label from it, and allocate a new global Android code above `80000187` and any
    later reservations. Do not change the key or package identity.
    The human-readable move from inherited `8.1.8` to proposed `0.1.2` is
    intentional; numeric versionCode still increases and determines update order.
 3. Regenerate native Android files, build on futwick and verify final metadata.
    Confirm the Settings display and manifest match that APK's actual versionName.
 4. Publish that new artifact under its new code. Never relabel, rebuild, resign
-   or overwrite the existing `80000186` APK to implement this migration.
+   or overwrite the existing `80000186` or `80000187` APK to implement this migration.
 
-**This PR changes no version identifiers.** Publishing the retained `80000186`
-APK still requires manifest versionName `8.1.8`; advertising it as `0.1.1` or
-`0.1.2` would misrepresent its metadata and fails local artifact validation.
+Documentation changes do not alter version identifiers. Both retained `80000186`
+and `80000187` APKs require manifest versionName `8.1.8`; advertising either as
+`0.1.1` or `0.1.2` would misrepresent its metadata and fails local artifact
+validation.
 
 ## Manual publishing checklist
 
