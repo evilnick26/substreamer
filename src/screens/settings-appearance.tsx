@@ -17,6 +17,7 @@ import { LibraryLayoutCard } from '../components/settings/LibraryLayoutCard';
 import { ListLengthCard } from '../components/settings/ListLengthCard';
 import { SongCoverArtCard } from '../components/settings/SongCoverArtCard';
 import { SongSortOrderCard } from '../components/settings/SongSortOrderCard';
+import { SyncedLyricsCard } from '../components/settings/SyncedLyricsCard';
 import { ThemeCard } from '../components/settings/ThemeCard';
 import { settingsStyles } from '../styles/settingsStyles';
 
@@ -39,6 +40,7 @@ export function SettingsAppearanceScreen() {
         <ArtistAlbumSortOrderCard />
         <DateFormatCard />
         <SongCoverArtCard />
+        <SyncedLyricsCard />
         <ListLengthCard />
         <ArtistPlayModeCard />
         <FiltersCard />

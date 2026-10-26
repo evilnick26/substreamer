@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { AlbumInfoContent } from '@/components/AlbumInfoContent';
+import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
 import { LyricsContent } from '@/components/LyricsContent';
 import { BookmarkButton } from '@/components/BookmarkButton';
 import { CachedImage } from '@/components/CachedImage';
@@ -350,6 +351,8 @@ export function PlayerPhonePortrait() {
           >
             <PlayerContent
               currentTrack={currentTrack}
+              lyrics={lyricsEntry}
+              visible={activeTab === 'player'}
               colors={colors}
               queueLoading={queueLoading}
               handleSeek={handleSeek}
@@ -442,6 +445,8 @@ export function PlayerPhonePortrait() {
 /* ------------------------------------------------------------------ */
 
 interface PlayerContentProps {
+  lyrics: PlayerLyricsResult['entry'];
+  visible: boolean;
   currentTrack: Child;
   colors: ThemeColors;
   queueLoading: boolean;
@@ -451,6 +456,8 @@ interface PlayerContentProps {
 }
 
 const PlayerContent = memo(function PlayerContent({
+  lyrics,
+  visible,
   currentTrack,
   colors,
   queueLoading,
@@ -572,17 +579,19 @@ const PlayerContent = memo(function PlayerContent({
 
       {/* Progress bar */}
       <View style={[styles.progressSection, { marginBottom: m.progressMarginBottom }]}>
-        <PlayerProgressBar
-          position={position}
-          duration={duration}
-          bufferedPosition={bufferedPosition}
-          colors={colors}
-          onSeek={handleSeek}
-          isBuffering={isBuffering}
-          error={error}
-          retrying={retrying}
-          onRetry={retryPlayback}
-        />
+        <PlayerLyricsOrProgress trackId={currentTrack.id} lyrics={lyrics} colors={colors} visible={visible}>
+          <PlayerProgressBar
+            position={position}
+            duration={duration}
+            bufferedPosition={bufferedPosition}
+            colors={colors}
+            onSeek={handleSeek}
+            isBuffering={isBuffering}
+            error={error}
+            retrying={retrying}
+            onRetry={retryPlayback}
+          />
+        </PlayerLyricsOrProgress>
       </View>
 
       {/* Three equal flex spacers (above the primary row, between the rows,

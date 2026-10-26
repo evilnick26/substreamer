@@ -229,6 +229,7 @@ jest.mock('@shopify/flash-list', () => {
 });
 
 import React from 'react';
+import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
 import { act, render } from '@testing-library/react-native';
 import { type SharedValue } from 'react-native-reanimated';
 
@@ -258,6 +259,8 @@ const fetchLyrics = lyricsStore.getState().fetchLyrics as jest.Mock;
 
 beforeEach(() => {
   fetchLyrics.mockClear();
+  Object.assign(lyricsStore.getState(), { entries: {}, loading: {}, errors: {}, revision: 0 });
+  layoutPreferencesStore.setState({ displaySyncedLyricsInNps: true });
   appStateStore.setState({ isActive: true });
   tabletLayoutStore.setState({ playerExpanded: false });
   playerStore.setState({
@@ -316,4 +319,19 @@ describe('PlayerTabletLandscape lyrics gate', () => {
 
     expect(fetchLyrics).not.toHaveBeenCalled();
   });
+});
+
+
+test('whole progress component is replaced for genuine cached lyrics and restored by OFF', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Original, Casing!' }],
+  } } });
+  tabletLayoutStore.setState({ playerExpanded: true });
+  const view = render(<PlayerTabletLandscape expandProgress={expandProgress} />);
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Original, Casing!');
+  act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
+  expect(view.getByTestId('progress-bar')).toBeTruthy();
+  expect(view.queryByTestId('inline-lyrics')).toBeNull();
 });

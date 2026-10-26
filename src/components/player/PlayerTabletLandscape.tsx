@@ -21,6 +21,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumInfoContent } from '@/components/AlbumInfoContent';
+import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
 import { LyricsContent } from '@/components/LyricsContent';
 import { BookmarkButton } from '@/components/BookmarkButton';
 import { CachedImage } from '@/components/CachedImage';
@@ -355,17 +356,19 @@ export function PlayerTabletLandscape({
 
               {/* Progress bar */}
               <View style={styles.progressSection}>
-                <PlayerProgressBar
-                  position={position}
-                  duration={duration}
-                  bufferedPosition={bufferedPosition}
-                  colors={colors}
-                  onSeek={handleSeek}
-                  isBuffering={isBuffering}
-                  error={error}
-                  retrying={retrying}
-                  onRetry={retryPlayback}
-                />
+                <PlayerLyricsOrProgress trackId={currentTrack.id} lyrics={lyricsEntry} colors={colors} visible={playerExpanded}>
+                  <PlayerProgressBar
+                    position={position}
+                    duration={duration}
+                    bufferedPosition={bufferedPosition}
+                    colors={colors}
+                    onSeek={handleSeek}
+                    isBuffering={isBuffering}
+                    error={error}
+                    retrying={retrying}
+                    onRetry={retryPlayback}
+                  />
+                </PlayerLyricsOrProgress>
               </View>
 
               {/* Transport controls */}

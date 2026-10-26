@@ -247,6 +247,7 @@ jest.mock('@shopify/flash-list', () => {
 });
 
 import React from 'react';
+import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
 import { render, fireEvent, act } from '@testing-library/react-native';
 
 import { appStateStore } from '@/store/appStateStore';
@@ -256,6 +257,7 @@ import { type Child } from '@/services/subsonicService';
 
 // Must import after mocks
 const { PlayerPhonePortrait } = require('@/screens/player/player-phone-portrait');
+const { PlayerTabletPortrait } = require('@/screens/player/player-tablet-portrait');
 
 const fetchLyrics = lyricsStore.getState().fetchLyrics as jest.Mock;
 
@@ -278,6 +280,8 @@ const MOCK_QUEUE: Child[] = [
 
 beforeEach(() => {
   fetchLyrics.mockClear();
+  Object.assign(lyricsStore.getState(), { entries: {}, loading: {}, errors: {}, revision: 0 });
+  layoutPreferencesStore.setState({ displaySyncedLyricsInNps: true });
   appStateStore.setState({ isActive: true });
   playerStore.setState({
     currentTrack: MOCK_TRACK,
@@ -577,4 +581,32 @@ describe('PlayerPhonePortrait', () => {
     // Queue items should still be rendered (mounted)
     expect(getByText('Second Song')).toBeTruthy();
   });
+});
+
+
+test('whole progress component is replaced for genuine cached lyrics and restored by OFF', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Original, Casing!' }],
+  } } });
+  const view = render(<PlayerPhonePortrait />);
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Original, Casing!');
+  act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
+  expect(view.getByTestId('progress-bar')).toBeTruthy();
+  expect(view.queryByTestId('inline-lyrics')).toBeNull();
+});
+
+
+test('tablet portrait shares cached lyrics with its full view and restores progress when OFF', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Tablet, Original!' }],
+  } } });
+  const view = render(<PlayerTabletPortrait />);
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Tablet, Original!');
+  act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
+  expect(view.getByTestId('progress-bar')).toBeTruthy();
+  expect(fetchLyrics).not.toHaveBeenCalled();
 });

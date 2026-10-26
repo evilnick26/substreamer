@@ -21,6 +21,7 @@ import {
   deleteLyrics,
   listCachedLyrics,
   loadLyrics,
+  loadLyricsSync,
   saveLyrics,
 } from '../lyricsTable';
 
@@ -410,4 +411,42 @@ describe('write cost is proportional to the one song, not the cache', () => {
     expect(await loadLyrics('song-0')).toEqual(syncedLyrics(LINES));
     expect(await loadLyrics('song-19')).toEqual(syncedLyrics(LINES));
   });
+});
+
+
+describe('synchronous player cache snapshot', () => {
+  it('matches the async reader, including text, ordering, offset and source', async () => {
+    const data = syncedLyrics(80);
+    data.lines[1].text = 'Original Case, punctuation!';
+    await saveLyrics('sync', data);
+    expect(loadLyricsSync('sync')).toEqual(await loadLyrics('sync'));
+    expect(loadLyricsSync('missing')).toBeNull();
+  });
+  it('degrades to unresolved when SQLite is unavailable', () => {
+    __setDbForTests(null);
+    expect(loadLyricsSync('missing')).toBeNull();
+  });
+});
+
+test('cache removal notifications cannot expose the deleted disk snapshot', async () => {
+  const data = syncedLyrics(3);
+  await saveLyrics('removed', data);
+  lyricsStore.setState({ entries: { removed: data } });
+  const reads: Array<LyricsData | null> = [];
+  const unsubscribe = lyricsStore.subscribe((s) => {
+    if (!s.entries.removed) reads.push(loadLyricsSync('removed'));
+  });
+  await lyricsStore.getState().removeLyrics('removed');
+  unsubscribe();
+  expect(reads).toEqual([null]);
+
+  await saveLyrics('cleared', data);
+  lyricsStore.setState({ entries: { cleared: data } });
+  const afterClear: Array<LyricsData | null> = [];
+  const stop = lyricsStore.subscribe((s) => {
+    if (!s.entries.cleared) afterClear.push(loadLyricsSync('cleared'));
+  });
+  await lyricsStore.getState().clearLyrics();
+  stop();
+  expect(afterClear).toEqual([null]);
 });

@@ -17,9 +17,10 @@
  * (15s `withTimeout`), so this hook is a thin coordination layer.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useAppActive } from './useAppActive';
+import { loadLyricsSync } from '../store/persistence/lyricsTable';
 import { lyricsStore, type LyricsErrorKind } from '../store/lyricsStore';
 import { type LyricsData } from '../services/subsonicService';
 
@@ -40,9 +41,27 @@ export function usePlayerLyrics(
   const appActive = useAppActive();
   const shouldFetch = enabled && appActive;
 
-  const entry = lyricsStore((s) => (trackId ? s.entries[trackId] : undefined));
+  const memoryEntry = lyricsStore((s) => (trackId ? s.entries[trackId] : undefined));
   const loading = lyricsStore((s) => (trackId ? (s.loading[trackId] ?? false) : false));
   const error = lyricsStore((s) => (trackId ? (s.errors[trackId] ?? null) : null));
+
+  const revision = lyricsStore((s) => s.revision);
+  // Cache revisions can change when another track resolves. Re-read a missing
+  // entry before paint rather than treating that change as ineligibility.
+  const snapshot = useMemo(() => ({
+    revision: lyricsStore.getState().revision,
+    entry: trackId && shouldFetch && !lyricsStore.getState().entries[trackId]
+      ? loadLyricsSync(trackId) : null,
+  }), [trackId, shouldFetch, revision]);
+  const entry = memoryEntry ?? (snapshot.revision === revision ? snapshot.entry ?? undefined : undefined);
+
+  useEffect(() => {
+    const cachedEntry = snapshot.entry;
+    if (!trackId || !cachedEntry) return;
+    lyricsStore.setState((s) => s.revision === snapshot.revision && !s.entries[trackId]
+      ? { entries: { ...s.entries, [trackId]: cachedEntry }, revision: s.revision + 1 }
+      : s);
+  }, [trackId, snapshot]);
 
   /**
    * The track a fetch was last started for. Comparing by id IS the per-track

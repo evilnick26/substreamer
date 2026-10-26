@@ -6,6 +6,7 @@
 jest.mock('../../store/persistence/lyricsTable', () => ({
   __esModule: true,
   loadLyrics: jest.fn(),
+  loadLyricsSync: jest.fn(() => null),
   saveLyrics: jest.fn(),
   clearAllLyrics: jest.fn(),
 }));

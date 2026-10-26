@@ -31,6 +31,40 @@ export interface LyricsCounts {
   unsynced: number;
 }
 
+interface LyricsLineRow { start_ms: number; text: string }
+
+function decodeLyrics(row: LyricsRow, lines: LyricsLineRow[]): LyricsData {
+  const data: LyricsData = {
+    synced: row.synced === 1,
+    lines: lines.map((l) => ({ startMs: l.start_ms, text: l.text })),
+    offsetMs: row.offset_ms,
+    source: row.source,
+  };
+  if (row.lang !== null) data.lang = row.lang;
+  return data;
+}
+
+/** Requested-track cache lookup before the player's first paint. */
+export function loadLyricsSync(songId: string): LyricsData | null {
+  const db = getDb();
+  if (!db) return null;
+  const started = performance.now();
+  try {
+    const row = db.getFirstSync<LyricsRow>(
+      'SELECT synced, lang, offset_ms, source FROM lyrics WHERE song_id = ?;', [songId],
+    );
+    if (!row) return null;
+    const lines = db.getAllSync<LyricsLineRow>(
+      'SELECT start_ms, text FROM lyric_lines WHERE song_id = ? ORDER BY pos;', [songId],
+    );
+    return decodeLyrics(row, lines);
+  } catch {
+    return null;
+  } finally {
+    if (__DEV__) console.debug(`[lyrics-cache] sync lookup ${(performance.now() - started).toFixed(2)}ms`);
+  }
+}
+
 /** Read one song's lyrics, or null when we have none stored. */
 export async function loadLyrics(songId: string): Promise<LyricsData | null> {
   const db = getDb();
@@ -45,14 +79,7 @@ export async function loadLyrics(songId: string): Promise<LyricsData | null> {
       'SELECT start_ms, text FROM lyric_lines WHERE song_id = ? ORDER BY pos;',
       [songId],
     );
-    const data: LyricsData = {
-      synced: row.synced === 1,
-      lines: lines.map((l) => ({ startMs: l.start_ms, text: l.text })),
-      offsetMs: row.offset_ms,
-      source: row.source,
-    };
-    if (row.lang !== null) data.lang = row.lang;
-    return data;
+    return decodeLyrics(row, lines);
   } catch {
     return null;
   }

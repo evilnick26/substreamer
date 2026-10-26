@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { kvStorage } from './persistence';
+import { kvStorage, kvStorageSync } from './persistence';
 
 export type ItemLayout = 'list' | 'grid';
 export type AlbumSortOrder = 'artist' | 'title';
@@ -15,6 +15,8 @@ export type ListLength = 20 | 30 | 50 | 100;
 export const LIST_LENGTH_DISPLAY_CAP = 20;
 
 export interface LayoutPreferencesState {
+  displaySyncedLyricsInNps: boolean;
+  setDisplaySyncedLyricsInNps: (value: boolean) => void;
   albumLayout: ItemLayout;
   artistLayout: ItemLayout;
   playlistLayout: ItemLayout;
@@ -47,9 +49,22 @@ export interface LayoutPreferencesState {
 
 const PERSIST_KEY = 'substreamer-layout-preferences';
 
+// Seed the flash-critical NPS preference before async store hydration finishes.
+function initialSyncedLyricsPreference(): boolean {
+  try {
+    const raw = kvStorageSync.getItem(PERSIST_KEY);
+    const value = typeof raw === 'string' ? JSON.parse(raw)?.state?.displaySyncedLyricsInNps : undefined;
+    return typeof value === 'boolean' ? value : true;
+  } catch {
+    return true;
+  }
+}
+
 export const layoutPreferencesStore = create<LayoutPreferencesState>()(
   persist(
     (set) => ({
+      displaySyncedLyricsInNps: initialSyncedLyricsPreference(),
+      setDisplaySyncedLyricsInNps: (displaySyncedLyricsInNps) => set({ displaySyncedLyricsInNps }),
       albumLayout: 'list',
       artistLayout: 'list',
       playlistLayout: 'list',
@@ -85,6 +100,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
       name: PERSIST_KEY,
       storage: createJSONStorage(() => kvStorage),
       partialize: (state) => ({
+        displaySyncedLyricsInNps: state.displaySyncedLyricsInNps,
         albumLayout: state.albumLayout,
         artistLayout: state.artistLayout,
         playlistLayout: state.playlistLayout,
