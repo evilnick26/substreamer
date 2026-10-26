@@ -11,13 +11,14 @@ import { QueueItemRow } from '@/components/QueueItemRow';
 import { closeOpenRow } from '@/components/SwipeableRow';
 import { type ThemeColors } from '@/constants/theme';
 import { usePlayerAlbumInfo } from '@/hooks/usePlayerAlbumInfo';
-import { usePlayerLyrics } from '@/hooks/usePlayerLyrics';
+import type { PlayerLyricsResult } from '@/hooks/usePlayerLyrics';
 import { type Child } from '@/services/subsonicService';
 import { sanitizeBiographyText } from '@/utils/formatters';
 
 export type PlayerMode = 'queue' | 'info' | 'lyrics';
 
 export interface PlayerModeContentProps {
+  lyrics: PlayerLyricsResult;
   /** Active content view — owned by the parent screen (the centered toggle). */
   mode: PlayerMode;
   currentTrack: Child;
@@ -42,6 +43,7 @@ export interface PlayerModeContentProps {
 export const PlayerModeContent = memo(function PlayerModeContent({
   mode,
   currentTrack,
+  lyrics,
   queue,
   currentTrackIndex,
   colors,
@@ -79,13 +81,12 @@ export const PlayerModeContent = memo(function PlayerModeContent({
   const notesAttributionUrl = albumInfoEntry?.enrichedNotesUrl ?? null;
 
   const trackId = currentTrack.id;
-  // Always enabled: this host is mounted only by the tablet-portrait player route.
   const {
     entry: lyricsEntry,
     loading: lyricsLoading,
     error: lyricsError,
     handleRetry: handleRetryLyrics,
-  } = usePlayerLyrics(trackId, currentTrack.artist, currentTrack.title, true);
+  } = lyrics;
 
   const renderQueueItem = useCallback(
     ({ item, index }: { item: Child; index: number }) => (

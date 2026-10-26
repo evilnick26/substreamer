@@ -1,5 +1,6 @@
 jest.mock('../persistence/kvStorage', () => require('../persistence/__mocks__/kvStorage'));
 
+import { kvStorage } from '../persistence/kvStorage';
 import { layoutPreferencesStore } from '../layoutPreferencesStore';
 
 beforeEach(() => {
@@ -105,4 +106,47 @@ describe('layoutPreferencesStore', () => {
     layoutPreferencesStore.getState().setIncludePartialInDownloadedFilter(false);
     expect(layoutPreferencesStore.getState().includePartialInDownloadedFilter).toBe(false);
   });
+});
+
+
+test('inline synced lyrics defaults ON, persists OFF and restores older preferences', async () => {
+  expect(layoutPreferencesStore.getInitialState().displaySyncedLyricsInNps).toBe(true);
+  layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false);
+  layoutPreferencesStore.setState({ displaySyncedLyricsInNps: true });
+  await kvStorage.setItem('substreamer-layout-preferences', JSON.stringify({ state: { displaySyncedLyricsInNps: false }, version: 0 }));
+  await layoutPreferencesStore.persist.rehydrate();
+  expect(layoutPreferencesStore.getState().displaySyncedLyricsInNps).toBe(false);
+  layoutPreferencesStore.setState({ displaySyncedLyricsInNps: true });
+  await kvStorage.setItem('substreamer-layout-preferences', JSON.stringify({ state: { albumLayout: 'grid' }, version: 0 }));
+  await layoutPreferencesStore.persist.rehydrate();
+  expect(layoutPreferencesStore.getState().displaySyncedLyricsInNps).toBe(true);
+});
+
+
+test('saved OFF is available before asynchronous hydration or the first player render', () => {
+  jest.isolateModules(() => {
+    const { kvStorageSync } = require('../persistence/kvStorage');
+    kvStorageSync.setItem('substreamer-layout-preferences', JSON.stringify({
+      state: { displaySyncedLyricsInNps: false }, version: 0,
+    }));
+    const { layoutPreferencesStore: coldStore } = require('../layoutPreferencesStore');
+    expect(coldStore.getInitialState().displaySyncedLyricsInNps).toBe(false);
+    expect(coldStore.getState().displaySyncedLyricsInNps).toBe(false);
+  });
+});
+
+
+test('persisted lyric preference coexists with library-order normalisation and album-version preference', async () => {
+  await kvStorage.setItem('substreamer-layout-preferences', JSON.stringify({ version: 0, state: {
+    displaySyncedLyricsInNps: false, showAlbumVersion: false,
+    libraryOrder: ['artists', 'artists', 'invalid', 'songs'],
+  } }));
+  await layoutPreferencesStore.persist.rehydrate();
+  expect(layoutPreferencesStore.getState()).toMatchObject({
+    displaySyncedLyricsInNps: false, showAlbumVersion: false,
+    libraryOrder: ['artists', 'songs', 'albums', 'playlists'],
+  });
+  layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(true);
+  expect(layoutPreferencesStore.getState().showAlbumVersion).toBe(false);
+  expect(layoutPreferencesStore.getState().libraryOrder).toEqual(['artists', 'songs', 'albums', 'playlists']);
 });

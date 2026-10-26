@@ -32,6 +32,8 @@ import { SkipIntervalButton } from '@/components/SkipIntervalButton';
 import { SleepTimerButton } from '@/components/SleepTimerButton';
 import { SleepTimerCapsule } from '@/components/SleepTimerCapsule';
 import { PlaybackSourceBadge } from '@/components/PlaybackSourceBadge';
+import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
+import { usePlayerLyrics } from '@/hooks/usePlayerLyrics';
 import { PlayerModeContent, type PlayerMode } from '@/components/player/PlayerModeContent';
 import { CastButton } from '@/components/RoutePicker';
 import { type ThemeColors } from '@/constants/theme';
@@ -81,6 +83,7 @@ export function PlayerTabletPortrait() {
   const songAlbumId = currentTrack?.albumId;
   const currentTrackIndex = playerStore((s) => s.currentTrackIndex);
   const queue = playerStore((s) => s.queue);
+  const lyrics = usePlayerLyrics(currentTrack?.id ?? null, currentTrack?.artist, currentTrack?.title, true);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
   const [mode, setMode] = useState<PlayerMode>('queue');
@@ -244,7 +247,9 @@ export function PlayerTabletPortrait() {
                 </View>
 
                 <View style={styles.progressSection}>
-                  <ProgressBar colors={colors} handleSeek={handleSeek} />
+                  <PlayerLyricsOrProgress trackId={currentTrack.id} lyrics={lyrics.entry} colors={colors}>
+                    <ProgressBar colors={colors} handleSeek={handleSeek} />
+                  </PlayerLyricsOrProgress>
                 </View>
 
                 <PlaybackControls
@@ -263,6 +268,7 @@ export function PlayerTabletPortrait() {
           {/* Bottom content: queue / info / lyrics on the page gradient */}
           <View style={[styles.bottomSection, { height: bottomSectionHeight }]}>
             <PlayerModeContent
+              lyrics={lyrics}
               mode={mode}
               currentTrack={currentTrack}
               queue={queue}

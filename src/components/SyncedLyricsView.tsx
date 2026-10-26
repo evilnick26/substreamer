@@ -18,6 +18,7 @@ import { LyricsLineRow } from './LyricsLineRow';
 import { seekTo } from '../services/playerService';
 import { type LyricsLine } from '../services/subsonicService';
 import { playerStore } from '../store/playerStore';
+import { findActiveLyricIndex } from '../utils/lyrics';
 import { impactAsync, ImpactFeedbackStyle } from '../utils/haptics';
 
 interface SyncedLyricsViewProps {
@@ -99,17 +100,7 @@ export const SyncedLyricsView = memo(function SyncedLyricsView({
   useEffect(() => {
     const compute = () => {
       const ms = playerStore.getState().position * 1000;
-      let idx = -1;
-      if (lineStarts.length > 0 && ms >= lineStarts[0]) {
-        let lo = 0;
-        let hi = lineStarts.length - 1;
-        while (lo < hi) {
-          const mid = (lo + hi + 1) >>> 1;
-          if (lineStarts[mid] <= ms) lo = mid;
-          else hi = mid - 1;
-        }
-        idx = lo;
-      }
+      const idx = findActiveLyricIndex(lineStarts, ms);
       setActiveIndex((prev) => (prev === idx ? prev : idx));
     };
     compute();

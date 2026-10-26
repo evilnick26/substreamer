@@ -127,14 +127,15 @@ export const lyricsStore = create<LyricsState>()((set, get) => {
     },
 
     removeLyrics: async (trackId) => {
+      // Readers may take a synchronous disk snapshot on a memory miss.
+      await deleteLyrics(trackId);
       const { [trackId]: _, ...entries } = get().entries;
       set({ entries, revision: get().revision + 1 });
-      await deleteLyrics(trackId);
     },
 
     clearLyrics: async () => {
-      set({ entries: {}, loading: {}, errors: {}, revision: get().revision + 1 });
       await clearAllLyrics();
+      set({ entries: {}, loading: {}, errors: {}, revision: get().revision + 1 });
     },
   };
 });

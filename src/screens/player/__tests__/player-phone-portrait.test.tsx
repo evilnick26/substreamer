@@ -260,6 +260,7 @@ import { type Child } from '@/services/subsonicService';
 
 // Must import after mocks
 const { PlayerPhonePortrait } = require('@/screens/player/player-phone-portrait');
+const { PlayerTabletPortrait } = require('@/screens/player/player-tablet-portrait');
 
 const fetchLyrics = lyricsStore.getState().fetchLyrics as jest.Mock;
 const getAlbumVersion = require('@/db/repository/albums').getAlbumVersion as jest.Mock;
@@ -292,6 +293,8 @@ beforeEach(() => {
     () => new Promise<string | null>(() => {}),
   );
   getDb.mockReturnValue({});
+  Object.assign(lyricsStore.getState(), { entries: {}, loading: {}, errors: {}, revision: 0 });
+  layoutPreferencesStore.setState({ displaySyncedLyricsInNps: true });
   appStateStore.setState({ isActive: true });
   playerStore.setState({
     currentTrack: MOCK_TRACK,
@@ -712,4 +715,56 @@ describe('PlayerPhonePortrait', () => {
     // Queue items should still be rendered (mounted)
     expect(getByText('Second Song')).toBeTruthy();
   });
+});
+
+
+test('whole progress component is replaced for genuine cached lyrics and restored by OFF', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Original, Casing!' }],
+  } } });
+  const view = render(<PlayerPhonePortrait />);
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Original, Casing!');
+  act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
+  expect(view.getByTestId('progress-bar')).toBeTruthy();
+  expect(view.queryByTestId('inline-lyrics')).toBeNull();
+});
+
+
+test('tablet portrait shares cached lyrics with its full view and restores progress when OFF', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Tablet, Original!' }],
+  } } });
+  const view = render(<PlayerTabletPortrait />);
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Tablet, Original!');
+  act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
+  expect(view.getByTestId('progress-bar')).toBeTruthy();
+  expect(fetchLyrics).not.toHaveBeenCalled();
+});
+
+
+test('inline lyrics preserves sanctifi phone ordering, local version and album/artist navigation', async () => {
+  getAlbumVersion.mockResolvedValue('Local Edition');
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Synced, Original!' }],
+  } } });
+  const push = jest.fn();
+  jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+  const view = render(<PlayerPhonePortrait />);
+  expect(await view.findByText('Local Edition')).toBeTruthy();
+  expect(view.getByText('Test Album')).toBeTruthy();
+  expect(view.queryByTestId('progress-bar')).toBeNull();
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Synced, Original!');
+  const ids = ['player-progress-section', 'player-controls', 'player-track-info'];
+  const order = view.UNSAFE_root.findAll(node => ids.includes(node.props.testID)).map(node => node.props.testID);
+  expect([...new Set(order)]).toEqual(ids);
+  fireEvent.press(view.getByTestId('player-album-link'));
+  fireEvent.press(view.getByTestId('player-artist-link'));
+  expect(push).toHaveBeenNthCalledWith(1, '/album/album-1');
+  expect(push).toHaveBeenNthCalledWith(2, '/artist/artist-1');
+  jest.restoreAllMocks();
 });
