@@ -159,13 +159,21 @@ publication rule, not protection against its owner's manual edits.
 
 ## Global build-number allocation and traceability
 
-**Reconciliation warning, 26 October 2026:** Issue 047 records Nick's confirmation
-that `80000188` was distributed and Issue 046 is closed. The inspected repository
-still contains `80000187` / semantic `0.1.0`; it does not contain the exact
-80000188 hash, size or source attestation. The known distributed lower bound is
-therefore **80000188**, not a complete allocation history. Do not allocate another
-code until Nick reconciles that artifact and every later reservation/distribution.
-For a **new** distributed artifact, allocate above every previously reserved/distributed code. Never reset the sequence, allocate
+**Historical reconciliation, 26 October 2026:** the owner confirms that Alpha
+`80000188` was tested and published on 25 October, with semantic version `0.1.1`,
+actual versionName `8.1.8`, package `fi.sancti.client`, size **79,562,702 bytes** and
+APK SHA-256 `b94623970de73c14da3f89d5569c272b1d1a994296f431750a24b2d1236c5e7e`.
+The [ledger](android-release-ledger.md) records the owner-reported inspection and
+publication evidence, deleted historical local copy and timestamp limitations.
+The exact original build-source commit remains unknown; the signer was not
+independently inspected during this latest reconciliation. Current configuration
+commit `897f374a` is not the historical APK's source attestation.
+
+The owner explicitly confirms no code above **80000188** has been reserved, built,
+attempted or distributed, establishing that global allocation high-water mark.
+This does not authorise a future release or create a retrospective staging or
+allocation record. For a **new** distributed artifact, separately approve a code
+above every previously reserved/distributed code. Never reset the sequence, allocate
 per channel, or derive it from a human-readable version. Record reservations and
 failed/withdrawn releases in the [ledger](android-release-ledger.md); do not reuse
 their numbers. One publisher allocates at a time. A build number need not change
@@ -180,13 +188,13 @@ workflow. Neither inherited tool is modified or authorised by this PR.
 
 ## sancti.fi semantic identity and deferred native migration
 
-Version sources in the inspected repository (not proof of the latest distributed artifact):
+Version sources recorded by configuration commit `897f374a` (not historical APK build provenance):
 
 | Identifier | Current source/value |
 | --- | --- |
-| Android versionCode | `app.json`, `expo.android.versionCode`: `80000187` (25 October 2026). |
+| Android versionCode | `app.json`, `expo.android.versionCode`: `80000188` (recorded by `897f374a`). |
 | Android versionName source | `app.json`, `expo.version`: `8.1.8`; `app.config.js` preserves it. Generated native files can be stale until regeneration. The built APK is authoritative for an existing artifact. |
-| sancti.fi semantic version | `app.json`, `expo.extra.sanctifiVersion`: `0.1.0`; Settings reads the resolved application configuration. |
+| sancti.fi semantic version | `app.json`, `expo.extra.sanctifiVersion`: `0.1.1`; Settings reads the resolved application configuration. |
 | sancti.fi Settings build | `Application.nativeBuildVersion`: full installed build, separate from the semantic version. |
 | Inherited Settings footer | `VersionFooter.tsx` reads `Constants.expoConfig.version`; its Android build label uses versionCode modulo 1000, not the full update-ordering value. |
 | npm package version | `package.json`: `8.1.8`; private package metadata, not the current sancti.fi Settings source. |
@@ -235,8 +243,10 @@ The allocation path above is a placeholder, not an established futwick path.
 Preflight/dry-run read Git and local files only: no Java, SDK, Gradle, Expo,
 tests, directories, output files or signing credentials are invoked/created/read.
 They return a JSON report and nonzero status for blockers, including multiple
-independent diagnostics. Incomplete history does not prevent developing or
-inspecting preflight; it blocks new-artifact preparation.
+independent diagnostics. Historical source gaps remain explicitly unknown; the
+Published 80000188 ledger row cannot substitute for a future Reserved row and
+allocation attestation. Current code 80000188 is already distributed and cannot
+be prepared with new-artifact intent. No preflight check is relaxed for history.
 
 Configure existing `JAVA_HOME` and `ANDROID_HOME` explicitly; preflight requires
 `java`, `javac`, the generated Gradle wrapper and SDK executables. Build-tools
