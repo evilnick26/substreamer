@@ -17,25 +17,52 @@ Add one row per reservation/artifact; update its status/channel history without
 erasing earlier allocations. Include failed/withdrawn reservations. Keep the full
 public certificate digest in the staging record and publication evidence.
 
-| versionCode | Actual versionName | Exact source revision (40 characters) | APK SHA-256 | Certificate SHA-256 | Status / UTC date / channels / archive URL |
+| versionCode | Actual versionName | Exact source revision (40 characters if known) | APK SHA-256 | Certificate SHA-256 | Status / UTC date / channels / archive URL |
 | --- | --- | --- | --- | --- | --- |
 | `80000187` | `8.1.8` | `3010cf5ca0a0443e99fe1c644666b747dd927506` | `95e388228dc644a4fbca069ca205a856f376dab534b61123cf13445efa9ed3cc` | `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c` | Published Alpha; owner reported 25 October 2026; exact UTC time not supplied. [Immutable APK](https://updates.sancti.fi/client/apks/sanctifi-80000187.apk). In-place 80000186 to 80000187 acceptance passed. |
+| `80000188` | `8.1.8` | Unknown - original build source not established | `b94623970de73c14da3f89d5569c272b1d1a994296f431750a24b2d1236c5e7e` | Unverified in this reconciliation; no APK-specific certificate digest recorded here | Published Alpha, 25 October 2026 (owner-attested); exact UTC publication time unknown. [Immutable APK](https://updates.sancti.fi/client/apks/sanctifi-80000188.apk). Historical publication, not a future reservation. |
 
-### 26 October 2026 reconciliation note
+### 26 October 2026: historical Alpha 80000188 reconciliation
 
-[Issue 046](https://github.com/evilnick26/substreamer/issues/46) is closed and
-[Issue 047](https://github.com/evilnick26/substreamer/issues/47) records Nick's
-confirmation of working/distributed **80000188**. Issue 046 approved semantic
-0.1.1 and unchanged native versionName 8.1.8, but approval is not actual APK
-inspection. The inspected sanctifi tree remains at semantic 0.1.0 / 80000187;
-no matching 80000188 staging record or dated release diary was found there.
+The owner supplied the original APK inspection results and confirmed successful
+release testing/publication, including the existing publication integrity checks.
+These are owner-reported results, not APK, HTTPS or phone checks repeated here.
+See the [reconciliation diary](project-diary/2026-10-26_issue-047_alpha-80000188-reconciliation.md).
 
-This note records the reported distribution without inventing an exact source,
-APK checksum, size, publication time or independently verified certificate/version.
-Obtain those from the retained APK and original build records; never infer source
-from current HEAD or reuse the 80000187 checksum. Include every later reservation
-before allocating anything new. Stage 1 automation requires an owner reconciliation
-attestation plus a ledger reservation; it does not create either automatically.
+Additional confirmed release facts:
+
+| Property | Owner-supplied value / evidence |
+| --- | --- |
+| sancti.fi semantic version | `0.1.1`, from the owner's release testing; separate from Android versionName `8.1.8`. |
+| Android package | `fi.sancti.client`, from the reported original APK inspection. |
+| APK size | **79,562,702 bytes**, from the reported original APK inspection. |
+| Local APK modification time | `2026-10-25 16:00:31 UTC`; a file modification time, not an established build or publication time. |
+| Historical local copy | `releases/sanctifi-80000188.apk`; inspected, then deleted by the owner after the published copy had already been verified. No deletion is performed by this documentation update. |
+
+The original build-source commit remains **unknown**. Commit
+`897f374ae50863dbe9f77ffc7c7f89e33e2c68da` records the current app.json configuration
+(semantic 0.1.1 / build 80000188); it does not establish which source produced the
+historical APK. Neither it nor current HEAD is assigned as that artifact's source.
+
+The original APK's signing certificate was **not independently inspected during
+this latest reconciliation**. The permanent identity documented in the
+[signing validation diary](project-diary/2026-10-24_issue-021_futwick-validation.md)
+is not a fresh certificate observation for 80000188. No signature verification is
+claimed here from the file checksum or successful historical publication alone.
+
+The owner explicitly confirms that **no versionCode higher than 80000188 has been
+reserved, built, attempted or distributed**. The owner-confirmed global allocation
+high-water mark is therefore **80000188** as of this reconciliation. This statement
+reconciles allocation history without filling in the unknown build provenance.
+
+This historical Published row is not a Stage 1 `Reserved` row. No retrospective
+`.apk.json`, private allocation attestation, new reservation or future release
+authorisation is created. A future new artifact still requires a separately
+approved higher code, matching configuration/native metadata, its own Reserved
+ledger row and the Stage 1 allocation attestation. Unknown historical source does
+not invalidate the confirmed allocation high-water mark; it must remain unknown.
+
+### Earlier 80000187 acceptance
 
 The published 80000187 APK is **79,561,254 bytes**, package `fi.sancti.client`.
 Gradle release build succeeded in **13m 54s**. The owner confirmed APK publication
@@ -57,12 +84,9 @@ was not this published APK; do not substitute its checksum or provenance.
 Previous 80000185/80000186 history above remains intact. Beta/Stable promotion is
 not reported by this acceptance; the recorded new channel is Alpha only.
 
-No new reservations or deployments are performed by this documentation update. Before allocating,
-include all later distributions and reservations, not only repository history.
-Issue 047 records Nick's confirmation that `80000188` was distributed; the known
-distributed lower bound is therefore **80000188**. Exact hash, size, build source
-and any later reservations still require owner reconciliation. No next allocation
-is authorised or inferred from this incomplete record.
+No new reservations or deployments are performed by this documentation update.
+The owner-confirmed high-water mark is **80000188**; no higher code is authorised
+or reserved here. Reconfirm allocation history at the time of any future release.
 
 See [publishing procedure and proposed human-version migration](android-release-publishing.md).
 Never record private keys, passwords, recovery archives or access credentials here.
