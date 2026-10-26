@@ -134,7 +134,7 @@ for (const [name, change, expected] of [
   ['missing signer', (f) => fs.writeFileSync(f.native, fs.readFileSync(f.native, 'utf8').replace('sanctifiRelease', 'debug')), /Permanent release signer/],
   ['dirty source', (f) => fs.appendFileSync(path.join(f.root, 'app.json'), ' '), /Source tree is dirty/],
   ['untracked input', (f) => f.write('untracked.js', 'code'), /Source tree is dirty/],
-  ['missing allocation', (f) => delete f.options.allocation, /reconciling 80000188/],
+  ['missing allocation', (f) => delete f.options.allocation, /supply --allocation FILE/],
   ['unreconciled allocation', (f) => fs.writeFileSync(f.allocation, '{"reconciled":false}'), /Allocation must attest/],
   ['missing JDK', (f) => delete f.env.JAVA_HOME, /Configure JAVA_HOME/],
   ['missing SDK tool', (f) => fs.unlinkSync(path.join(f.tools, 'aapt2')), /ENOENT/],

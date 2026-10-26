@@ -232,6 +232,31 @@ One entry point, `node scripts/android-release.js`, retains the original `stage`
 and `validate` commands. New commands are `preflight`, `prepare` and `verify`.
 There is no remote publishing mode. Unknown/duplicate options fail.
 
+Read-only CLI help needs no SDK configuration, allocation file or clean checkout:
+
+```bash
+node scripts/android-release.js --help
+node scripts/android-release.js preflight --help
+node scripts/android-release.js prepare --help
+node scripts/android-release.js verify --help
+```
+
+`validate --help`, `stage --help` and `-h` are also supported. Help exits successfully
+before readiness checks or tool execution; it does not build, test, sign, allocate,
+stage or publish. Use help alone or `COMMAND --help`; mixing help with other
+arguments is rejected. Help describes the existing syntax, including the difference
+between read-only `prepare --dry-run` and an explicitly approved
+`prepare --execute-build`, and the new/keep intent requirements.
+
+Preflight diagnostics read the configured code and ledger rather than assuming a
+particular latest release. They distinguish the unambiguous owner-confirmed
+high-water statement, highest code in ledger rows, current Published/Reserved status,
+and recorded hash/size/source metadata. Unknown or ambiguous fields remain unknown;
+recorded evidence is not a fresh APK, signer or HTTPS check. Size is read only from
+the published code's ledger section. These diagnostics do not replace allocation
+validation: the existing minimum historical allocation floor and all reservation,
+attestation, metadata and immutable-archive gates remain in force.
+
 Read-only preparation, from a clean reviewed checkout with dependencies installed:
 
 ```bash

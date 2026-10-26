@@ -214,6 +214,42 @@ function nativeMetadata(text) {
   return { versionCode: Number(code), versionName, packageName };
 }
 
+function ledgerDiagnostics(ledger, configuredCode) {
+  const validCode = (value) => Number.isInteger(value) && value > 0 && value <= 2100000000;
+  const marks = [...ledger.matchAll(/owner-confirmed(?:\s+global\s+allocation)?\s+high-water\s+mark\s+is(?:\s+therefore)?\s+\*\*(\d+)\*\*/gi)]
+    .map((match) => Number(match[1]));
+  const confirmed = marks.length > 0 && marks.every((code) => validCode(code) && code === marks[0]) ? marks[0] : null;
+  const rows = ledger.split('\n').filter((line) => /^\|\s*`\d+`\s*\|/.test(line)).map((line) => {
+    const fields = line.split('|').slice(1, -1).map((value) => value.trim());
+    return { code: Number(fields[0].replaceAll('`', '')), fields, status: fields.at(-1) };
+  }).filter((row) => validCode(row.code));
+  const unique = rows.filter((row) => rows.filter((other) => other.code === row.code).length === 1);
+  const current = unique.find((row) => row.code === configuredCode);
+  const published = unique.filter((row) => /^Published\b/i.test(row.status)).sort((a, b) => b.code - a.code)[0];
+  const highest = rows.length ? Math.max(...rows.map((row) => row.code)) : null;
+  const messages = [confirmed === null ? 'Owner-confirmed allocation high-water mark is not unambiguously recorded in the ledger'
+    : `Owner-confirmed allocation high-water mark: ${confirmed}`];
+  if (highest !== null) messages.push(`Highest versionCode in ledger rows: ${highest}`);
+  if (current) messages.push(/^Published\b/i.test(current.status)
+    ? `Current configured versionCode ${configuredCode} has already been distributed (Published ledger row)`
+    : `Current configured versionCode ${configuredCode} has ledger status: ${current.status}`);
+  else messages.push(`Current configured versionCode ${configuredCode ?? 'unknown'} has no unambiguous ledger row`);
+  if (published && published.fields.length === 6) {
+    const source = published.fields[2].replaceAll('`', '');
+    const hash = published.fields[3].replaceAll('`', '');
+    const sections = ledger.split(/(?=^#{1,6} )/m).filter((section) =>
+      new RegExp('^#{1,6} [^\n]*\\b' + published.code + '\\b').test(section));
+    const sizes = sections.flatMap((section) => [...section.matchAll(/^\|\s*APK size\s*\|\s*\*\*((?:[1-9]\d{0,2}(?:,\d{3})+)|(?:[1-9]\d*)) bytes\*\*/gm)])
+      .map((match) => Number(match[1].replaceAll(',', '')));
+    const size = sizes.length === 1 && Number.isSafeInteger(sizes[0]) && sizes[0] > 0 ? sizes[0] : null;
+    messages.push(`Published ${published.code}: APK SHA-256 ${/^[a-f0-9]{64}$/.test(hash) ? 'recorded (' + hash + ')' : 'not recorded as a valid digest'}; ` +
+      `APK size ${size === null ? 'not unambiguously recorded in its ledger section' : 'recorded (' + size + ' bytes)'}; ` +
+      `original build-source commit ${/^[a-f0-9]{40}$/.test(source) ? 'recorded (' + source + ')' : 'unknown/unverified (no full revision recorded)'}. ` +
+      'Ledger evidence only; no fresh APK, signer or HTTPS verification performed');
+  }
+  return messages;
+}
+
 async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env) {
   const report = { command: 'preflight', ok: true, errors: [], warnings: [], publication: 'none',
     apkVerification: 'Not performed by preflight', automatedChecks: 'Not run by preflight',
@@ -257,18 +293,26 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
     for (const tool of ['apksigner', 'aapt2']) fs.accessSync(path.join(report.buildTools, tool), fs.constants.X_OK);
     check(fs.existsSync(path.join(root, 'node_modules/expo/package.json')), 'Install reviewed locked dependencies before preparing a build');
   });
+  let ledger;
+  try {
+    ledger = fs.readFileSync(path.join(root, 'docs/android-release-ledger.md'), 'utf8');
+    report.warnings.push(...ledgerDiagnostics(ledger, report.expected?.versionCode));
+  } catch {
+    report.warnings.push('Release ledger diagnostic context unavailable; inspect docs/android-release-ledger.md locally');
+  }
   await attempt(async () => {
     report.directory = outsideGit(options.directory || DEFAULT_DIRECTORY);
     if (options.intent === 'new') {
-      check(options.allocation, 'New artifact blocked: supply --allocation FILE after reconciling 80000188 and all later reservations; repository 80000187 is stale');
+      check(options.allocation, 'New artifact blocked: supply --allocation FILE. A new release requires a separately approved higher versionCode, a Reserved ledger entry and its matching private allocation attestation. ' + report.warnings.join('. '));
       const allocation = readJson(options.allocation);
-      const ledger = fs.readFileSync(path.join(root, 'docs/android-release-ledger.md'), 'utf8');
+      check(ledger !== undefined, 'Cannot check allocation without the release ledger');
       const knownCodes = [...ledger.matchAll(/^\|\s*`(\d+)`\s*\|/gm)].map((m) => Number(m[1]));
+      const minimumHighWaterMark = Math.max(80000188, ...knownCodes.filter((n) => n !== report.expected?.versionCode));
       check(allocation.reconciled === true && Number.isInteger(allocation.highWaterMark) &&
-        allocation.highWaterMark >= Math.max(80000188, ...knownCodes.filter((n) => n !== report.expected?.versionCode)) &&
+        allocation.highWaterMark >= minimumHighWaterMark &&
         allocation.versionCode === report.expected?.versionCode && allocation.versionCode > allocation.highWaterMark &&
         typeof allocation.ledgerReference === 'string' && allocation.ledgerReference.trim().length > 0,
-      'Allocation must attest reconciled history, highWaterMark >= 80000188, a higher matching versionCode and ledgerReference; no number is allocated here');
+      `Allocation must attest reconciled history, highWaterMark >= ${minimumHighWaterMark}, a higher matching versionCode and ledgerReference; no number is allocated here`);
       check(ledger.split('\n').some((line) => line.split('|')[1]?.trim() === '`' + allocation.versionCode + '`' && /^Reserved\b/i.test(line.split('|').at(-2)?.trim() || '')),
         'Record the approved code as Reserved in the release ledger before building');
       const destination = path.join(report.directory, `sanctifi-${allocation.versionCode}.apk`);
@@ -288,7 +332,6 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
       report.existingArtifact = { ...record, file: archived };
     }
   });
-  report.warnings.push('80000188 was reported distributed in issues 46/47; its exact hash/source are not established by this checkout');
   report.buildCommand = { cwd: 'android', command: './gradlew', args: [':app:assembleRelease'], NODE_ENV: 'production' };
   report.ok = report.errors.length === 0;
   return report;
@@ -434,8 +477,48 @@ function localOptions(args, preparing) {
   return options;
 }
 
+function help(command) {
+  const common = '  --build-tools DIRECTORY  SDK tools (default: $ANDROID_HOME/build-tools/36.0.0)\n' +
+    '  --directory DIRECTORY    Trusted release archive outside Git (default: ~/.local/share/sanctifi/releases/)';
+  const intent = '  --intent new|keep is required. new consumes a separately approved higher code, Reserved ledger row\n' +
+    '  and --allocation FILE (private JSON: reconciled, versionCode, highWaterMark, ledgerReference).\n' +
+    '  Allocation is required only for new and invalid for keep; it records prior approval, never creates it.\n' +
+    '  keep requires the existing immutable APK/provenance and rejects changed rebuild bytes.\n' +
+    '  Neither intent edits versions or allocates a number.';
+  const commands = {
+    preflight: 'preflight --intent new|keep [--allocation FILE] [--build-tools DIRECTORY] [--directory DIRECTORY]\n' +
+      '  Read-only readiness checks; no tests, SDK processes, build or staging.\n' + intent + '\n' + common,
+    prepare: 'prepare --intent new|keep (--dry-run | --execute-build) [--allocation FILE] [--build-tools DIRECTORY] [--directory DIRECTORY]\n' +
+      '  --dry-run: read-only preparation assessment, with no tests/tools/build/staging.\n' +
+      '  --execute-build: runs checks, an actual separately authorised Gradle build, APK verification and staging.\n' +
+      '  Choose exactly one execution flag; stale native metadata stops, never triggers Expo prebuild.\n' + intent + '\n' + common,
+    verify: 'verify APK --build-tools DIRECTORY\n' +
+      '  Inspect an existing APK: signature/pinned signer, package, versions, hash and size.\n' +
+      '  Requires existing SDK tools; source revision stays unknown. Does not build or stage.',
+    validate: 'validate MANIFEST [--apk APK --build-tools DIRECTORY]\n' +
+      '  Validate manifest structure only, or also compare a supplied local APK using required SDK tools.\n' +
+      '  --build-tools is only valid with --apk. No download or public hosting verification.',
+    stage: 'stage APK --build-tools DIRECTORY --source-revision SHA [--directory DIRECTORY]\n' +
+      '  Verify/copy an existing APK to the immutable archive. SHA is the actual full 40-character build-source\n' +
+      '  attestation and must exist in this checkout. Refuses differing bytes/provenance; never infer old source from HEAD.\n' +
+      '  build-tools is required; directory defaults to ~/.local/share/sanctifi/releases/ outside Git.',
+  };
+  if (command) {
+    check(Object.hasOwn(commands, command), 'Unknown command for help: ' + command);
+    return 'Usage: node scripts/android-release.js ' + commands[command] + '\nHelp is read-only and needs no SDK, allocation file or clean checkout. No command publishes remotely.';
+  }
+  return 'Usage: node scripts/android-release.js COMMAND [arguments]\n\n' + Object.values(commands).join('\n\n') +
+    '\n\nUse --help or COMMAND --help (also -h). Help does not inspect the checkout or run tools.\nNo command changes versions or publishes remotely; real builds require separate owner approval.';
+}
+
 async function main(args) {
   const [command, file, ...rest] = args;
+  if (args.some((arg) => arg === '--help' || arg === '-h')) {
+    check((args.length === 1 && ['--help', '-h'].includes(command)) ||
+      (args.length === 2 && ['--help', '-h'].includes(file)), 'Usage: --help or COMMAND --help');
+    console.log(help(args.length === 1 ? undefined : command));
+    return;
+  }
   if (command === 'preflight' || command === 'prepare') {
     const options = localOptions(args.slice(1), command === 'prepare');
     const report = command === 'prepare' ? await prepare(options) : await preflight(options);
@@ -487,7 +570,7 @@ async function main(args) {
   }
 }
 
-module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks };
+module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks, ledgerDiagnostics };
 if (require.main === module) main(process.argv.slice(2)).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
