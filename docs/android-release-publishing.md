@@ -2,8 +2,10 @@
 
 ## Scope and current status
 
-This procedure prepares files locally. It does not build/sign APKs, upload files,
-change versions, install updates or implement the client checks owned by Issue 023.
+The manual publication procedure below remains available. The Stage 1 local CLI
+can run an explicitly approved Gradle release build; preflight and dry-run never
+build. It never changes versions, regenerates native files, uploads files, changes
+channel pointers, installs updates or changes the client updater.
 Nick's hosting investigation confirmed that the existing Caddy container serves
 `https://updates.sancti.fi/` from host root `/opt/updates-site`, and that the website
 responds successfully over HTTPS. Nick subsequently confirmed the first live
@@ -63,7 +65,7 @@ The first published APK (24 October) is **79,545,302 bytes**, package
 `42f7945d52433a993765a42fb3416e65e996507bfce2f635f4958877673d222f`.
 The first Alpha manifest (297 bytes) passed local schema validation and references
 that artifact, version metadata and checksum. Preserve this APK's bytes and metadata.
-The current Alpha pointer now offers `sanctifi-80000187.apk` (79,561,254 bytes),
+The Alpha pointer recorded on 25 October offered `sanctifi-80000187.apk` (79,561,254 bytes),
 with SHA-256
 `95e388228dc644a4fbca069ca205a856f376dab534b61123cf13445efa9ed3cc`.
 Its actual versionName remains `8.1.8`; prior immutable artifacts remain unchanged.
@@ -157,9 +159,13 @@ publication rule, not protection against its owner's manual edits.
 
 ## Global build-number allocation and traceability
 
-Known distributed high-water mark: `80000187`. For a **new** distributed artifact,
-allocate above every previously reserved/distributed code, normally `80000188`
-next after confirming no other allocation. Never reset the sequence, allocate
+**Reconciliation warning, 26 October 2026:** Issue 047 records Nick's confirmation
+that `80000188` was distributed and Issue 046 is closed. The inspected repository
+still contains `80000187` / semantic `0.1.0`; it does not contain the exact
+80000188 hash, size or source attestation. The known distributed lower bound is
+therefore **80000188**, not a complete allocation history. Do not allocate another
+code until Nick reconciles that artifact and every later reservation/distribution.
+For a **new** distributed artifact, allocate above every previously reserved/distributed code. Never reset the sequence, allocate
 per channel, or derive it from a human-readable version. Record reservations and
 failed/withdrawn releases in the [ledger](android-release-ledger.md); do not reuse
 their numbers. One publisher allocates at a time. A build number need not change
@@ -174,7 +180,7 @@ workflow. Neither inherited tool is modified or authorised by this PR.
 
 ## sancti.fi semantic identity and deferred native migration
 
-Current version sources:
+Version sources in the inspected repository (not proof of the latest distributed artifact):
 
 | Identifier | Current source/value |
 | --- | --- |
@@ -211,6 +217,209 @@ metadata now. Any future native alignment requires separate approval, a newly
 allocated higher Android code, actual APK verification and its own release record.
 Never rebuild, relabel, resign or overwrite an existing immutable APK to perform
 that migration.
+
+## Stage 1 local release automation
+
+One entry point, `node scripts/android-release.js`, retains the original `stage`
+and `validate` commands. New commands are `preflight`, `prepare` and `verify`.
+There is no remote publishing mode. Unknown/duplicate options fail.
+
+Read-only preparation, from a clean reviewed checkout with dependencies installed:
+
+```bash
+node scripts/android-release.js preflight --intent new --allocation /absolute/private/allocation.json
+node scripts/android-release.js prepare --intent new --allocation /absolute/private/allocation.json --dry-run
+```
+
+The allocation path above is a placeholder, not an established futwick path.
+Preflight/dry-run read Git and local files only: no Java, SDK, Gradle, Expo,
+tests, directories, output files or signing credentials are invoked/created/read.
+They return a JSON report and nonzero status for blockers, including multiple
+independent diagnostics. Incomplete history does not prevent developing or
+inspecting preflight; it blocks new-artifact preparation.
+
+Configure existing `JAVA_HOME` and `ANDROID_HOME` explicitly; preflight requires
+`java`, `javac`, the generated Gradle wrapper and SDK executables. Build-tools
+default to `$ANDROID_HOME/build-tools/36.0.0`; `--build-tools DIRECTORY` overrides
+the path. No macOS SDK assumptions or emulator-starting helpers are used. JDK
+17 through 24 is checked when execution is explicitly requested, not in dry-run.
+
+`app.json` remains authoritative for the Android code and separate sancti.fi
+semantic version; native versionName remains 8.1.8. Preflight compares package,
+code and versionName with the ignored `android/app/build.gradle`, checks for the
+permanent release-signing configuration/validator, and stops on missing, stale or
+ambiguous metadata. It does not prove that signing credentials are valid.
+Preserve local native work and review the established manual
+`npx expo prebuild --platform android --no-install` procedure separately if a
+refresh is needed; this CLI never runs it or edits generated files.
+
+Version intent is mandatory:
+
+- **`--intent new`:** consumes a separately approved reservation, without allocating
+  or writing any version. The private allocation JSON must contain integer
+  `versionCode` equal to the current app.json/native code, integer `highWaterMark`
+  at least 80000188 and at least every other code recorded in the ledger, boolean
+  `reconciled: true`, and nonempty string `ledgerReference` identifying the owner's
+  reconciliation/reservation evidence. Its code must exceed that high-water mark
+  and appear in a `Reserved` row in the ledger. An existing archive entry is a
+  blocker. This is an owner attestation, not automatic discovery of private release
+  history or a distributed allocation service. Do not assert reconciliation until
+  it has actually happened. No allocation file or new reservation is supplied by
+  this implementation.
+- **`--intent keep`:** requires a retained staged APK and `.apk.json` for the
+  configured code. It verifies the archive before building, compares the rebuild
+  byte-for-byte by SHA-256 and fails on changed bytes. The existing artifact and
+  original source attestation remain unchanged, even if the comparison build is
+  from another commit. New bytes require separate approval for a globally new code.
+  To inspect an older APK independently of current source configuration, use
+  `verify` instead of changing source versions.
+
+Only after separate approval for a real release build:
+
+```bash
+node scripts/android-release.js prepare --intent new --allocation /absolute/private/allocation.json --execute-build
+# Or, for an approved comparison rebuild of a retained artifact:
+node scripts/android-release.js prepare --intent keep --execute-build
+```
+
+`prepare` requires exactly one of `--dry-run` or `--execute-build`. Preparation
+runs release-tool/signing Node tests, TypeScript, full Jest (two workers), Intl,
+translation, ProGuard and module-inventory validators before Gradle; any failure
+stops the sequence. Optional signing runtime groups retain their explicit skip
+behaviour without prerequisites; a successful Node command is not proof that
+those runtime groups executed. It then uses exactly
+`(cd android && NODE_ENV=production ./gradlew :app:assembleRelease)` with the
+existing signing setup. No auto-install, release tag, Git commit/push or EAS job
+is performed. Run one preparation/manual build at a time per checkout.
+
+The default archive remains `~/.local/share/sanctifi/releases/`; `--directory`
+may select another trusted directory outside every Git checkout, including through
+symlink ancestors. The guard resolves the nearest existing directory, then checks
+all physical ancestors for `.git` files, recognisable `.git` directories, or
+repository metadata (`HEAD` with `objects`/`refs`, or linked-worktree `commondir`).
+Empty `.git` directories alone are not repositories. It refuses recognised markers, including
+nested repositories, linked worktrees and repository metadata directories; it does
+not treat a failed Git discovery command as evidence of safety. Missing path
+components are appended only after that check. Existing files, dangling symlinks
+and filesystem inspection errors stop preflight. A symlink pointing out of a
+checkout to an external directory is acceptable because the physical destination
+is outside Git. Keep the directory under trusted local ownership: this is not
+protection against another process replacing ancestors after preflight.
+
+Preparation acquires an exclusive `.prepare-lock`; if a crash
+leaves it behind, inspect running processes before manually removing it. No stale
+lock is automatically deleted.
+
+Each execution creates a private `.build-*` directory with mode 700 and private
+check/build logs and `summary.json` with mode 600. Previous standard APK output
+is moved there before Gradle; a freshly emitted output is required. If no new
+output exists after failure, the previous output is restored. A fresh failed
+output is not staged. A verified snapshot is retained privately as `candidate.apk`.
+A nonzero result is never publication approval; inspect partial staging/evidence.
+
+### Evidence retention and interrupted-run recovery
+
+Retention is deliberately manual and **unbounded**. There is no automatic deletion
+or age-based pruning. This protects diagnostics, but repeated preparations can
+retain two additional APK-sized files per run (`previous-output.apk` and
+`candidate.apk`), plus check/build logs. These are separate copies from the immutable
+archive; moving the old output initially does not copy it, but later runs can
+retain another previous output. Preflight/dry-run and failed preflight create none.
+
+| Outcome | Previous standard output | New output / evidence |
+| --- | --- | --- |
+| Failure before the old output is moved | Still at the standard output path | Any completed checks/logs remain in the private run directory. |
+| Success after the old output is moved | Retained as `.build-*/previous-output.apk` | New standard output, private `candidate.apk`, logs and summary remain; the verified immutable artifact is staged/reused separately. |
+| Caught failure, no new standard output exists | Moved back to the standard output path; `previous-output.apk` is no longer present in that run directory | Logs/summary and any candidate already made remain. Restored output is an older artifact, not this run's success. |
+| Caught failure with a new standard output present | Retained privately; never overwrites the new output | New output is untrusted, potentially partial or invalid. Logs/summary and any private candidate remain; staging may be incomplete if failure happened during staging. |
+| Abrupt termination or machine failure | May remain privately if the move completed | Cleanup/restoration and summary writing are not guaranteed. A stale lock, partial output, logs or partially completed staging may remain. |
+
+Normal caught failures release the lock and write a summary. OS termination, an
+I/O failure during recovery/cleanup, or a machine crash can prevent that; neither
+an absent summary nor an existing standard output proves success. No automatic
+signal recovery or stale-lock removal is attempted.
+
+After interruption, before any retry or cleanup:
+
+1. Confirm the Node preparation, Gradle daemon/worker and any manual build using
+   this checkout have stopped. Do not remove the lock while another build can
+   still write output. Inspect the private run directories and logs; directory
+   names are random, so use timestamps/content to identify the affected run.
+2. Preserve any standard output as an **untrusted** diagnostic file in a new private
+   location without overwriting anything. Inspect `previous-output.apk` if present;
+   do not assume its version or source. Do not overwrite either file to recover.
+3. If restoring the previous output is useful and the standard destination is
+   absent, copy exclusively, keeping the private backup. Example, with deliberately
+   selected local paths (these are placeholders, not known futwick paths):
+
+   ```bash
+   SF_EVIDENCE=/absolute/private/releases/.build-CHOSEN_RUN
+   SF_OUTPUT=/absolute/checkout/android/app/build/outputs/apk/release/app-release.apk
+   node -e 'const fs = require("node:fs"); fs.copyFileSync(process.argv[1], process.argv[2], fs.constants.COPYFILE_EXCL)' \
+     "$SF_EVIDENCE/previous-output.apk" "$SF_OUTPUT"
+   ```
+
+   This refuses an existing destination. It restores a build output only; it does
+   not establish provenance, stage, publish or authorise a new build. Never assign
+   today's HEAD to that recovered APK without its original evidence.
+4. Review any `sanctifi-<code>.apk` and `.apk.json` left by partial staging with the
+   existing verification/staging procedures. Never overwrite a conflict, invent
+   missing provenance or delete an immutable release to make a retry pass. Once
+   processes and recovery are settled, remove only the empty `.prepare-lock`
+   directory using `rmdir`; then rerun read-only preflight. A real retry still
+   requires the normal build approval and version-intent checks.
+
+A sensible manual policy is to retain the most recent successful run, all unresolved
+failed/interrupted runs, and private source/build summaries and relevant logs for
+distributed artifacts. Periodically review disk usage. Once a run is resolved,
+compare any APK copy with a separately verified retained artifact and its original
+record before deciding it is redundant. An old output may be the only surviving
+copy of another build; a failed candidate may be the evidence needed for diagnosis.
+
+Delete only explicitly reviewed files inside one chosen `.build-*` directory; keep
+needed summaries/logs separately and private. An entire run directory can be removed
+only after checking every retained file and confirming no active process uses it.
+Do not run wildcard cleanup over the archive root, do not delete
+`sanctifi-*.apk` / `.apk.json`, and do not clean unresolved `.stage-*` or lock
+artifacts as though they were obsolete build logs. No cleanup command or retention
+policy in this section changes immutable release retention.
+
+Provenance records HEAD, branch, dirty status and hashes of native input files
+before checks, after checks and after building. Native output/cache directories
+(`build`, `.gradle`, `.cxx`, `.kotlin`), signing.properties and key files are excluded;
+native symlinks require manual review. Changes stop preparation. Ignored native
+inputs are explicitly represented by hashes, rather than attributed to HEAD.
+The report also includes Node/JDK versions, build-tools path, command, times,
+actual APK size/hash/signer/versions, check results and manual acceptance still
+outstanding. This is meaningful local evidence, not a hermetic source proof:
+installed dependencies, external Gradle configuration, ignored JS/environment
+inputs and signing material are not fully captured. Do not change inputs during
+preparation; before/after equality cannot detect a transient change that was undone.
+
+Existing immutable `.apk.json` records retain their format. Supplementary evidence
+is written separately; keep-version reports distinguish original artifact source
+from comparison-build source. CLI output omits individual native input hashes;
+they remain in private evidence. Logs are never echoed or uploaded by the tool.
+Gradle or external tools can emit sensitive information: keep logs private and
+review/redact before sharing; do not enable shell tracing, build scans or debug logs.
+No environment dump, signing-file contents, passwords or keystore bytes belong in
+Git or release summaries.
+
+A successful report includes an unadvertised schema-v1 `manifestCandidate` built
+from verified APK metadata, with the canonical URL and checksum. Optional notes
+can be added to a separate candidate JSON and checked with the existing validator.
+This is not a published channel manifest or proof of HTTPS availability.
+
+Independent verification, without assigning today's HEAD to an existing APK:
+
+```bash
+node scripts/android-release.js verify /absolute/path/existing.apk --build-tools "$ANDROID_HOME/build-tools/36.0.0"
+```
+
+`verify` reports actual metadata, pinned signer, size and checksum; source revision
+is explicitly unknown. `stage` continues to require the publisher's exact source
+attestation. Existing manual commands below remain the fallback. Physical-device
+acceptance and complete public HTTPS checks remain separate from all local results.
 
 ## Manual publishing checklist
 

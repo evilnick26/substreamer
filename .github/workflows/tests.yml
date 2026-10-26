@@ -24,7 +24,7 @@ jobs:
       - run: npm ci
 
       - name: Validate release manifest and staging tooling
-        run: node --test scripts/__tests__/android-release.test.cjs
+        run: node --test scripts/__tests__/android-release*.test.cjs
 
       - name: Validate release signing plugin
         run: node --test plugins/__tests__/with-sanctifi-release-signing*.test.cjs
