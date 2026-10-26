@@ -294,7 +294,19 @@ is performed. Run one preparation/manual build at a time per checkout.
 
 The default archive remains `~/.local/share/sanctifi/releases/`; `--directory`
 may select another trusted directory outside every Git checkout, including through
-symlink ancestors. Preparation acquires an exclusive `.prepare-lock`; if a crash
+symlink ancestors. The guard resolves the nearest existing directory, then checks
+all physical ancestors for `.git` files, recognisable `.git` directories, or
+repository metadata (`HEAD` with `objects`/`refs`, or linked-worktree `commondir`).
+Empty `.git` directories alone are not repositories. It refuses recognised markers, including
+nested repositories, linked worktrees and repository metadata directories; it does
+not treat a failed Git discovery command as evidence of safety. Missing path
+components are appended only after that check. Existing files, dangling symlinks
+and filesystem inspection errors stop preflight. A symlink pointing out of a
+checkout to an external directory is acceptable because the physical destination
+is outside Git. Keep the directory under trusted local ownership: this is not
+protection against another process replacing ancestors after preflight.
+
+Preparation acquires an exclusive `.prepare-lock`; if a crash
 leaves it behind, inspect running processes before manually removing it. No stale
 lock is automatically deleted.
 
@@ -304,6 +316,73 @@ is moved there before Gradle; a freshly emitted output is required. If no new
 output exists after failure, the previous output is restored. A fresh failed
 output is not staged. A verified snapshot is retained privately as `candidate.apk`.
 A nonzero result is never publication approval; inspect partial staging/evidence.
+
+### Evidence retention and interrupted-run recovery
+
+Retention is deliberately manual and **unbounded**. There is no automatic deletion
+or age-based pruning. This protects diagnostics, but repeated preparations can
+retain two additional APK-sized files per run (`previous-output.apk` and
+`candidate.apk`), plus check/build logs. These are separate copies from the immutable
+archive; moving the old output initially does not copy it, but later runs can
+retain another previous output. Preflight/dry-run and failed preflight create none.
+
+| Outcome | Previous standard output | New output / evidence |
+| --- | --- | --- |
+| Failure before the old output is moved | Still at the standard output path | Any completed checks/logs remain in the private run directory. |
+| Success after the old output is moved | Retained as `.build-*/previous-output.apk` | New standard output, private `candidate.apk`, logs and summary remain; the verified immutable artifact is staged/reused separately. |
+| Caught failure, no new standard output exists | Moved back to the standard output path; `previous-output.apk` is no longer present in that run directory | Logs/summary and any candidate already made remain. Restored output is an older artifact, not this run's success. |
+| Caught failure with a new standard output present | Retained privately; never overwrites the new output | New output is untrusted, potentially partial or invalid. Logs/summary and any private candidate remain; staging may be incomplete if failure happened during staging. |
+| Abrupt termination or machine failure | May remain privately if the move completed | Cleanup/restoration and summary writing are not guaranteed. A stale lock, partial output, logs or partially completed staging may remain. |
+
+Normal caught failures release the lock and write a summary. OS termination, an
+I/O failure during recovery/cleanup, or a machine crash can prevent that; neither
+an absent summary nor an existing standard output proves success. No automatic
+signal recovery or stale-lock removal is attempted.
+
+After interruption, before any retry or cleanup:
+
+1. Confirm the Node preparation, Gradle daemon/worker and any manual build using
+   this checkout have stopped. Do not remove the lock while another build can
+   still write output. Inspect the private run directories and logs; directory
+   names are random, so use timestamps/content to identify the affected run.
+2. Preserve any standard output as an **untrusted** diagnostic file in a new private
+   location without overwriting anything. Inspect `previous-output.apk` if present;
+   do not assume its version or source. Do not overwrite either file to recover.
+3. If restoring the previous output is useful and the standard destination is
+   absent, copy exclusively, keeping the private backup. Example, with deliberately
+   selected local paths (these are placeholders, not known futwick paths):
+
+   ```bash
+   SF_EVIDENCE=/absolute/private/releases/.build-CHOSEN_RUN
+   SF_OUTPUT=/absolute/checkout/android/app/build/outputs/apk/release/app-release.apk
+   node -e 'const fs = require("node:fs"); fs.copyFileSync(process.argv[1], process.argv[2], fs.constants.COPYFILE_EXCL)' \
+     "$SF_EVIDENCE/previous-output.apk" "$SF_OUTPUT"
+   ```
+
+   This refuses an existing destination. It restores a build output only; it does
+   not establish provenance, stage, publish or authorise a new build. Never assign
+   today's HEAD to that recovered APK without its original evidence.
+4. Review any `sanctifi-<code>.apk` and `.apk.json` left by partial staging with the
+   existing verification/staging procedures. Never overwrite a conflict, invent
+   missing provenance or delete an immutable release to make a retry pass. Once
+   processes and recovery are settled, remove only the empty `.prepare-lock`
+   directory using `rmdir`; then rerun read-only preflight. A real retry still
+   requires the normal build approval and version-intent checks.
+
+A sensible manual policy is to retain the most recent successful run, all unresolved
+failed/interrupted runs, and private source/build summaries and relevant logs for
+distributed artifacts. Periodically review disk usage. Once a run is resolved,
+compare any APK copy with a separately verified retained artifact and its original
+record before deciding it is redundant. An old output may be the only surviving
+copy of another build; a failed candidate may be the evidence needed for diagnosis.
+
+Delete only explicitly reviewed files inside one chosen `.build-*` directory; keep
+needed summaries/logs separately and private. An entire run directory can be removed
+only after checking every retained file and confirming no active process uses it.
+Do not run wildcard cleanup over the archive root, do not delete
+`sanctifi-*.apk` / `.apk.json`, and do not clean unresolved `.stage-*` or lock
+artifacts as though they were obsolete build logs. No cleanup command or retention
+policy in this section changes immutable release retention.
 
 Provenance records HEAD, branch, dirty status and hashes of native input files
 before checks, after checks and after building. Native output/cache directories

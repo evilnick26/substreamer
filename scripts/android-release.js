@@ -141,18 +141,30 @@ function git(root, args) {
 }
 
 function outsideGit(directory) {
+  const exists = (file) => {
+    try { fs.lstatSync(file); return true; } catch (error) {
+      if (error.code === 'ENOENT') return false;
+      throw error;
+    }
+  };
   let existing = path.resolve(directory);
   const missing = [];
-  while (!fs.existsSync(existing)) {
+  while (!exists(existing)) {
     missing.unshift(path.basename(existing));
     check(path.dirname(existing) !== existing, 'Cannot resolve staging directory');
     existing = path.dirname(existing);
   }
-  const resolved = path.join(fs.realpathSync(existing), ...missing);
-  let inGit = false;
-  try { git(existing, ['rev-parse', '--show-toplevel']); inGit = true; } catch {}
-  check(!inGit, 'Release directory must be outside every Git checkout (including symlink targets)');
-  return resolved;
+  check(fs.statSync(existing).isDirectory(), 'Release directory or its nearest existing parent must be a directory');
+  const physical = fs.realpathSync(existing);
+  const metadata = (parent) => exists(path.join(parent, 'HEAD')) &&
+    ((exists(path.join(parent, 'objects')) && exists(path.join(parent, 'refs'))) || exists(path.join(parent, 'commondir')));
+  for (let ancestor = physical; ; ancestor = path.dirname(ancestor)) {
+    const marker = path.join(ancestor, '.git');
+    const checkout = exists(marker) && (!fs.statSync(marker).isDirectory() || metadata(marker));
+    check(!checkout && !metadata(ancestor), 'Release directory must be outside every Git checkout or repository metadata (including symlink targets)');
+    if (path.dirname(ancestor) === ancestor) break;
+  }
+  return path.join(physical, ...missing);
 }
 
 async function sourceState(root) {

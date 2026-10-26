@@ -159,6 +159,7 @@ test('build failure retains failure summary and restores previous standard outpu
   assert.equal(report.ok, false);
   assert.match(report.errors.join(), /fixture build failed/);
   assert.deepEqual(fs.readFileSync(f.output), bytes);
+  assert.equal(fs.existsSync(path.join(report.evidenceDirectory, 'previous-output.apk')), false);
   assert.equal(fs.existsSync(path.join(f.archive, 'sanctifi-80000189.apk')), false);
   assert.equal(JSON.parse(fs.readFileSync(path.join(report.evidenceDirectory, 'summary.json'))).ok, false);
 });
@@ -374,4 +375,161 @@ test('native input fingerprints omit signing material and build output', async (
   const after = await sourceState(f.root);
   assert.deepEqual(after, before);
   assert.doesNotMatch(JSON.stringify(after), /fixture-only-secret|signing.properties|local.p12|generated.txt/);
+});
+
+for (const location of ['.git', '.git/objects/new/releases', 'app.json']) {
+  test(`release directory rejects checkout metadata/non-directory ${location}`, async (t) => {
+    const f = fixture(t);
+    f.options.directory = path.join(f.root, location);
+    const report = await preflight(f.options, f.root, f.env);
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), /outside every Git|must be a directory/);
+  });
+}
+
+test('release directory rejects a bare repository and missing descendants', async (t) => {
+  const f = fixture(t);
+  const bare = path.join(f.directory, 'archive.git');
+  execFileSync('git', ['init', '--bare', bare], { stdio: 'ignore' });
+  for (const directory of [bare, path.join(bare, 'objects/new/releases')]) {
+    const report = await preflight({ ...f.options, directory }, f.root, f.env);
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), /outside every Git/);
+  }
+});
+
+test('successful preparation retains previous output and candidate with no automatic pruning', async (t) => {
+  const f = fixture(t, 'keep');
+  await archived(f);
+  f.build(f.root, f.env, path.join(f.directory, 'initial.log'));
+  const first = await prepare(f.options, f.root, f.env, f.build, f.sdk);
+  const second = await prepare(f.options, f.root, f.env, f.build, f.sdk);
+  for (const report of [first, second]) {
+    assert.equal(report.ok, true, report.errors.join());
+    assert.deepEqual(fs.readFileSync(path.join(report.evidenceDirectory, 'previous-output.apk')), bytes);
+    assert.deepEqual(fs.readFileSync(path.join(report.evidenceDirectory, 'candidate.apk')), bytes);
+    assert.equal(fs.existsSync(path.join(report.evidenceDirectory, 'summary.json')), true);
+  }
+  assert.notEqual(first.evidenceDirectory, second.evidenceDirectory);
+  assert.equal(fs.readdirSync(f.archive).filter((name) => name.startsWith('.build-')).length, 2);
+  assert.deepEqual(fs.readFileSync(path.join(f.archive, 'sanctifi-80000189.apk')), bytes);
+});
+
+test('failed build with fresh output preserves both previous output and failed output', async (t) => {
+  const f = fixture(t);
+  f.build(f.root, f.env, path.join(f.directory, 'initial.log'));
+  const report = await prepare(f.options, f.root, f.env, () => {
+    fs.writeFileSync(f.output, 'untrusted failed output');
+    throw new Error('fixture failure after output');
+  }, f.sdk);
+  assert.equal(report.ok, false);
+  assert.deepEqual(fs.readFileSync(path.join(report.evidenceDirectory, 'previous-output.apk')), bytes);
+  assert.equal(fs.readFileSync(f.output, 'utf8'), 'untrusted failed output');
+  assert.equal(fs.existsSync(path.join(f.archive, 'sanctifi-80000189.apk')), false);
+});
+
+for (const freshOutput of [false, true]) {
+  test(`abrupt process termination preserves backup/lock with fresh output ${freshOutput}`, (t) => {
+    const f = fixture(t);
+    f.build(f.root, f.env, path.join(f.directory, 'initial.log'));
+    const script = `
+      const fs = require('node:fs');
+      const { prepare } = require(process.argv[1]);
+      const input = JSON.parse(process.argv[2]);
+      prepare(input.options, input.root, input.env, () => {
+        if (input.freshOutput) fs.writeFileSync(input.output, 'partial output');
+        process.kill(process.pid, 'SIGKILL');
+      }, () => 'openjdk 21.0.8', () => []);
+    `;
+    const result = spawnSync(process.execPath, ['-e', script, path.resolve(__dirname, '../android-release.js'),
+      JSON.stringify({ options: f.options, root: f.root, env: f.env, output: f.output, freshOutput })],
+    { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.signal, 'SIGKILL', result.stderr);
+    const evidence = fs.readdirSync(f.archive).filter((name) => name.startsWith('.build-'));
+    assert.equal(evidence.length, 1);
+    const directory = path.join(f.archive, evidence[0]);
+    assert.deepEqual(fs.readFileSync(path.join(directory, 'previous-output.apk')), bytes);
+    assert.equal(fs.existsSync(path.join(directory, 'summary.json')), false);
+    assert.equal(fs.existsSync(path.join(f.archive, '.prepare-lock')), true);
+    assert.equal(fs.existsSync(f.output), freshOutput);
+    const restore = () => fs.copyFileSync(path.join(directory, 'previous-output.apk'), f.output, fs.constants.COPYFILE_EXCL);
+    if (freshOutput) {
+      assert.throws(restore, { code: 'EEXIST' });
+      assert.equal(fs.readFileSync(f.output, 'utf8'), 'partial output');
+    } else {
+      restore();
+      assert.deepEqual(fs.readFileSync(f.output), bytes);
+    }
+    assert.deepEqual(fs.readFileSync(path.join(directory, 'previous-output.apk')), bytes);
+    assert.equal(fs.existsSync(path.join(f.archive, 'sanctifi-80000189.apk')), false);
+  });
+}
+
+test('release directory rejects nested repositories through symlinked ancestors', async (t) => {
+  const f = fixture(t);
+  const nested = path.join(f.root, 'node_modules/nested');
+  fs.mkdirSync(nested);
+  execFileSync('git', ['init', nested], { stdio: 'ignore' });
+  const alias = path.join(f.directory, 'nested-link');
+  fs.symlinkSync(nested, alias);
+  for (const directory of [nested, path.join(nested, 'missing/one/two'), path.join(alias, 'missing/one/two')]) {
+    const report = await preflight({ ...f.options, directory }, f.root, f.env);
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), /outside every Git/);
+  }
+});
+
+test('release directory rejects linked-worktree .git files', async (t) => {
+  const f = fixture(t);
+  const worktree = path.join(f.directory, 'worktree');
+  f.git('worktree', 'add', '-b', 'fixture-worktree', worktree);
+  assert.equal(fs.lstatSync(path.join(worktree, '.git')).isFile(), true);
+  const report = await preflight({ ...f.options, directory: path.join(worktree, 'missing/releases') }, f.root, f.env);
+  assert.equal(report.ok, false);
+  assert.match(report.errors.join(), /outside every Git/);
+});
+
+test('release directory resolves symlink to an external directory and preserves missing components', async (t) => {
+  const f = fixture(t);
+  const external = path.join(f.directory, 'external');
+  fs.mkdirSync(external);
+  const alias = path.join(f.root, 'node_modules/external-link');
+  fs.symlinkSync(external, alias);
+  const report = await preflight({ ...f.options, directory: path.join(alias, 'missing/one/two') }, f.root, f.env);
+  assert.equal(report.ok, true, report.errors.join());
+  assert.equal(report.directory, path.join(fs.realpathSync(external), 'missing/one/two'));
+  assert.equal(fs.existsSync(path.join(external, 'missing')), false);
+});
+
+test('release directory refuses a dangling symlink without creating directories', async (t) => {
+  const f = fixture(t);
+  const alias = path.join(f.directory, 'dangling');
+  const missing = path.join(f.directory, 'absent');
+  fs.symlinkSync(missing, alias);
+  const report = await preflight({ ...f.options, directory: path.join(alias, 'releases') }, f.root, f.env);
+  assert.equal(report.ok, false);
+  assert.match(report.errors.join(), /ENOENT/);
+  assert.equal(fs.existsSync(missing), false);
+});
+
+test('empty .git directory alone does not turn an external directory into a repository', async (t) => {
+  const f = fixture(t);
+  fs.mkdirSync(path.join(f.directory, '.git'));
+  const report = await preflight(f.options, f.root, f.env);
+  assert.equal(report.ok, true, report.errors.join());
+  assert.equal(fs.existsSync(f.archive), false);
+});
+
+test('release directory inspection errors fail closed without creating files', async (t) => {
+  const f = fixture(t);
+  const original = fs.lstatSync;
+  const blocked = path.join(f.directory, '.git');
+  t.mock.method(fs, 'lstatSync', (file, ...args) => {
+    if (file === blocked) throw Object.assign(new Error('Fixture filesystem inspection denied'), { code: 'EACCES' });
+    return original(file, ...args);
+  });
+  const report = await preflight(f.options, f.root, f.env);
+  assert.equal(report.ok, false);
+  assert.match(report.errors.join(), /filesystem inspection denied/);
+  assert.equal(fs.existsSync(f.archive), false);
 });

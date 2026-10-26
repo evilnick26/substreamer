@@ -88,3 +88,47 @@ No phone acceptance is inferred from fixtures or earlier release history.
 No version values, native files, signing configuration, production APKs, server
 permissions or live manifests are changed. No release is built, uploaded, installed
 or published. The PR must remain unmerged; Stage 2 remains separately reviewed work.
+
+### PR 48 review refinement: retention and release directory safety
+
+The owner requested investigation before focused corrections on the same branch.
+Retention is a conservative design trade-off with a documentation gap: successful
+runs retain previous-output.apk and candidate.apk; caught failures restore the
+previous output only if no new output exists. Repeated preparations retain APK
+copies/logs without a bound. Abrupt termination can leave a backup, stale lock,
+partial output and no summary. No automatic pruning policy is introduced.
+
+The publishing guide now records every outcome, safe process/lock inspection,
+exclusive copy recovery without overwriting, and a manual retention policy. Keep
+recent success, unresolved failures and release provenance/logs; remove only
+individually reviewed redundant evidence. Never prune immutable APKs/records or
+unresolved staging/lock data as obsolete build logs.
+
+The directory finding is an actual guard defect. Regression tests showed that
+Git --show-toplevel fails inside .git metadata and bare repositories; the old
+catch treated those failures as outside Git. A file destination already failed
+later with ENOTDIR, but now receives an explicit directory diagnostic. The guard
+checks the nearest existing directory's real path and all physical ancestors for
+.git files, recognisable Git directories or bare/linked metadata. Missing path
+components, nested repositories, linked worktrees and symlink targets are covered.
+Filesystem errors fail closed. Empty .git placeholders are not repositories, and
+external physical destinations remain allowed. Trusted local ownership is still
+required; concurrent hostile ancestor replacement is not prevented.
+
+Validation: 120 combined Node tests passed; 2 optional Gradle/AGP runtime groups
+skipped. The new safety regressions failed against the prior guard; retention
+fixtures passed without changing retention code. Coverage includes success,
+failed output, restoration, repeated-run accumulation and child SIGKILL both
+before and after a fresh output is written, exclusive recovery copying and
+filesystem-inspection failure. All artifacts are synthetic fixtures;
+no actual Gradle release build or production APK is involved. TypeScript and Intl,
+translation, ProGuard and module-inventory checks passed; 2,169 existing translation
+warnings remain. Full Jest passed: 634 suites / 11,192 tests, with the existing
+2 suites / 8 private-fixture tests skipped. Syntax, whitespace, documentation
+links/fences and protected-file comparisons passed. Production-code comparison
+confirms that only outsideGit changed; retention and staging logic are unchanged.
+
+Only the directory guard, focused tests, publishing guidance and this diary change.
+Version/signing configuration, immutable staging and manual fallback are unchanged.
+No native regeneration, actual release build, upload, manifest publication, server
+change or physical-device acceptance is performed. The PR remains draft/unmerged.
