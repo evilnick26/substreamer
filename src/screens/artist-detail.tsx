@@ -37,6 +37,7 @@ import { refreshCoverArt } from '../services/imageCacheService';
 import { PillToggle } from '../components/PillToggle';
 import { playAllByArtist, playMoreByArtist, toggleStar } from '../services/moreOptionsService';
 import { shuffleArray } from '../utils/arrayHelpers';
+import { groupArtistReleases, type ArtistReleaseListItem } from '../utils/artistReleaseGroups';
 import { playTrack } from '../services/playerService';
 import {
   fetchArtistBase,
@@ -74,6 +75,7 @@ export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const groupReleases = layoutPreferencesStore((s) => s.groupArtistReleasesByType);
   const artistPlayMode = playbackSettingsStore((s) => s.artistPlayMode);
   const { width: screenWidth } = useWindowDimensions();
   const heroImageSize = Math.min(Math.max(HERO_IMAGE_SIZE, screenWidth * 0.35), 280);
@@ -236,16 +238,36 @@ export function ArtistDetailScreen() {
     });
   }, [albums, albumSortDesc]);
 
-  const renderAlbumItem = useCallback(
-    ({ item }: { item: AlbumID3 }) => (
-      <View style={styles.albumRowWrap}>
-        <AlbumRow album={item} />
-      </View>
-    ),
-    [],
+  const releaseItems = useMemo(
+    () => groupReleases ? groupArtistReleases(sortedAlbums) : sortedAlbums,
+    [sortedAlbums, groupReleases],
   );
 
-  const albumKeyExtractor = useCallback((item: AlbumID3) => item.id, []);
+  const renderAlbumItem = useCallback(
+    ({ item }: { item: AlbumID3 | ArtistReleaseListItem }) => {
+      if ('type' in item && item.type === 'header') {
+        return (
+          <View style={styles.section}>
+            <SectionTitle title={t(item.group)} color={colors.label} />
+          </View>
+        );
+      }
+      const album = 'type' in item ? item.album : item;
+      return (
+        <View style={styles.albumRowWrap}>
+          <AlbumRow album={album} />
+        </View>
+      );
+    },
+    [t, colors.label],
+  );
+
+  const albumKeyExtractor = useCallback((item: AlbumID3 | ArtistReleaseListItem) => {
+    if (!('type' in item)) return item.id;
+    return item.type === 'header' ? `release-header:${item.group}` : `release-album:${item.album.id}`;
+  }, []);
+  const releaseItemType = useCallback((item: AlbumID3 | ArtistReleaseListItem) =>
+    'type' in item ? item.type : 'album', []);
 
   const topSongsRenderItem = useCallback(
     ({ item }: { item: Child }) => (
@@ -428,15 +450,16 @@ export function ArtistDetailScreen() {
               </View>
             )}
 
-            {/* ---- Albums section header (list items follow in FlashList) ---- */}
+            {/* ---- Release sorting and unified-list heading ---- */}
             {albums.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <SectionTitle title={t('albums')} color={colors.label} />
+                  {!groupReleases && <SectionTitle title={t('albums')} color={colors.label} />}
                   <Pressable
                     onPress={() => setAlbumSortDesc((prev) => !prev)}
                     style={({ pressed }) => [
                       styles.sortButton,
+                      groupReleases && { marginLeft: 'auto' },
                       pressed && styles.pressed,
                     ]}
                     hitSlop={8}
@@ -467,6 +490,7 @@ export function ArtistDetailScreen() {
     topSongs,
     similarArtists,
     albums.length,
+    groupReleases,
     albumSortDesc,
     colors.textPrimary,
     colors.textSecondary,
@@ -525,8 +549,9 @@ export function ArtistDetailScreen() {
         <DetailScreenBackground coverArt={artist?.coverArt} isWide={isWide} />
 
         <FlashList
-          data={sortedAlbums}
+          data={releaseItems}
           renderItem={renderAlbumItem}
+          getItemType={releaseItemType}
           keyExtractor={albumKeyExtractor}
           drawDistance={LIST_DRAW_DISTANCE}
           ListHeaderComponent={listHeader}

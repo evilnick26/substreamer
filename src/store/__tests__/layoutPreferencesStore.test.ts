@@ -1,7 +1,7 @@
 jest.mock('../persistence/kvStorage', () => require('../persistence/__mocks__/kvStorage'));
 
-import { kvStorage } from '../persistence/kvStorage';
 import { layoutPreferencesStore } from '../layoutPreferencesStore';
+import { kvStorage } from '../persistence/kvStorage';
 
 beforeEach(() => {
   layoutPreferencesStore.setState({
@@ -149,4 +149,29 @@ test('persisted lyric preference coexists with library-order normalisation and a
   layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(true);
   expect(layoutPreferencesStore.getState().showAlbumVersion).toBe(false);
   expect(layoutPreferencesStore.getState().libraryOrder).toEqual(['artists', 'songs', 'albums', 'playlists']);
+});
+describe('artist release grouping persistence', () => {
+  const key = 'substreamer-layout-preferences';
+  const reload = () => {
+    let store!: typeof layoutPreferencesStore;
+    jest.isolateModules(() => { store = require('../layoutPreferencesStore').layoutPreferencesStore; });
+    return store;
+  };
+
+  it('defaults ON for a fresh installation and older preferences', async () => {
+    await kvStorage.removeItem(key);
+    expect(reload().getState().groupArtistReleasesByType).toBe(true);
+    await kvStorage.setItem(key, JSON.stringify({ state: { artistAlbumSortOrder: 'oldest' }, version: 0 }));
+    const upgraded = reload().getState();
+    expect(upgraded.groupArtistReleasesByType).toBe(true);
+    expect(upgraded.artistAlbumSortOrder).toBe('oldest');
+  });
+
+  it('persists OFF and ON across fresh store loads', async () => {
+    layoutPreferencesStore.getState().setGroupArtistReleasesByType(false);
+    expect(layoutPreferencesStore.getState().groupArtistReleasesByType).toBe(false);
+    expect(reload().getState().groupArtistReleasesByType).toBe(false);
+    layoutPreferencesStore.getState().setGroupArtistReleasesByType(true);
+    expect(reload().getState().groupArtistReleasesByType).toBe(true);
+  });
 });

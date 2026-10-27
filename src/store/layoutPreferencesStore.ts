@@ -30,6 +30,7 @@ export interface LayoutPreferencesState {
   albumSortOrder: AlbumSortOrder;
   songSortOrder: SongSortOrder;
   artistAlbumSortOrder: ArtistAlbumSortOrder;
+  groupArtistReleasesByType: boolean;
   dateFormat: DateFormat;
   songCoverArtMode: SongCoverArtMode;
   showAlbumVersion: boolean;
@@ -45,6 +46,7 @@ export interface LayoutPreferencesState {
   setAlbumSortOrder: (order: AlbumSortOrder) => void;
   setSongSortOrder: (order: SongSortOrder) => void;
   setArtistAlbumSortOrder: (order: ArtistAlbumSortOrder) => void;
+  setGroupArtistReleasesByType: (value: boolean) => void;
   setDateFormat: (format: DateFormat) => void;
   setSongCoverArtMode: (mode: SongCoverArtMode) => void;
   setShowAlbumVersion: (value: boolean) => void;
@@ -82,6 +84,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
       albumSortOrder: 'artist',
       songSortOrder: 'title',
       artistAlbumSortOrder: 'newest',
+      groupArtistReleasesByType: true,
       dateFormat: 'yyyy/mm/dd',
       songCoverArtMode: 'album',
       showAlbumVersion: true,
@@ -98,6 +101,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
       setSongSortOrder: (songSortOrder) => set({ songSortOrder }),
       setArtistAlbumSortOrder: (artistAlbumSortOrder) =>
         set({ artistAlbumSortOrder }),
+      setGroupArtistReleasesByType: (groupArtistReleasesByType) => set({ groupArtistReleasesByType }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
       setSongCoverArtMode: (songCoverArtMode) => set({ songCoverArtMode }),
       setShowAlbumVersion: (showAlbumVersion) => set({ showAlbumVersion }),
@@ -125,6 +129,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
         albumSortOrder: state.albumSortOrder,
         songSortOrder: state.songSortOrder,
         artistAlbumSortOrder: state.artistAlbumSortOrder,
+        groupArtistReleasesByType: state.groupArtistReleasesByType,
         dateFormat: state.dateFormat,
         songCoverArtMode: state.songCoverArtMode,
         showAlbumVersion: state.showAlbumVersion,
