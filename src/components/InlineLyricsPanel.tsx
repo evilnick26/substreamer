@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useSyncExternalStore } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import type { ThemeColors } from '../constants/theme';
 import { useAppActive } from '../hooks/useAppActive';
@@ -15,6 +15,7 @@ export const InlineLyricsPanel = memo(function InlineLyricsPanel({
   colors: ThemeColors;
   visible?: boolean;
 }) {
+  const { fontScale } = useWindowDimensions();
   const active = useAppActive() && visible;
   const starts = useMemo(() => lyrics.lines.map((line) => line.startMs + lyrics.offsetMs), [lyrics]);
   const subscribe = useCallback((notify: () => void) => active
@@ -26,9 +27,10 @@ export const InlineLyricsPanel = memo(function InlineLyricsPanel({
   }, [starts, trackId]);
   const index = useSyncExternalStore(subscribe, snapshot, snapshot);
 
+  // Reserve two context lines, two current lines, padding and gaps.
   return (
-    <View testID="inline-lyrics" style={styles.panel}>
-      {[-1, 0, 1].map((relative) => {
+    <View testID="inline-lyrics" style={[styles.panel, { minHeight: (20 + 44 + 20) * fontScale + 12 }]}>
+      {(index === -1 ? [1] : [-1, 0, 1]).map((relative) => {
         const text = index === -2 ? '' : lyrics.lines[index + relative]?.text ?? '';
         const current = relative === 0;
         return (
@@ -49,8 +51,8 @@ export const InlineLyricsPanel = memo(function InlineLyricsPanel({
 });
 
 const styles = StyleSheet.create({
-  panel: { width: '100%', paddingVertical: 4, gap: 2 },
+  panel: { width: '100%', paddingVertical: 4, gap: 2, justifyContent: 'center' },
   line: { textAlign: 'center' },
   context: { fontSize: 14, lineHeight: 20 },
-  current: { fontSize: 16, lineHeight: 22, minHeight: 44, fontWeight: '700' },
+  current: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
 });
