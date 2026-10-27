@@ -57,3 +57,48 @@ Native geometry and the new anticipation timing still require phone acceptance. 
 Commit and push of this dedicated branch are explicitly authorised by the owner. No merge into sanctifi, PR or release promotion is authorised.
 
 Focused validation passed: 14 Android/iOS suites, 180 tests, including the existing shared selector, full synced lyrics view, cache hook, phone/tablet integration and committed-render flicker checks. Typecheck, Intl validation and circular-import checks passed; all 13 translation files validated with the existing 2,182 missing-key warnings. Android Expo/Hermes export passed; this is not a native APK build. Clean final full regression: 642 suites / 11,258 tests passed; two suites / eight tests skipped. No final test failures. Final typecheck and git diff --check also passed. The four changed files are the panel, its focused tests, the mode integration tests and this diary. No native APK/device check was performed; phone acceptance of anticipation remains outstanding.
+
+## Final Android acceptance and product milestone — 2026-10-27
+
+**Issue #006 is accepted for Alpha.**
+
+The product owner reports that the final implementation, `a203afe5afdd3e6451d2da848422ec938b873f86`, was integrated into futwick's local sanctifi branch by a clean, conflict-free fast-forward merge, changing exactly the four expected files. The Android release APK was built successfully on futwick, transferred to the Poco F8 Ultra, installed and tested. These subsequent physical-device results supersede the pending acceptance recorded above; those earlier statements remain accurate accounts of what was known when written. This entry records the owner's report, not device testing performed in the cloud.
+
+### Physical-device behaviour observed and accepted
+
+- Eligible synchronised lyrics appear automatically on the NPS when the setting is enabled. Playback drives lyric progression. The current lyric is prominent and bold; previous and next entries are subdued, single-line contextual entries with truncation when necessary. Current text wraps naturally onto two lines, and the complete lyric becomes visible when a truncated contextual entry becomes current.
+- The lyrics panel replaces the original progress bar. Layout remains visually stable during lyric changes: one-line spacing is balanced, the accepted two-line appearance is preserved, and the lone upcoming entry is naturally centred. Album artwork remains prominent, while transport controls and track metadata retain their positions. The frameless presentation is accepted; no surrounding container is necessary or desired.
+- The three visual reference cases all passed product-owner inspection: Talking Heads — Psycho Killer; The Mountain Goats — No Children; Pernice Brothers — The Devil and The Jinn.
+- The final three-second anticipation refinement passed on the Poco F8 Ultra. During sufficiently long introductions, lyric text stays hidden until three seconds before the first timestamp while the NPS remains in lyrics mode and the progress bar remains hidden. Subsequent lyric progression remains unchanged.
+- During earlier device testing, switching to tracks with synchronised lyrics produced no perceptible progress-bar flash. This critical observed result is accepted. It does not establish that every possible transition or timing edge case was manually exercised; the automated suite provides broader coverage.
+- Both dark and light themes passed visual inspection on the Poco F8 Ultra. The current lyric uses the appropriate high-contrast theme foreground colour, and contextual lyrics remain subdued. The owner explicitly prefers the existing theme-aware foreground styling and decided against artwork-accent colouring for the current lyric.
+
+### Automated validation versus native acceptance
+
+Previously reported validation for the final anticipation implementation remains: 180 focused Android/iOS tests passed; full regression 11,258 passed and eight skipped; typecheck, internationalisation/translation, circular-import and whitespace checks passed; Android Expo/Hermes export passed. Those are cloud automated results, including simulated Android/iOS test projects and a JavaScript bundle export. They are distinct from the later successful native release APK build on futwick and physical Poco F8 Ultra testing reported above. No physical iOS device testing is claimed.
+
+This closeout changes documentation only. No implementation, dependencies or tests were changed, and the automated suite and builds were not rerun for this diary update. Documentation validation checks that the previous diary contents are preserved verbatim, that only this file changes, and that the diff has no whitespace errors.
+
+### Unresolved observation and outstanding coverage
+
+An earlier plain-text lyrics track took approximately a minute or longer to populate the existing full Lyrics screen. Its cause remains unresolved, and it was not established as a regression caused by #006. Record it as an observation, not a confirmed #006 defect.
+
+Coverage not yet comprehensively demonstrated remains: wider Android devices and screen sizes; physical iOS devices; tablet layouts; extended offline and cache-recovery scenarios; and larger accessibility fonts. The earlier request for measured Android synchronous SQLite lookup latency is not fulfilled by any timing measurements in this acceptance report. No new latency measurements or exhaustive native event-order checks are claimed. Product acceptance on the tested phone does not silently mark this remaining coverage as passed.
+
+### Product-owner assessment
+
+The product owner considers this a watershed moment for the sancti.fi Client project. Although the application began as a Substreamer fork, inline synchronised lyrics are the first major enhancement that makes the application feel distinctly like sancti.fi, rather than simply a customised upstream client. This is a product milestone as well as an engineering outcome.
+
+The original product objective has been achieved: lyrics are integrated naturally into listening, appear automatically and unobtrusively, and preserve a visually restrained interface and existing playback behaviour. The resulting experience matches the owner's original vision:
+
+**"THIS FEELS LIKE WHAT I WAS IMAGINING."**
+
+The development sequence combined investigation, implementation, automated validation, physical-device feedback, focused refinement and final acceptance. Alpha acceptance records readiness from the product owner's perspective; it does not claim that distribution has already occurred.
+
+### Issue housekeeping
+
+A concise acceptance-summary draft is prepared below for issue #006. It has not been posted. The issue must not be closed and the comment must not be published without explicit authorisation. This documentation update is committed and pushed only on its dedicated branch; no merge into sanctifi or PR is part of this closeout.
+
+Draft comment:
+
+> **Issue #006 is accepted for Alpha.** Final implementation `a203afe5afdd3e6451d2da848422ec938b873f86` integrated into local sanctifi by a conflict-free fast-forward; the release APK built on futwick and passed Poco F8 Ultra testing. Automatic synced lyrics, balanced one/two-line and centred upcoming presentation, the three-second first-lyric anticipation window, stable NPS layout and both dark/light themes are accepted. Earlier track-switch testing showed no perceptible progress-bar flash; manual coverage was not exhaustive. Automated validation: 180 focused tests passed; full suite 11,258 passed, eight skipped; typecheck, Intl/translations, cycles, whitespace and Android Expo/Hermes export passed. Wider Android, physical iOS, tablets, extended offline/cache recovery and larger fonts remain outstanding coverage. Slow plain-text loading in the full Lyrics screen remains an unresolved observation, not a confirmed #006 regression. This is sancti.fi's first major enhancement to fulfil its own distinct listening experience: **"THIS FEELS LIKE WHAT I WAS IMAGINING."**
