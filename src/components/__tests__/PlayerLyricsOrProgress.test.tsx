@@ -174,3 +174,30 @@ test('an unrelated late result between disk-cache render and adoption cannot fla
   expect(view.queryByTestId('progress')).toBeNull();
   expect(mockCommits.every((mode) => mode === 'lyrics:b')).toBe(true);
 });
+
+test('quiet introduction, anticipation, current and restart stay in the same lyrics panel without progress commits', () => {
+  lyricsStore.setState({ entries: { a: { ...timed('unused'), lines: [
+    { startMs: 45000, text: 'First' }, { startMs: 90000, text: 'Second' },
+  ] } } });
+  playerStore.setState({ position: 0 });
+  const view = render(<Screen id="a" />);
+  const panel = view.getByTestId('inline-lyrics');
+  const style = panel.props.style;
+  const checkPanel = () => {
+    expect(view.getByTestId('inline-lyrics')).toBe(panel);
+    expect(view.getByTestId('inline-lyrics').props.style).toEqual(style);
+    expect(view.queryByTestId('progress')).toBeNull();
+    expect(mockCommits.length).toBeGreaterThan(0);
+    expect(mockCommits.every((mode) => mode === 'lyrics:a')).toBe(true);
+  };
+  checkPanel();
+  expect(view.queryByText('First')).toBeNull();
+  for (const position of [41.999, 42, 45, 80, 0, 42]) {
+    act(() => playerStore.setState({ position }));
+    checkPanel();
+    if (position < 42) expect(view.queryByText('First')).toBeNull();
+    else expect(view.getByTestId(position < 45 ? 'inline-lyrics-next' : 'inline-lyrics-current')
+      .props.accessibilityLabel).toBe('First');
+  }
+  expect(getLyricsForTrack).not.toHaveBeenCalled();
+});

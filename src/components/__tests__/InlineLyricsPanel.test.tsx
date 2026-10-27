@@ -76,3 +76,61 @@ test('the reserved line-height budget scales with accessibility fonts and stays 
     act(() => Dimensions.set({ window }));
   }
 });
+
+test('a long introduction stays empty until exactly three seconds before the first effective timestamp', () => {
+  const intro: LyricsData = { ...lyrics, lines: [
+    { startMs: 45000, text: 'First, Original!' },
+    { startMs: 90000, text: 'Second' },
+    { startMs: 120000, text: 'Last' },
+  ] };
+  playerStore.setState({ position: 0 });
+  const view = render(<InlineLyricsPanel trackId="a" lyrics={intro} colors={colors} />);
+  const panel = view.getByTestId('inline-lyrics');
+  const style = StyleSheet.flatten(panel.props.style);
+  for (const position of [0, 41.999]) {
+    act(() => playerStore.setState({ position }));
+    expect(view.queryByText('First, Original!')).toBeNull();
+    expect(view.queryAllByText(/.+/)).toHaveLength(0);
+    expect(StyleSheet.flatten(view.getByTestId('inline-lyrics').props.style)).toEqual(style);
+  }
+  act(() => playerStore.setState({ position: 42 }));
+  expect(view.getByTestId('inline-lyrics-next').props.accessibilityLabel).toBe('First, Original!');
+  expect(view.queryByTestId('inline-lyrics-current')).toBeNull();
+  act(() => playerStore.setState({ position: 45 }));
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('First, Original!');
+  expect(StyleSheet.flatten(view.getByTestId('inline-lyrics-current').props.style).fontWeight).toBe('700');
+  // Later instrumental gaps keep the current lyric, including near the next timestamp.
+  for (const position of [80, 86.999, 87, 89.999]) {
+    act(() => playerStore.setState({ position }));
+    expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('First, Original!');
+    expect(view.getByTestId('inline-lyrics-next').props.accessibilityLabel).toBe('Second');
+  }
+  act(() => playerStore.setState({ position: 90 }));
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Second');
+  act(() => playerStore.setState({ position: 150 }));
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Last');
+  act(() => playerStore.setState({ position: 41.999 }));
+  expect(view.queryAllByText(/.+/)).toHaveLength(0);
+  expect(view.getByTestId('inline-lyrics')).toBe(panel);
+  expect(StyleSheet.flatten(view.getByTestId('inline-lyrics').props.style)).toEqual(style);
+});
+
+test.each([2000, 3000, 0])('first timestamp %ims is already visible at playback zero', (startMs) => {
+  playerStore.setState({ position: 0 });
+  const view = render(<InlineLyricsPanel trackId="a" lyrics={{ ...lyrics,
+    lines: [{ startMs, text: 'First' }],
+  }} colors={colors} />);
+  expect(view.getByTestId(startMs === 0 ? 'inline-lyrics-current' : 'inline-lyrics-next').props.accessibilityLabel).toBe('First');
+});
+
+test.each([500, -500, 0.5])('anticipation uses the existing effective timestamp with offset %ims without rounding', (offsetMs) => {
+  playerStore.setState({ position: (42000 + offsetMs - 1) / 1000 });
+  const view = render(<InlineLyricsPanel trackId="a" lyrics={{ ...lyrics, offsetMs,
+    lines: [{ startMs: 45000, text: 'Offset first' }],
+  }} colors={colors} />);
+  expect(view.queryByText('Offset first')).toBeNull();
+  act(() => playerStore.setState({ position: (42000 + offsetMs) / 1000 }));
+  expect(view.getByTestId('inline-lyrics-next').props.accessibilityLabel).toBe('Offset first');
+  act(() => playerStore.setState({ position: (45000 + offsetMs) / 1000 }));
+  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Offset first');
+});

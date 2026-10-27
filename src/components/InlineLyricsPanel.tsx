@@ -22,15 +22,18 @@ export const InlineLyricsPanel = memo(function InlineLyricsPanel({
     ? playerStore.subscribe(notify) : () => {}, [active]);
   const snapshot = useCallback(() => {
     const state = playerStore.getState();
-    return state.currentTrack?.id === trackId
-      ? findActiveLyricIndex(starts, state.position * 1000) : -2;
+    if (state.currentTrack?.id !== trackId) return -2;
+    const positionMs = state.position * 1000;
+    const index = findActiveLyricIndex(starts, positionMs);
+    // A distinct snapshot lets the anticipation boundary trigger a render.
+    return index === -1 && positionMs < Math.max(0, starts[0] - 3000) ? -3 : index;
   }, [starts, trackId]);
   const index = useSyncExternalStore(subscribe, snapshot, snapshot);
 
   // Reserve two context lines, two current lines, padding and gaps.
   return (
     <View testID="inline-lyrics" style={[styles.panel, { minHeight: (20 + 44 + 20) * fontScale + 12 }]}>
-      {(index === -1 ? [1] : [-1, 0, 1]).map((relative) => {
+      {(index === -3 ? [] : index === -1 ? [1] : [-1, 0, 1]).map((relative) => {
         const text = index === -2 ? '' : lyrics.lines[index + relative]?.text ?? '';
         const current = relative === 0;
         return (
