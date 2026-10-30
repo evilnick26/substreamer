@@ -382,3 +382,44 @@ for (const removed of [false, true]) {
     assert.match(report.errors.join(), /attempt marker no longer belongs/);
   });
 }
+
+test('approved semantic amendment accepts only exact app.json value change, without changing reservation', async (t) => {
+  const f = fixture(t);
+  const result = await f.reserve();
+  await synchronise({ directory: f.directory, allocation: result.reservation, execute: true, dryRun: false }, f.root);
+  const reservationBefore = fs.readFileSync(result.reservation);
+  const ledgerBefore = fs.readFileSync(f.ledger);
+  const appPath = path.join(f.root, 'app.json');
+  const original = fs.readFileSync(appPath, 'utf8');
+  const amendmentPath = path.join(f.root, 'docs/release-amendments/80000190.json');
+  const record = JSON.parse(reservationBefore);
+  const amendment = { schemaVersion: 1, reservationId: record.id, versionCode: 80000190,
+    field: 'expo.extra.sanctifiVersion', from: '0.1.1', to: '0.1.2', reason: 'Owner approved' };
+  fs.mkdirSync(path.dirname(amendmentPath), { recursive: true });
+  fs.writeFileSync(appPath, original.replace('"sanctifiVersion": "0.1.1"', '"sanctifiVersion": "0.1.2"'));
+  f.commit();
+  const options = { directory: f.directory, allocation: result.reservation, intent: 'new' };
+  assert.equal((await preflight(options, f.root, f.env)).ok, false);
+  fs.writeFileSync(amendmentPath, JSON.stringify(amendment));
+  f.commit();
+  assert.equal((await preflight(options, f.root, f.env)).ok, true);
+  assert.deepEqual(fs.readFileSync(result.reservation), reservationBefore);
+  assert.deepEqual(fs.readFileSync(f.ledger), ledgerBefore);
+  const approved = fs.readFileSync(appPath, 'utf8');
+  for (const changed of [
+    approved.replace('"versionCode": 80000190', '"versionCode": 80000191'),
+    approved.replace('"sanctifiVersion": "0.1.2"', '"sanctifiVersion": "0.1.3"'),
+    approved.replace('"package": "fi.sancti.client"', '"package": "other.client"'),
+    approved + '\\n',
+  ]) {
+    fs.writeFileSync(appPath, changed);
+    f.commit();
+    assert.equal((await preflight(options, f.root, f.env)).ok, false);
+  }
+  fs.writeFileSync(appPath, approved);
+  f.commit();
+  amendment.reservationId = '00000000-0000-0000-0000-000000000000';
+  fs.writeFileSync(amendmentPath, JSON.stringify(amendment));
+  f.commit();
+  assert.equal((await preflight(options, f.root, f.env)).ok, false);
+});
