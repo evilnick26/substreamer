@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "reservationId": "bd22ba90-f700-465c-be9b-bf231f04492b",
+  "versionCode": 80000190,
+  "field": "expo.extra.sanctifiVersion",
+  "from": "0.1.1",
+  "to": "0.1.2",
+  "reason": "Owner approved retaining release 0.1.2 for grouping release-type refinement on 2026-10-30; correction committed as 778b53af."
+}
