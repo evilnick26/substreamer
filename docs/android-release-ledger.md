@@ -1,6 +1,8 @@
 # sancti.fi Android release ledger
 
-This is a manual record, not a release service. One publisher allocates numbers.
+This is the public allocation/artifact record, not a release service. The local
+release CLI can append reservations after reconciliation. One publisher allocates
+numbers through one private registry on Futwick.
 Keep allocated/withdrawn numbers; never reuse them for different APK bytes.
 Promotion reuses an artifact and does not allocate a code.
 
@@ -21,6 +23,27 @@ public certificate digest in the staging record and publication evidence.
 | --- | --- | --- | --- | --- | --- |
 | `80000187` | `8.1.8` | `3010cf5ca0a0443e99fe1c644666b747dd927506` | `95e388228dc644a4fbca069ca205a856f376dab534b61123cf13445efa9ed3cc` | `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c` | Published Alpha; owner reported 25 October 2026; exact UTC time not supplied. [Immutable APK](https://updates.sancti.fi/client/apks/sanctifi-80000187.apk). In-place 80000186 to 80000187 acceptance passed. |
 | `80000188` | `8.1.8` | Unknown - original build source not established | `b94623970de73c14da3f89d5569c272b1d1a994296f431750a24b2d1236c5e7e` | Unverified in this reconciliation; no APK-specific certificate digest recorded here | Published Alpha, 25 October 2026 (owner-attested); exact UTC publication time unknown. [Immutable APK](https://updates.sancti.fi/client/apks/sanctifi-80000188.apk). Historical publication, not a future reservation. |
+
+### 30 October 2026: owner-reported 80000189 collision reconciliation
+
+| versionCode | Actual versionName | Exact source revision (40 characters if known) | APK SHA-256 | Certificate SHA-256 | Status / UTC date / channels / archive URL |
+| --- | --- | --- | --- | --- | --- |
+| `80000189` | Not independently inspected in this cloud task | Unknown - original build source not established | `682f11bfc2bd08f32359f23eb3581e5d8c38ec64f5e1e530a10cc46cdd5178d4` | Not independently inspected in this cloud task | Published Alpha, Lyrics Without Leaving; owner-reported 30 October 2026. [Immutable APK](https://updates.sancti.fi/client/apks/sanctifi-80000189.apk). Permanently occupied. |
+
+The published artifact is **79,568,030 bytes**, per the owner's supplied inspection.
+A later Futwick Issue 024 candidate reused that code with different bytes:
+SHA-256 `c728b1117c09da1aacad785c2d1b4b46cd9ea3283e2c8b4084e6a5c41a08f261`,
+**79,570,830 bytes**, built approximately `2026-10-27 19:53 UTC` (owner report).
+That candidate was tested but never published. It is rejected for distribution;
+do not replace, relabel or overwrite the published APK. Its original source is
+unknown here. These facts are owner-supplied, not fresh cloud APK/server checks.
+
+The 26 October high-water statements below are historical snapshots superseded
+by this evidence. At least 80000189 is occupied. **80000190 is only a proposal**:
+no reservation or availability attestation is created by this documentation.
+Reconcile all Futwick archives, failed attempts, private reservations and the
+server before invoking automatic allocation. See the
+[allocation diary](project-diary/2026-10-30_issue-047_release-allocation.md).
 
 ### 26 October 2026: historical Alpha 80000188 reconciliation
 

@@ -250,6 +250,256 @@ function ledgerDiagnostics(ledger, configuredCode) {
   return messages;
 }
 
+function digest(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function allocationFile(directory, code) {
+  return path.join(directory, '.allocations', `${code}.json`);
+}
+
+function ledgerRows(text) {
+  const rows = text.split('\n').filter((line) => /^\|\s*`\d+`\s*\|/.test(line)).map((line) => {
+    const fields = line.split('|').slice(1, -1).map((field) => field.trim().replaceAll('`', ''));
+    const versionCode = Number(fields[0]);
+    validateVersion(versionCode, '8.1.8');
+    check(fields.length === 6 && /^(Published|Reserved|Failed|Withdrawn|Rejected)\b/.test(fields[5]), 'Incomplete or unrecognised release ledger row');
+    const sha = /^[a-f0-9]{64}$/.test(fields[3]) ? fields[3] : null;
+    check(!/^Published\b/.test(fields[5]) || sha, 'Published ledger row lacks APK checksum');
+    return { versionCode, sha256: sha, state: /^Rejected\b/.test(fields[5]) ? 'rejected' : 'occupied', status: fields[5] };
+  });
+  check(rows.length && new Set(rows.map((row) => row.versionCode)).size === rows.length, 'Missing or duplicate release ledger history');
+  return rows;
+}
+
+function metadataPlan(root, code) {
+  const appFile = path.join(root, 'app.json');
+  const nativeFile = path.join(root, 'android/app/build.gradle');
+  check(existingRegularFile(appFile) && existingRegularFile(nativeFile), 'app.json and existing native Gradle project required; no prebuild is run');
+  const dynamic = path.join(root, 'app.config.js');
+  if (fs.existsSync(dynamic)) {
+    check(!/versionCode|versionName/.test(fs.readFileSync(dynamic, 'utf8')), 'Dynamic version overrides require manual review');
+  }
+  const app = fs.readFileSync(appFile, 'utf8');
+  const native = fs.readFileSync(nativeFile, 'utf8');
+  const expo = readJson(appFile).expo;
+  const current = nativeMetadata(native);
+  validateVersion(expo.android.versionCode, expo.version);
+  check(expo.version === '8.1.8' && current.versionName === expo.version &&
+    expo.android.package === PACKAGE && current.packageName === PACKAGE, 'Package/versionName migration requires separate review');
+  check(/^\d+\.\d+\.\d+$/.test(expo.extra?.sanctifiVersion), 'Missing sancti.fi semantic version');
+  check([...app.matchAll(/"versionCode"\s*:/g)].length === 1, 'Ambiguous app.json versionCode');
+  check([...native.matchAll(/\bversionCode\b/g)].length === 1 &&
+    !/versionCodeOverride|productFlavors|\bsplits\b|apply\s+from\s*:/.test(native), 'Unsupported Gradle versionCode overrides; inspect native build manually');
+  check(code > expo.android.versionCode && code > current.versionCode, 'Allocation must exceed configured versionCodes');
+  const appNext = app.replace(/("versionCode"\s*:\s*)\d+/, (_, prefix) => prefix + code);
+  const nativeNext = native.replace(/^(\s*versionCode\s+)\d+(\s*)$/m, (_, prefix, suffix) => prefix + code + suffix);
+  return [
+    { path: 'app.json', before: digest(app), after: digest(appNext), original: app, target: appNext },
+    { path: 'android/app/build.gradle', before: digest(native), after: digest(nativeNext), original: native, target: nativeNext },
+  ];
+}
+
+function readReservation(file, directory) {
+  check(existingRegularFile(file), 'Reservation file must be a regular file');
+  const identity = readJson(path.join(directory, '.allocations/registry.json'));
+  check(identity.schemaVersion === 1 && identity.directory === directory, 'Registry identity mismatch');
+  const record = readJson(file);
+  validateVersion(record.versionCode, '8.1.8');
+  check(record.schemaVersion === 2 && record.reconciled === true &&
+    record.versionCode === record.highWaterMark + 1 && record.directory === directory &&
+    path.resolve(file) === allocationFile(directory, record.versionCode) &&
+    typeof record.id === 'string' && /^[a-f0-9-]{36}$/.test(record.id) &&
+    Array.isArray(record.metadata) && record.metadata.length === 2 &&
+    record.metadata.every((item, index) => item.path === ['app.json', 'android/app/build.gradle'][index] &&
+      digest(item.original) === item.before && digest(item.target) === item.after), 'Invalid private registry reservation');
+  return record;
+}
+
+async function allocationEvidence(options, root, run) {
+  const directory = outsideGit(options.directory || DEFAULT_DIRECTORY);
+  check(fs.lstatSync(directory).isDirectory(), 'Existing trusted archive required, including for initial allocation');
+  check(options.history && existingRegularFile(options.history), 'Supply --history FILE with complete Futwick/server reconciliation');
+  outsideGit(path.dirname(options.history));
+  const historyBytes = fs.readFileSync(options.history, 'utf8');
+  const history = readJson(options.history);
+  const age = Date.now() - Date.parse(history.checkedAt);
+  check(history.schemaVersion === 1 && age >= 0 && age <= 24 * 60 * 60 * 1000 &&
+    history.complete === true && history.exclusiveAllocator === true && history.allocationDirectory === directory &&
+    ['futwick', 'server'].every((key) => typeof history.sources?.[key] === 'string' && history.sources[key].trim()),
+  'History must be complete, <=24h old, identify Futwick/server evidence and the exclusive allocation directory');
+  check(Array.isArray(history.artifacts) && history.artifacts.length && Array.isArray(history.archivePaths) && history.archivePaths.length,
+    'History must enumerate artifacts and all local archivePaths (including unstaged builds)');
+  const ledgerFile = path.join(root, 'docs/android-release-ledger.md');
+  const ledger = fs.readFileSync(ledgerFile, 'utf8');
+  const rows = ledgerRows(ledger);
+  const evidence = [];
+  const add = (item, source) => {
+    validateVersion(item.versionCode, '8.1.8');
+    check(['occupied', 'rejected'].includes(item.state) &&
+      ((item.sha256 === null && item.state === 'occupied') || /^[a-f0-9]{64}$/.test(item.sha256)), 'Invalid history artifact');
+    evidence.push({ ...item, source });
+  };
+  for (const item of history.artifacts) add(item, 'authoritative history');
+  for (const row of rows) {
+    const localReservation = !row.sha256 && existingRegularFile(allocationFile(directory, row.versionCode));
+    if (localReservation) readReservation(allocationFile(directory, row.versionCode), directory);
+    check(localReservation || history.artifacts.some((item) => item.versionCode === row.versionCode &&
+      (!row.sha256 || row.sha256 === item.sha256) && item.state === row.state), 'History omits or contradicts a ledger allocation');
+    add(row, 'ledger');
+  }
+  const registry = path.join(directory, '.allocations');
+  if (options.initialize) check(!fs.existsSync(registry), 'Registry already exists; omit --initialize');
+  else {
+    check(fs.lstatSync(registry).isDirectory(), 'Private registry unavailable; restore it, never silently start over');
+    const names = fs.readdirSync(registry);
+    check(names.includes('registry.json'), 'Registry identity missing; restore from backup');
+    const identity = readJson(path.join(registry, 'registry.json'));
+    check(identity.directory === directory && identity.schemaVersion === 1, 'Registry directory identity mismatch');
+    for (const name of names.filter((name) => name !== 'registry.json')) {
+      check(/^\d+\.json$/.test(name), 'Unrecognised registry entry; reconcile before allocating');
+      const record = readReservation(path.join(registry, name), directory);
+      add({ versionCode: record.versionCode, sha256: null, state: 'occupied' }, 'reservation');
+    }
+  }
+  check(!fs.existsSync(path.join(directory, '.prepare-lock')) || options.locked, 'Another allocation/preparation holds .prepare-lock');
+  const seen = new Set();
+  const scan = async (file) => {
+    const stat = fs.lstatSync(file);
+    check(!stat.isSymbolicLink(), 'Archive symlinks require manual reconciliation');
+    const real = fs.realpathSync(file);
+    if (seen.has(real)) return;
+    seen.add(real);
+    if (stat.isDirectory()) {
+      if (file === registry) return;
+      for (const name of fs.readdirSync(file).sort()) await scan(path.join(file, name));
+    } else if (/\.apk$/i.test(file)) {
+      check(options.buildTools, 'Local APK inventory requires --build-tools DIRECTORY');
+      const apk = await inspectApk(file, options.buildTools, run);
+      const rejected = history.artifacts.some((item) => item.state === 'rejected' && item.versionCode === apk.versionCode && item.sha256 === apk.sha256);
+      add({ versionCode: apk.versionCode, sha256: apk.sha256, state: rejected ? 'rejected' : 'occupied' }, file);
+      const sidecar = file + '.json';
+      if (fs.existsSync(sidecar)) {
+        check(existingRegularFile(sidecar), 'Invalid APK sidecar');
+        const record = readJson(sidecar);
+        check(record.versionCode === apk.versionCode && record.sha256 === apk.sha256, 'Archive sidecar contradicts APK bytes');
+      }
+    } else if (/\.apk\.json$/i.test(file)) {
+      check(existingRegularFile(file.slice(0, -5)), 'Orphan APK provenance; reconcile missing artifact');
+    }
+  };
+  for (const archive of [directory, ...history.archivePaths]) {
+    check(path.isAbsolute(archive) && fs.lstatSync(archive).isDirectory(), 'archivePaths must be absolute existing directories');
+    await scan(archive);
+  }
+  const output = path.join(root, 'android/app/build/outputs/apk/release/app-release.apk');
+  if (fs.existsSync(output)) await scan(output);
+  for (const item of evidence.filter((item) => item.sha256 && item.state !== 'rejected')) {
+    check(!evidence.some((other) => other.versionCode === item.versionCode && other.state !== 'rejected' &&
+      other.sha256 && other.sha256 !== item.sha256), `Conflicting APK bytes for versionCode ${item.versionCode}; quarantine/reconcile rejected artifacts explicitly`);
+  }
+  const expo = readJson(path.join(root, 'app.json')).expo;
+  const native = nativeMetadata(fs.readFileSync(path.join(root, 'android/app/build.gradle'), 'utf8'));
+  const highWaterMark = Math.max(80000189, expo.android.versionCode, native.versionCode, ...evidence.map((item) => item.versionCode));
+  const versionCode = highWaterMark + 1;
+  validateVersion(versionCode, '8.1.8');
+  const metadata = metadataPlan(root, versionCode);
+  return { directory, ledgerFile, ledger, historySha256: digest(historyBytes), highWaterMark, versionCode, evidence, metadata };
+}
+
+async function allocate(options, root = path.resolve(__dirname, '..'), run = runTool) {
+  check(options.dryRun !== options.execute, 'Choose exactly one of --dry-run or --execute');
+  const assess = () => allocationEvidence(options, root, run);
+  if (options.dryRun) {
+    const result = await assess();
+    return { command: 'allocate', dryRun: true, versionCode: result.versionCode, highWaterMark: result.highWaterMark,
+      historySha256: result.historySha256, evidence: result.evidence, changes: result.metadata.map(({ path, before, after }) => ({ path, before, after })), publication: 'none' };
+  }
+  const directory = outsideGit(options.directory || DEFAULT_DIRECTORY);
+  check(fs.lstatSync(directory).isDirectory(), 'Existing archive required');
+  const lock = path.join(directory, '.prepare-lock');
+  fs.mkdirSync(lock, { mode: 0o700 });
+  try {
+    options = { ...options, locked: true };
+    const result = await assess();
+    check(Number(options.expectCode) === result.versionCode, `Approve the proposed allocation with --expect-code ${result.versionCode}; history may have changed`);
+    const registry = path.join(directory, '.allocations');
+    if (options.initialize) {
+      fs.mkdirSync(registry, { mode: 0o700 });
+      const identity = fs.openSync(path.join(registry, 'registry.json'), 'wx', 0o600);
+      try { fs.writeFileSync(identity, JSON.stringify({ schemaVersion: 1, directory })); fs.fsyncSync(identity); } finally { fs.closeSync(identity); }
+      const parent = fs.openSync(directory, 'r');
+      try { fs.fsyncSync(parent); } finally { fs.closeSync(parent); }
+    }
+    const reservation = allocationFile(directory, result.versionCode);
+    const record = { schemaVersion: 2, id: crypto.randomUUID(), reconciled: true, directory,
+      versionCode: result.versionCode, highWaterMark: result.highWaterMark, reservedAt: new Date().toISOString(),
+      ledgerReference: `Automatic reservation ${result.versionCode}`, historySha256: result.historySha256,
+      evidence: result.evidence, metadata: result.metadata };
+    const fd = fs.openSync(reservation, 'wx', 0o600);
+    try { fs.writeFileSync(fd, JSON.stringify(record, null, 2) + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    const parent = fs.openSync(registry, 'r');
+    try { fs.fsyncSync(parent); } finally { fs.closeSync(parent); }
+    check(fs.readFileSync(result.ledgerFile, 'utf8') === result.ledger, 'Ledger changed; reservation retained, stop and reconcile');
+    fs.appendFileSync(result.ledgerFile, `\n### Automatic reservation ${result.versionCode}\n\n| versionCode | Actual versionName | Exact source revision | APK SHA-256 | Certificate SHA-256 | Status |\n| --- | --- | --- | --- | --- | --- |\n| \`${result.versionCode}\` | \`8.1.8\` | Unknown - not built | Not built | Not inspected | Reserved ${record.reservedAt}; automatic reservation ${record.id} |\n`);
+    return { command: 'allocate', versionCode: result.versionCode, reservation, synchronised: false, publication: 'none' };
+  } finally { fs.rmdirSync(lock); }
+}
+
+async function synchronise(options, root = path.resolve(__dirname, '..')) {
+  check(options.dryRun !== options.execute, 'Choose exactly one of --dry-run or --execute');
+  const directory = outsideGit(options.directory || DEFAULT_DIRECTORY);
+  const record = readReservation(options.allocation, directory);
+  const apply = () => {
+    check(!fs.existsSync(path.join(directory, `.attempt-${record.versionCode}`)), 'Build already attempted; allocate a new code');
+    const codes = fs.readdirSync(path.join(directory, '.allocations')).filter((name) => /^\d+\.json$/.test(name)).map((name) => Number(name.slice(0, -5)));
+    check(record.versionCode === Math.max(...codes), 'Reservation superseded; synchronise only the newest allocation');
+    const ledger = fs.readFileSync(path.join(root, 'docs/android-release-ledger.md'), 'utf8');
+    check(ledgerRows(ledger).some((row) => row.versionCode === record.versionCode && /^Reserved\b/.test(row.status) && row.status.includes(record.id)), 'Reservation missing from ledger; reconcile before synchronising');
+    for (const item of record.metadata) {
+      const file = path.join(root, item.path);
+      check(existingRegularFile(file), 'Metadata file missing');
+      const current = digest(fs.readFileSync(file));
+      check(current === item.before || current === item.after, `Metadata changed since allocation: ${item.path}; preserve local edits and allocate again`);
+    }
+    if (options.execute) {
+      for (const item of record.metadata) {
+        const file = path.join(root, item.path);
+        if (digest(fs.readFileSync(file)) === item.after) continue;
+        const temporary = file + '.allocation-' + record.id;
+        fs.writeFileSync(temporary, item.target, { flag: 'wx', mode: fs.statSync(file).mode & 0o777 });
+        fs.renameSync(temporary, file);
+      }
+    }
+    return { command: 'synchronise', dryRun: options.dryRun, versionCode: record.versionCode,
+      files: record.metadata.map((item) => item.path), publication: 'none' };
+  };
+  if (options.dryRun) return apply();
+  const lock = path.join(directory, '.prepare-lock');
+  fs.mkdirSync(lock, { mode: 0o700 });
+  try { return apply(); } finally { fs.rmdirSync(lock); }
+}
+
+function allocationOptions(args, command) {
+  const values = command === 'allocate'
+    ? { '--history': 'history', '--directory': 'directory', '--build-tools': 'buildTools', '--expect-code': 'expectCode' }
+    : { '--allocation': 'allocation', '--directory': 'directory' };
+  const flags = { '--dry-run': 'dryRun', '--execute': 'execute', ...(command === 'allocate' ? { '--initialize': 'initialize' } : {}) };
+  const options = { dryRun: false, execute: false };
+  const seen = new Set();
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    check(!seen.has(arg), 'Duplicate option: ' + arg);
+    seen.add(arg);
+    if (flags[arg]) options[flags[arg]] = true;
+    else {
+      check(values[arg] && args[i + 1] && !args[i + 1].startsWith('--'), 'Unknown or incomplete option: ' + arg);
+      options[values[arg]] = args[++i];
+    }
+  }
+  return options;
+}
+
 async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env) {
   const report = { command: 'preflight', ok: true, errors: [], warnings: [], publication: 'none',
     apkVerification: 'Not performed by preflight', automatedChecks: 'Not run by preflight',
@@ -306,6 +556,15 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
       check(options.allocation, 'New artifact blocked: supply --allocation FILE. A new release requires a separately approved higher versionCode, a Reserved ledger entry and its matching private allocation attestation. ' + report.warnings.join('. '));
       const allocation = readJson(options.allocation);
       check(ledger !== undefined, 'Cannot check allocation without the release ledger');
+      if (allocation.schemaVersion === 2) {
+        readReservation(options.allocation, report.directory);
+        check(!fs.existsSync(path.join(report.directory, `.attempt-${allocation.versionCode}`)),
+          'Reservation already attempted; failed or abandoned builds require a new allocation');
+        for (const item of allocation.metadata) {
+          check(digest(fs.readFileSync(path.join(root, item.path))) === item.after,
+            'Run synchronise for this reservation before preparation');
+        }
+      }
       const knownCodes = [...ledger.matchAll(/^\|\s*`(\d+)`\s*\|/gm)].map((m) => Number(m[1]));
       const minimumHighWaterMark = Math.max(80000188, ...knownCodes.filter((n) => n !== report.expected?.versionCode));
       check(allocation.reconciled === true && Number.isInteger(allocation.highWaterMark) &&
@@ -403,6 +662,13 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
   let moved = false;
   report.startedAt = new Date().toISOString();
   try {
+    if (options.intent === 'new' && readJson(options.allocation).schemaVersion === 2) {
+      const reservation = readReservation(options.allocation, report.directory);
+      const fd = fs.openSync(path.join(report.directory, `.attempt-${reservation.versionCode}`), 'wx', 0o600);
+      try { fs.writeFileSync(fd, reservation.id + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      const parent = fs.openSync(report.directory, 'r');
+      try { fs.fsyncSync(parent); } finally { fs.closeSync(parent); }
+    }
     const javaVersion = run(path.join(env.JAVA_HOME, 'bin/java'), ['--version']);
     const javaMajor = /(?:openjdk|java) (\d+)/i.exec(javaVersion);
     check(javaMajor && Number(javaMajor[1]) >= 17 && Number(javaMajor[1]) <= 24, 'Gradle requires JDK 17-24; configure a supported JAVA_HOME');
@@ -486,6 +752,12 @@ function help(command) {
     '  keep requires the existing immutable APK/provenance and rejects changed rebuild bytes.\n' +
     '  Neither intent edits versions or allocates a number.';
   const commands = {
+    allocate: 'allocate --history FILE (--dry-run | --execute --expect-code CODE) [--initialize] [--directory DIRECTORY] [--build-tools DIRECTORY]\n' +
+      '  Reconcile complete fresh Futwick/server history, ledger, local APKs and durable reservations.\n' +
+      '  --dry-run is read-only; SDK verification runs when local APKs exist. --execute reserves and appends a Reserved ledger row.\n' +
+      '  --initialize explicitly starts the single private registry; use only after full owner reconciliation.',
+    synchronise: 'synchronise --allocation FILE (--dry-run | --execute) [--directory DIRECTORY]\n' +
+      '  Apply a registry reservation to app.json and existing Gradle versionCode only; no prebuild/build.',
     preflight: 'preflight --intent new|keep [--allocation FILE] [--build-tools DIRECTORY] [--directory DIRECTORY]\n' +
       '  Read-only readiness checks; no tests, SDK processes, build or staging.\n' + intent + '\n' + common,
     prepare: 'prepare --intent new|keep (--dry-run | --execute-build) [--allocation FILE] [--build-tools DIRECTORY] [--directory DIRECTORY]\n' +
@@ -508,7 +780,7 @@ function help(command) {
     return 'Usage: node scripts/android-release.js ' + commands[command] + '\nHelp is read-only and needs no SDK, allocation file or clean checkout. No command publishes remotely.';
   }
   return 'Usage: node scripts/android-release.js COMMAND [arguments]\n\n' + Object.values(commands).join('\n\n') +
-    '\n\nUse --help or COMMAND --help (also -h). Help does not inspect the checkout or run tools.\nNo command changes versions or publishes remotely; real builds require separate owner approval.';
+    '\n\nUse --help or COMMAND --help (also -h). Help does not inspect the checkout or run tools.\nOnly synchronise changes versions. No command publishes remotely; real builds require separate owner approval.';
 }
 
 async function main(args) {
@@ -517,6 +789,11 @@ async function main(args) {
     check((args.length === 1 && ['--help', '-h'].includes(command)) ||
       (args.length === 2 && ['--help', '-h'].includes(file)), 'Usage: --help or COMMAND --help');
     console.log(help(args.length === 1 ? undefined : command));
+    return;
+  }
+  if (command === 'allocate' || command === 'synchronise') {
+    const options = allocationOptions(args.slice(1), command);
+    console.log(JSON.stringify(await (command === 'allocate' ? allocate(options) : synchronise(options)), null, 2));
     return;
   }
   if (command === 'preflight' || command === 'prepare') {
@@ -570,7 +847,7 @@ async function main(args) {
   }
 }
 
-module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks, ledgerDiagnostics };
+module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks, ledgerDiagnostics, allocate, synchronise, allocationOptions };
 if (require.main === module) main(process.argv.slice(2)).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
