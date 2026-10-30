@@ -196,7 +196,8 @@ test('concurrent allocation processes issue exactly one approved code', async (t
   const script = `const { allocate } = require(process.argv[1]); allocate(JSON.parse(process.argv[2]), process.argv[3]).then(r => console.log(r.versionCode)).catch(e => { console.error(e.message); process.exitCode = 1; });`;
   const start = () => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['-e', script, path.resolve(__dirname, '../android-release.js'),
-      JSON.stringify({ ...f.options, dryRun: false, execute: true, expectCode: 80000190 }), f.root]);
+      JSON.stringify({ ...f.options, dryRun: false, execute: true, expectCode: 80000190 }), f.root],
+      { env: { ...process.env, FORCE_COLOR: '0', NODE_DISABLE_COLORS: '1' } });
     let stdout = ''; let stderr = '';
     child.stdout.on('data', (data) => { stdout += data; }); child.stderr.on('data', (data) => { stderr += data; });
     child.on('error', reject); child.on('close', (status) => resolve({ status, stdout, stderr }));
@@ -382,3 +383,45 @@ for (const removed of [false, true]) {
     assert.match(report.errors.join(), /attempt marker no longer belongs/);
   });
 }
+
+test('approved semantic amendment accepts only exact app.json value change, without changing reservation', async (t) => {
+  const f = fixture(t);
+  const result = await f.reserve();
+  await synchronise({ directory: f.directory, allocation: result.reservation, execute: true, dryRun: false }, f.root);
+  const reservationBefore = fs.readFileSync(result.reservation);
+  const ledgerBefore = fs.readFileSync(f.ledger);
+  const appPath = path.join(f.root, 'app.json');
+  const original = fs.readFileSync(appPath, 'utf8');
+  const amendmentPath = path.join(f.root, 'docs/release-amendments/80000190.json');
+  const record = JSON.parse(reservationBefore);
+  const amendment = { schemaVersion: 1, reservationId: record.id, versionCode: 80000190,
+    field: 'expo.extra.sanctifiVersion', from: '0.1.1', to: '0.1.2', reason: 'Owner approved' };
+  fs.mkdirSync(path.dirname(amendmentPath), { recursive: true });
+  fs.writeFileSync(appPath, original.replace('"sanctifiVersion": "0.1.1"', '"sanctifiVersion": "0.1.2"'));
+  f.commit();
+  const options = { directory: f.directory, allocation: result.reservation, intent: 'new' };
+  assert.equal((await preflight(options, f.root, f.env)).ok, false);
+  fs.writeFileSync(amendmentPath, JSON.stringify(amendment));
+  f.commit();
+  const amendedReport = await preflight(options, f.root, f.env);
+  assert.equal(amendedReport.ok, true, JSON.stringify(amendedReport.errors));
+  assert.deepEqual(fs.readFileSync(result.reservation), reservationBefore);
+  assert.deepEqual(fs.readFileSync(f.ledger), ledgerBefore);
+  const approved = fs.readFileSync(appPath, 'utf8');
+  for (const changed of [
+    approved.replace('"versionCode": 80000190', '"versionCode": 80000191'),
+    approved.replace('"sanctifiVersion": "0.1.2"', '"sanctifiVersion": "0.1.3"'),
+    approved.replace('"package": "fi.sancti.client"', '"package": "other.client"'),
+    approved + '\\n',
+  ]) {
+    fs.writeFileSync(appPath, changed);
+    f.commit();
+    assert.equal((await preflight(options, f.root, f.env)).ok, false);
+  }
+  fs.writeFileSync(appPath, approved);
+  f.commit();
+  amendment.reservationId = '00000000-0000-0000-0000-000000000000';
+  fs.writeFileSync(amendmentPath, JSON.stringify(amendment));
+  f.commit();
+  assert.equal((await preflight(options, f.root, f.env)).ok, false);
+});
