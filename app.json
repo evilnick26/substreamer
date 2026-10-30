@@ -126,7 +126,7 @@
       "@react-native-vector-icons/fontawesome5"
     ],
     "extra": {
-      "sanctifiVersion": "0.1.1",
+      "sanctifiVersion": "0.1.2",
       "router": {},
       "eas": {
         "projectId": "b3c7e72f-f01c-4110-8a30-a669b1d9bf34"
