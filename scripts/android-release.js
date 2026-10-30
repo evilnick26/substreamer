@@ -362,6 +362,37 @@ function metadataPlan(root, code) {
   ];
 }
 
+// A committed, reservation-specific semantic-version amendment is the only
+// permitted departure from the immutable post-synchronisation app.json bytes.
+function matchesSemanticAmendment(root, reservation, item, actual) {
+  if (item.path !== 'app.json') return false;
+  const file = path.join(root, 'docs/release-amendments', `${reservation.versionCode}.json`);
+  if (!existingRegularFile(file)) return false;
+  const amendment = readJson(file);
+  if (amendment.schemaVersion !== 1 || amendment.reservationId !== reservation.id ||
+      amendment.versionCode !== reservation.versionCode ||
+      amendment.field !== 'expo.extra.sanctifiVersion' ||
+      typeof amendment.from !== 'string' || typeof amendment.to !== 'string' ||
+      !/^\\d+\\.\\d+\\.\\d+$/.test(amendment.from) ||
+      !/^\\d+\\.\\d+\\.\\d+$/.test(amendment.to) ||
+      amendment.from === amendment.to ||
+      !Object.keys(amendment).every((key) =>
+        ['schemaVersion', 'reservationId', 'versionCode', 'field', 'from', 'to', 'reason'].includes(key)) ||
+      typeof amendment.reason !== 'string' || !amendment.reason.trim()) return false;
+  const original = JSON.parse(item.target);
+  if (original.expo?.extra?.sanctifiVersion !== amendment.from) return false;
+  original.expo.extra.sanctifiVersion = amendment.to;
+  const current = JSON.parse(actual);
+  // Require byte-for-byte equivalence after changing exactly the approved value.
+  // Preserve the original JSON formatting by replacing only the field's value.
+  const matches = [...item.target.matchAll(/("sanctifiVersion"\\s*:\\s*")([^"]+)(")/g)];
+  if (matches.length !== 1 || matches[0][2] !== amendment.from) return false;
+  const expected = item.target.replace(/("sanctifiVersion"\\s*:\\s*")([^"]+)(")/,
+    (_, prefix, old, suffix) => prefix + amendment.to + suffix);
+  return digest(actual) === digest(expected) &&
+    current.expo?.extra?.sanctifiVersion === amendment.to;
+}
+
 function readReservation(file, directory) {
   check(existingRegularFile(file), 'Reservation file must be a regular file');
   const identity = readJson(path.join(directory, '.allocations/registry.json'));
@@ -644,7 +675,10 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
           check(!fs.existsSync(marker), 'Reservation already attempted; failed or abandoned builds require a new allocation');
         }
         for (const item of allocation.metadata) {
-          check(existingRegularFile(path.join(root, item.path)) && digest(fs.readFileSync(path.join(root, item.path))) === item.after,
+          const file = path.join(root, item.path);
+          check(existingRegularFile(file), 'Run synchronise for this reservation before preparation');
+          const actual = fs.readFileSync(file, 'utf8');
+          check(digest(actual) === item.after || matchesSemanticAmendment(root, allocation, item, actual),
             'Run synchronise for this reservation before preparation');
         }
       }
