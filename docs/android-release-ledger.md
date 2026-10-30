@@ -39,10 +39,11 @@ do not replace, relabel or overwrite the published APK. Its original source is
 unknown here. These facts are owner-supplied, not fresh cloud APK/server checks.
 
 The 26 October high-water statements below are historical snapshots superseded
-by this evidence. At least 80000189 is occupied. **80000190 is only a proposal**:
-no reservation or availability attestation is created by this documentation.
-Reconcile all Futwick archives, failed attempts, private reservations and the
-server before invoking automatic allocation. See the
+by this evidence. At least 80000189 is occupied. At the time of this
+reconciliation, **80000190 was only a proposal**: this documentation did not
+itself reserve the code. The code was subsequently permanently reserved on
+2026-10-30 at 20:19:29 UTC; see the automatic reservation entry below.
+Reconciliation of Futwick and server evidence preceded that allocation. See the
 [allocation diary](project-diary/2026-10-30_issue-047_release-allocation.md).
 
 ### 26 October 2026: historical Alpha 80000188 reconciliation
@@ -113,3 +114,9 @@ or reserved here. Reconfirm allocation history at the time of any future release
 
 See [publishing procedure and proposed human-version migration](android-release-publishing.md).
 Never record private keys, passwords, recovery archives or access credentials here.
+
+### Automatic reservation 80000190
+
+| versionCode | Actual versionName | Exact source revision | APK SHA-256 | Certificate SHA-256 | Status |
+| --- | --- | --- | --- | --- | --- |
+| `80000190` | `8.1.8` | Unknown - not built | Not built | Not inspected | Reserved 2026-10-30T20:19:29.530Z; automatic reservation bd22ba90-f700-465c-be9b-bf231f04492b |
