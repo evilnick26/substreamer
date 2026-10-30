@@ -281,3 +281,104 @@ test('CLI allocation and synchronisation complete without manual version edits',
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, 'app.json'))).expo.android.versionCode, 80000190);
   assert.match(fs.readFileSync(f.native, 'utf8'), /versionCode 80000190/);
 });
+
+async function readyReservation(t) {
+  const f = fixture(t);
+  const result = await f.reserve();
+  await synchronise({ directory: f.directory, allocation: result.reservation, execute: true, dryRun: false }, f.root);
+  f.commit();
+  return { ...f, reservation: result.reservation,
+    prepareOptions: { directory: f.directory, allocation: result.reservation, intent: 'new', executeBuild: true, dryRun: false } };
+}
+
+function newerPrivateReservation(f) {
+  const record = JSON.parse(fs.readFileSync(f.reservation));
+  record.versionCode++;
+  record.highWaterMark++;
+  record.id = '12345678-1234-1234-1234-123456789abc';
+  fs.writeFileSync(path.join(f.directory, '.allocations', record.versionCode + '.json'), JSON.stringify(record));
+}
+
+const readinessChanges = [
+  ['orphan newer reservation', newerPrivateReservation, /superseded/],
+  ['changed private evidence', (f) => {
+    const record = JSON.parse(fs.readFileSync(f.reservation)); record.historySha256 = 'b'.repeat(64);
+    fs.writeFileSync(f.reservation, JSON.stringify(record));
+  }, /allocationSha256 changed/],
+  ['withdrawn ledger row', (f) => fs.writeFileSync(f.ledger, fs.readFileSync(f.ledger, 'utf8').replace(/Reserved/g, 'Withdrawn')), /ledger entry must match/],
+  ['wrong ledger identity', (f) => {
+    const record = JSON.parse(fs.readFileSync(f.reservation));
+    fs.writeFileSync(f.ledger, fs.readFileSync(f.ledger, 'utf8').replace(record.id, 'different-reservation'));
+  }, /ledger entry must match/],
+  ['duplicate ledger row', (f) => fs.appendFileSync(f.ledger, '| `80000190` | `8.1.8` | Unknown | Not built | Unknown | Reserved duplicate |\n'), /duplicate release ledger/],
+  ['changed native code', (f) => fs.writeFileSync(f.native, fs.readFileSync(f.native, 'utf8').replace('80000190', '80000191')), /Stale native metadata|inputs changed/],
+  ['changed app metadata', (f) => fs.appendFileSync(path.join(f.root, 'app.json'), '\n'), /synchronise|inputs changed/],
+  ['new archive collision', (f) => fs.writeFileSync(path.join(f.directory, 'sanctifi-80000190.apk'), 'intervening artifact'), /existing archive entry/],
+];
+
+for (const [name, change, expected] of readinessChanges) {
+  test(`change between preflight and lock blocks preparation: ${name}`, async (t) => {
+    const f = await readyReservation(t);
+    assert.equal((await preflight(f.prepareOptions, f.root, f.env)).ok, true);
+    const mkdir = fs.mkdirSync;
+    let interleaved = false;
+    t.mock.method(fs, 'mkdirSync', (directory, ...args) => {
+      if (directory === path.join(f.directory, '.prepare-lock') && !interleaved) {
+        interleaved = true; change(f);
+      }
+      return mkdir(directory, ...args);
+    });
+    const report = await prepare(f.prepareOptions, f.root, f.env, () => assert.fail('build started'),
+      () => assert.fail('SDK/Java started'), () => assert.fail('checks started'));
+    assert.equal(interleaved, true);
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), expected);
+    assert.equal(fs.existsSync(path.join(f.directory, '.attempt-80000190')), false);
+    assert.equal(fs.existsSync(path.join(f.directory, '.prepare-lock')), false);
+  });
+
+  test(`change immediately before build blocks preparation: ${name}`, async (t) => {
+    const f = await readyReservation(t);
+    let checked = false;
+    const report = await prepare(f.prepareOptions, f.root, f.env, () => assert.fail('build started'), f.sdk,
+      () => { checked = true; change(f); return []; });
+    assert.equal(checked, true);
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), new RegExp(expected.source + '|inputs changed during automated checks'));
+    assert.equal(fs.existsSync(path.join(f.directory, '.attempt-80000190')), true);
+    assert.equal(fs.existsSync(path.join(f.directory, '.prepare-lock')), false);
+  });
+}
+
+test('completed competing allocation between preflight and lock never consumes old attempt', async (t) => {
+  const f = await readyReservation(t);
+  const mkdir = fs.mkdirSync;
+  let competing;
+  t.mock.method(fs, 'mkdirSync', (directory, ...args) => {
+    if (directory === path.join(f.directory, '.prepare-lock') && !competing) {
+      const script = 'require(process.argv[1]).allocate(JSON.parse(process.argv[2]), process.argv[3]).then(r => console.log(JSON.stringify(r))).catch(e => { console.error(e.message); process.exitCode = 1; });';
+      competing = JSON.parse(execFileSync(process.execPath, ['-e', script, path.resolve(__dirname, '../android-release.js'),
+        JSON.stringify({ ...f.options, initialize: false, execute: true, dryRun: false, expectCode: 80000191 }), f.root], { encoding: 'utf8' }));
+    }
+    return mkdir(directory, ...args);
+  });
+  const report = await prepare(f.prepareOptions, f.root, f.env, () => assert.fail('build started'),
+    () => assert.fail('SDK/Java started'), () => assert.fail('checks started'));
+  assert.equal(competing.versionCode, 80000191);
+  assert.equal(report.ok, false);
+  assert.match(report.errors.join(), /superseded/);
+  assert.equal(fs.existsSync(path.join(f.directory, '.attempt-80000190')), false);
+});
+
+for (const removed of [false, true]) {
+  test(`attempt marker ${removed ? 'removed' : 'replaced'} during checks prevents build`, async (t) => {
+    const f = await readyReservation(t);
+    const marker = path.join(f.directory, '.attempt-80000190');
+    const report = await prepare(f.prepareOptions, f.root, f.env, () => assert.fail('build started'), f.sdk, () => {
+      if (removed) fs.unlinkSync(marker); else fs.writeFileSync(marker, 'another-run\n');
+      return [];
+    });
+    assert.equal(report.ok, false);
+    assert.match(report.errors.join(), /attempt marker no longer belongs/);
+  });
+}

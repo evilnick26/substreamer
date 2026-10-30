@@ -500,7 +500,7 @@ function allocationOptions(args, command) {
   return options;
 }
 
-async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env) {
+async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env, attemptId) {
   const report = { command: 'preflight', ok: true, errors: [], warnings: [], publication: 'none',
     apkVerification: 'Not performed by preflight', automatedChecks: 'Not run by preflight',
     manualAcceptance: 'Not performed: startup/manual discovery, browser in-place install, account/settings/offline preservation, navigation, online/offline playback, Up to Date' };
@@ -546,6 +546,7 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
   let ledger;
   try {
     ledger = fs.readFileSync(path.join(root, 'docs/android-release-ledger.md'), 'utf8');
+    report.ledgerSha256 = digest(ledger);
     report.warnings.push(...ledgerDiagnostics(ledger, report.expected?.versionCode));
   } catch {
     report.warnings.push('Release ledger diagnostic context unavailable; inspect docs/android-release-ledger.md locally');
@@ -556,12 +557,28 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
       check(options.allocation, 'New artifact blocked: supply --allocation FILE. A new release requires a separately approved higher versionCode, a Reserved ledger entry and its matching private allocation attestation. ' + report.warnings.join('. '));
       const allocation = readJson(options.allocation);
       check(ledger !== undefined, 'Cannot check allocation without the release ledger');
+      report.allocationSha256 = digest(JSON.stringify(allocation));
       if (allocation.schemaVersion === 2) {
-        readReservation(options.allocation, report.directory);
-        check(!fs.existsSync(path.join(report.directory, `.attempt-${allocation.versionCode}`)),
-          'Reservation already attempted; failed or abandoned builds require a new allocation');
+        const reservation = readReservation(options.allocation, report.directory);
+        check(digest(JSON.stringify(reservation)) === report.allocationSha256, 'Reservation changed while inspecting it');
+        const registry = path.join(report.directory, '.allocations');
+        for (const name of fs.readdirSync(registry).filter((name) => name !== 'registry.json')) {
+          check(/^\d+\.json$/.test(name), 'Unrecognised registry entry; reconcile before preparing');
+          const other = readReservation(path.join(registry, name), report.directory);
+          check(other.versionCode <= allocation.versionCode, 'Reservation superseded by a newer private allocation');
+        }
+        check(ledgerRows(ledger).some((row) => row.versionCode === allocation.versionCode &&
+          /^Reserved\b/.test(row.status) && row.status.includes(allocation.id) && row.sha256 === null),
+        'Reserved ledger entry must match the private reservation identity and have no APK bytes');
+        const marker = path.join(report.directory, `.attempt-${allocation.versionCode}`);
+        if (attemptId !== undefined) {
+          check(attemptId === allocation.id && existingRegularFile(marker) && fs.readFileSync(marker, 'utf8') === attemptId + '\n',
+            'Preparation attempt marker no longer belongs to this reservation');
+        } else {
+          check(!fs.existsSync(marker), 'Reservation already attempted; failed or abandoned builds require a new allocation');
+        }
         for (const item of allocation.metadata) {
-          check(digest(fs.readFileSync(path.join(root, item.path))) === item.after,
+          check(existingRegularFile(path.join(root, item.path)) && digest(fs.readFileSync(path.join(root, item.path))) === item.after,
             'Run synchronise for this reservation before preparation');
         }
       }
@@ -637,6 +654,14 @@ function executeBuild(root, env, log) {
   } finally { fs.closeSync(fd); }
 }
 
+async function recheckPreparation(options, root, env, report, attemptId) {
+  const current = await preflight(options, root, env, attemptId);
+  check(current.ok, 'Preparation readiness changed: ' + current.errors.join('. '));
+  for (const key of ['source', 'expected', 'semanticVersion', 'directory', 'buildTools', 'allocation', 'allocationSha256', 'ledgerSha256', 'existingArtifact']) {
+    check(JSON.stringify(current[key]) === JSON.stringify(report[key]), `Preparation ${key} changed since preflight; no build started`);
+  }
+}
+
 async function prepare(options, root = path.resolve(__dirname, '..'), env = process.env, build = executeBuild, run = runTool, checks = executeChecks) {
   check(options.dryRun !== options.executeBuild, 'Choose exactly one of --dry-run or --execute-build; real release builds require separate owner approval');
   const report = await preflight(options, root, env);
@@ -650,6 +675,12 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
     report.errors.push('Cannot acquire .prepare-lock; another preparation may be running. Inspect locally before removing a stale lock');
     return report;
   }
+  try { await recheckPreparation(options, root, env, report); } catch (error) {
+    fs.rmdirSync(lock);
+    report.ok = false;
+    report.errors.push(error.message);
+    return report;
+  }
   let evidence;
   try { evidence = fs.mkdtempSync(path.join(report.directory, '.build-')); } catch (error) {
     fs.rmdirSync(lock);
@@ -660,10 +691,12 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
   const output = path.join(root, 'android/app/build/outputs/apk/release/app-release.apk');
   const previous = path.join(evidence, 'previous-output.apk');
   let moved = false;
+  let attemptId;
   report.startedAt = new Date().toISOString();
   try {
     if (options.intent === 'new' && readJson(options.allocation).schemaVersion === 2) {
       const reservation = readReservation(options.allocation, report.directory);
+      attemptId = reservation.id;
       const fd = fs.openSync(path.join(report.directory, `.attempt-${reservation.versionCode}`), 'wx', 0o600);
       try { fs.writeFileSync(fd, reservation.id + '\n'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
       const parent = fs.openSync(report.directory, 'r');
@@ -685,6 +718,7 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
       fs.renameSync(output, previous);
       moved = true;
     }
+    await recheckPreparation(options, root, env, report, attemptId);
     build(root, env, path.join(evidence, 'build.log'));
     check(existingRegularFile(output), 'Gradle succeeded without producing a fresh app-release.apk; no artifact staged');
     report.after = await sourceState(root);

@@ -144,3 +144,100 @@ Still requires Futwick/server access and owner decisions:
 No real code was reserved, no version metadata changed, no APK was built, signed,
 uploaded or published. Futwick-local files were not accessed or altered. No APKs,
 credentials, private inventories or allocation records are included in the commit.
+
+## Review follow-up: Carl's 30 October review of draft PR 59
+
+Read Issue 047 (including its reopening comment), current draft PR 59 and the
+[review](https://github.com/evilnick26/substreamer/pull/59#pullrequestreview-5716697394).
+The two concerns were assessed against the implementation, not treated as settled
+solely because they appeared in review.
+
+### Confirmed preflight/preparation race
+
+Before this follow-up, `prepare` performed preflight without `.prepare-lock`, then
+acquired the lock and only validated the private record's structure before making
+the attempt marker. A completed allocation between those operations could make
+the old code superseded. Source checks alone are insufficient: a private newer
+reservation left without its ledger row after an interrupted allocation does not
+change Git/native source state. Changed private evidence also evades those hashes.
+
+Four focused regressions were run against an isolated copy of the pre-review CLI
+at `16d31541`: orphan newer reservation and changed private evidence, each inserted
+before lock acquisition and during quality checks. All four failed as expected:
+the old implementation reached the simulated Java/check or build callback rather
+than rejecting invalid readiness. No actual Java/Gradle build or signing occurred.
+
+Changes:
+
+- Schema-v2 preflight now reads/validates the private registry and rejects a newer
+  reservation even if it has no ledger row. Its own public row must be uniquely
+  Reserved, match the private reservation identity and have no APK bytes. Metadata
+  must still equal the reserved target bytes. Allocation contents and ledger bytes
+  are fingerprinted in the preparation report.
+- After acquiring the shared lock, preparation repeats full preflight and compares
+  source, expected/semantic metadata, directory/tools, allocation/evidence contents,
+  ledger contents and existing artifact state with the initial report. Failure
+  releases the lock before tests, tools, evidence directory or attempt creation.
+- After quality checks, immediately before the build callback, preparation repeats
+  that validation while retaining the lock. Only its exact owned attempt marker is
+  accepted. Superseded/withdrawn/changed allocations, changed metadata or an occupied
+  archive destination stop the build. A failure after the attempt began preserves
+  the burned attempt and existing diagnostic/previous-output recovery behavior.
+
+Nineteen new regression cases cover both checkpoints for orphan/newer reservations,
+changed private evidence, withdrawn/wrong/duplicate ledger rows, app/native edits
+and an intervening archive collision; a completed competing allocation in another
+Node process between preflight and the lock; and removed/replaced attempt markers.
+Existing dry-run, successful preparation, keep-version and staging tests remain.
+Allocation, synchronisation and preparation share the lock, held throughout
+preparation. This is not
+protection against manual/remote writers ignoring that lock or disconnected
+allocation hosts; their coordination remains an operational prerequisite.
+
+### Inventory bootstrap and the intended automatic workflow
+
+Carl's second concern also holds: although the same fresh inventory can cover
+several local reservations in one exclusive window, the current 24-hour input
+contract still imposes manual inventory renewal later. This is a Phase 1 limitation,
+not completion of Issue 047. Refreshing just the timestamp is not acceptable.
+
+Expanded the runbook with an explicit Phase 2 design. Human bootstrap decisions
+identify all historical archive/attempt records, establish allocation authority and
+resolve the 80000189 published/rejected collision. Unrecorded history and unknown
+original source revisions cannot be inferred from a checksum. Those reviewed
+historical decisions form a persistent baseline, not a new hand-authored JSON
+exercise for every release. New unexplained conflicts require human reconciliation.
+
+Routine collection must be automated by the existing CLI: scan configured local
+archives/reservations/attempts; inspect the full authenticated server archive,
+channel manifests and in-flight state; compute/verify checksums and public APKs;
+retain timestamped observations; merge the approved historical baseline; and feed
+a machine-generated inventory into allocation. Missing access, incomplete reads,
+stale observations or conflicting bytes must fail closed. Refresh and reservation
+need an agreed exclusive protocol; even a freshly generated snapshot is not a lock.
+The later publish flow must automate transfer/checksum/manifest promotion/rollback
+while retaining explicit owner publication approval and physical acceptance.
+
+The current schema can accept machine-generated `checkedAt`, evidence references,
+paths and occupied/rejected artifact records without changing the allocator.
+However source strings are not authenticated evidence. The Phase 2 collector must
+validate its own source observations before claiming completeness/exclusivity;
+structured source/snapshot/coordination metadata may need a versioned extension.
+No live collector or fictional server commands are added in this follow-up.
+
+Remaining owner decisions: complete archive scope and bootstrap dispositions;
+actual scoped server read access/commands; whether Futwick remains the sole
+allocation authority (recommended by the existing simple local design) or another
+shared coordination mechanism is needed. Phase 2 acceptance must demonstrate a
+repeat release without hand-edited inventory fields or manual transfer/checksum
+choreography. These decisions do not authorise real 80000190 allocation now.
+
+### Follow-up validation
+
+Release/signing Node fixtures: **182 tests, 180 passed, 2 skipped, 0 failed**.
+The two signing runtime skips retain their prerequisite limitations. TypeScript
+`tsc --noEmit` passed. Full Jest: **646 suites / 11,328 tests passed**, with
+2 suites / 8 tests skipped. `git diff --check` passed. No app.json/native
+version metadata was changed; all allocations/build callbacks in regression tests
+used temporary synthetic fixtures. PR 59 remains draft; no merge, real reservation,
+Android build, signing, upload or publication is authorised or performed.
