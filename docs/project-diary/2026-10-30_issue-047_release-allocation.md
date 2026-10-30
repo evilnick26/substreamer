@@ -241,3 +241,14 @@ The two signing runtime skips retain their prerequisite limitations. TypeScript
 version metadata was changed; all allocations/build callbacks in regression tests
 used temporary synthetic fixtures. PR 59 remains draft; no merge, real reservation,
 Android build, signing, upload or publication is authorised or performed.
+
+
+### 30 October — 80000190 reservation and semantic-version amendment follow-up
+
+Owner-approved allocation `80000190` was reserved using reconciled Futwick/server evidence (high-water mark `80000189`), synchronised into Expo and native Gradle metadata, and committed on `sanctifi` (`f4adb3e1`). The owner elected to retain client semantic version `0.1.2` for release-type grouping rather than introducing `0.1.3`. The one-line correction from `0.1.1` to `0.1.2` was committed as `778b53af`, with the working tree clean and pushed.
+
+Initial real preflight rejected the corrected `app.json` with `Run synchronise for this reservation before preparation`: the allocator's immutable post-synchronisation whole-file SHA-256 no longer matched. The reservation itself was not edited or reallocated. Draft PR #61 (`fix/047-semantic-version-attestation`) adds a committed, reservation-ID-specific amendment record (`docs/release-amendments/80000190.json`) permitting precisely that semantic-version value change; all other `app.json` bytes and native Gradle metadata remain subject to their original hash checks. Regression tests cover the approved change, missing/mismatched attestation and unrelated edits. The first test run exposed a regular-expression escaping defect; corrected in `14155e30`. An inherited terminal ANSI-colour setting was also neutralised in the concurrent-allocation fixture.
+
+**Validation reported by owner on Futwick:** focused allocation suite **51/51 passed**; full release-tooling suite **145/145 passed**. Real read-only `preflight --intent new` against `/media/data/Complete/Sanctifi/Releases/.allocations/80000190.json` returned `ok: true`, `errors: []`, semantic version `0.1.2`, Expo/native versionCode `80000190`, clean branch `test/047-semantic-amendment`, source revision `14155e307dfbb3aadd479e00a1eea733119e31dd`. Four warnings reflect existing historical ledger limitations. No APK verification, automated production build checks, manual acceptance, staging or publication occurred.
+
+**Outstanding:** owner review/merge of PR #61; read-only `prepare --intent new --dry-run` on the merged branch; separately authorised real build, APK verification and physical acceptance before any publication. Phase 2 inventory automation remains deferred and is not implied by this amendment.
