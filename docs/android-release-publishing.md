@@ -4,7 +4,8 @@
 
 The manual publication procedure below remains available. The Stage 1 local CLI
 can run an explicitly approved Gradle release build; preflight and dry-run never
-build. It never changes versions, regenerates native files, uploads files, changes
+build. The allocation/synchronisation commands below can reserve codes and update
+versionCode explicitly. It never regenerates native files, uploads files, changes
 channel pointers, installs updates or changes the client updater.
 Nick's hosting investigation confirmed that the existing Caddy container serves
 `https://updates.sancti.fi/` from host root `/opt/updates-site`, and that the website
@@ -169,7 +170,8 @@ The exact original build-source commit remains unknown; the signer was not
 independently inspected during this latest reconciliation. Current configuration
 commit `897f374a` is not the historical APK's source attestation.
 
-The owner explicitly confirms no code above **80000188** has been reserved, built,
+In that historical 26 October snapshot, the owner confirmed no code above
+**80000188** had been reserved, built,
 attempted or distributed, establishing that global allocation high-water mark.
 This does not authorise a future release or create a retrospective staging or
 allocation record. For a **new** distributed artifact, separately approve a code
@@ -185,6 +187,241 @@ sancti.fi releases.** It derives Android code from the iOS build, would currentl
 produce `80000186` again, pushes tags and targets `master` for GitHub releases.
 EAS `production.autoIncrement` in `eas.json` is likewise outside this manual
 workflow. Neither inherited tool is modified or authorised by this PR.
+
+## Automatic allocation and versionCode synchronisation
+
+As of 30 October, the owner reports published Alpha 80000189 and a different,
+unpublished Issue 024 candidate with the same code. The published bytes permanently
+own 80000189. See the ledger for both hashes; no APK is modified here. 80000190
+is proposed, **not reserved or confirmed free**. The historical 80000188 statements
+above do not establish current availability.
+
+Use one trusted allocation directory on Futwick, normally the existing
+`~/.local/share/sanctifi/releases/`. Back it up, including hidden entries. Allocation
+reconciles ledger rows, private `.allocations/<code>.json` reservations, every APK
+recursively in that directory and the selected archives, current standard Gradle
+output (if present), configured codes, and a fresh authoritative inventory. It
+selects their maximum plus one, with a permanent occupied floor of 80000189.
+Missing history, duplicate ledger codes, missing archives/sidecars, malformed
+reservations, invalid APKs and conflicting distributable hashes stop allocation.
+Local APK inventory invokes existing signature/package/metadata verification and
+hashing, including during allocation dry-run. It never builds or reads signing keys.
+
+Before initial use, the owner must reconcile Futwick's unstaged APKs, old archive
+locations, failed/abandoned builds, existing allocation files and the full server
+archive/reservation history. Inspect actual server inventory and all channel
+manifests, not just the Alpha pointer or a 404 for the proposed filename. Retain
+the server inventory/checksum evidence and verify published identity through the
+established full HTTPS download checks. No remote discovery or publishing command
+is added in this phase. GitHub releases or the repository ledger alone cannot
+establish completeness. No exact historical SSH command is invented here.
+
+Supply the result as a **private file outside Git**, with this contract (the
+example is deliberately incomplete and will be refused):
+
+```json
+{
+  "schemaVersion": 1,
+  "checkedAt": "REPLACE_WITH_ACTUAL_UTC_CHECK_TIME",
+  "complete": false,
+  "exclusiveAllocator": false,
+  "allocationDirectory": "/absolute/trusted/releases",
+  "sources": {
+    "futwick": "Reference to actual complete local audit and retained evidence",
+    "server": "Reference to actual complete publication/archive audit and retained evidence"
+  },
+  "archivePaths": ["/absolute/existing/legacy-archive"],
+  "artifacts": [
+    {
+      "versionCode": 80000189,
+      "sha256": "682f11bfc2bd08f32359f23eb3581e5d8c38ec64f5e1e530a10cc46cdd5178d4",
+      "state": "occupied"
+    }
+  ]
+}
+```
+
+Use the **exact ledger hash** when assembling real evidence; include every ledger
+allocation and additional known server/local code, including failed reservations.
+`sha256` is a lowercase file digest, or `null` for a reservation with no APK.
+`state` is `occupied`, or `rejected` for an explicitly reconciled, permanently
+non-distributable artifact identified by its exact hash. The latter allows the
+known rejected 80000189 candidate to coexist with the published identity; both
+still occupy the code. It is not permission to reuse a rejected code. Invalid or
+unverifiable partial APKs must be reconciled and quarantined outside scanned
+archives, with their code retained as occupied; never delete evidence to pass.
+`archivePaths` must list all existing local archives, including unstaged builds;
+the standard output and selected release directory are always scanned as well.
+
+Only set `complete: true` and `exclusiveAllocator: true` after the checks are
+complete and all other allocators/manual builds/publishers are stopped. The file
+must identify the real physical allocation directory and have a `checkedAt` no
+more than 24 hours old. This is an owner attestation backed by retained evidence,
+not proof that an unavailable host was checked. Freshness does not prevent an
+external publisher racing this tool: keep that exclusive operating window open
+through allocation. Later local reservations are read automatically, so the file
+need not be hand-edited for each new reservation within that window.
+
+### Initial reconciliation versus routine evidence collection
+
+The private JSON import is a **Phase 1 bootstrap interface**, not the final release
+operator experience. Today the CLI accepts a manually assembled inventory and
+requires it to be fresh. That means a later allocation outside the 24-hour window
+still needs a newly verified inventory until the collector is implemented. Do not
+refresh only `checkedAt`, weaken completeness checks or claim that this manual step
+completes Issue 047. Within one valid exclusive window, new registry reservations
+are included automatically; no manual inventory edit is needed for each one.
+
+Some historical information requires a human decision once, or after an anomaly:
+identify every legacy archive and allocation record; establish the publication
+server and authoritative allocator; account for failed/unpublished attempts; resolve
+which differing historical APK was published and which must remain rejected. The
+known 80000189 collision needs that disposition. Unknown original source revisions
+must stay unknown. A tool can discover and hash existing bytes, but cannot infer
+that no unrecorded private build existed or invent its provenance. Retain the
+approved bootstrap baseline and its evidence rather than reauthoring that history
+for every release. Reconciliation repeats if an unknown artifact, missing registry,
+new publisher or contradictory record appears.
+
+Phase 2 must add automated collection/refresh to **this same CLI**, before it can
+claim the end-to-end workflow is complete. The intended sequence is:
+
+1. Load the approved historical baseline and persisted archive/server configuration.
+   Scan all configured local archives, standard output, durable reservations,
+   attempt records and the public ledger. Use the existing APK verification/hash
+   helpers; detect missing paths, changed historical bytes and unknown artifacts.
+2. Through the established authenticated, scoped server connection, collect the
+   **complete** immutable archive and any server reservation/in-flight state, not
+   just the current Alpha pointer. Fetch/validate all channel manifests, collect
+   server checksums and perform the required complete public HTTPS APK verification.
+   Retain timestamped raw observations privately. Actual access and exact remote
+   commands must first be audited on Futwick/obscurity; none is invented here.
+3. Merge observed facts with the approved baseline, retaining occupied/failed codes
+   and explicit rejected hashes. Compute codes, hashes, archive paths and check time
+   automatically. Emit a concise pass/fail/evidence report and machine-generated
+   inventory outside Git, promoting it atomically only after the complete collection
+   succeeds. Failed refreshes preserve old evidence without renewing its timestamp.
+   Never have the operator copy checksums into JSON. Missing
+   server access, partial listings, unsupported/malformed data, stale evidence or
+   contradictory bytes must fail closed, not reuse a cached attestation as fresh.
+4. Before allocation, refresh/revalidate against the current registry and server
+   state under the agreed exclusive allocation protocol. A collected snapshot is
+   not a lock: if multiple hosts can allocate or publish, agree a shared authority
+   and concurrency mechanism first. Keep the freshness limit until that replacement
+   protocol has been reviewed; even a very recent snapshot can race another writer.
+5. Feed the generated inventory directly to allocation/synchronisation/preparation,
+   retain verified build evidence automatically and then automate the transfer,
+   server/public checksum chain, candidate manifest validation and atomic promotion
+   with rollback. Recheck destination collisions immediately before mutation. Keep
+   explicit owner publication approval and real-device acceptance separate.
+
+The current schemaVersion 1 inventory can be generated by a collector without a
+consumer change: `checkedAt` is the actual completed collection time; `sources`
+reference retained local/server evidence; `archivePaths` come from reviewed
+configuration; `artifacts` contain discovered occupied codes/hashes plus approved
+historical exceptions. `complete` and `exclusiveAllocator` must be set only after
+the collector's checks and coordination succeed, not copied from an old file.
+The allocator currently validates structure/freshness/consistency, **not** the
+truth or authenticity of source reference strings. Structured per-source observations,
+server snapshot/lock identity or signed provenance would require an explicitly
+versioned extension if needed; the present strings are not proof of those properties.
+
+Phase 2 acceptance must demonstrate a repeat release starting from the reviewed
+configuration/baseline without hand-editing any inventory fields or running manual
+SCP/SSH/checksum commands. Simulation must cover offline/partial server reads,
+corrupt or unknown artifacts, stale snapshots, intervening allocations/publications
+and interrupted refresh/publication. Owner decisions still needed are the complete
+archive scope, server read access/commands and allocation authority, plus the policy
+for new historical conflicts. This design does not authorise server access,
+allocation, building or publication now.
+
+### Phase 1 invocation on Futwick
+
+On Futwick, after those checks, choose real absolute private paths:
+
+```bash
+SF_RELEASES="$HOME/.local/share/sanctifi/releases"
+SF_HISTORY=/absolute/private/reconciled-history.json
+node scripts/android-release.js allocate --history "$SF_HISTORY" \
+  --directory "$SF_RELEASES" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
+  --initialize --dry-run
+```
+
+`--initialize` is only for the first reconciled registry creation; omit it on
+subsequent allocations. The archive must already exist, and a missing registry
+without this flag fails. Never reinitialise a lost registry: restore its backup
+and reconcile the ledger, archives and server. Separate registries on different
+hosts or different `--directory` paths cannot coordinate; they are unsupported.
+Dry-run writes nothing and shows proposed code, evidence and metadata hashes.
+
+Only after owner approval of the exact dry-run proposal, repeat with
+`--execute --expect-code PROPOSED_CODE` instead of `--dry-run`. The expected code
+must still match fresh reconciliation. Execution shares `.prepare-lock` with
+synchronisation and preparation, creates an exclusive, fsynced private reservation
+**before** appending a Reserved ledger row, and prints its path. Concurrent calls
+cannot issue the same reservation. Never remove reservations or reuse codes after
+an interrupted allocation, abandoned build or rejection. A partial/malformed record
+blocks allocation until evidence is recovered; a complete orphan reservation still
+raises the next code. No stale lock is automatically removed.
+
+Then synchronise explicitly, using the returned reservation path:
+
+```bash
+SF_ALLOCATION=/absolute/trusted/releases/.allocations/PROPOSED_CODE.json
+node scripts/android-release.js synchronise --allocation "$SF_ALLOCATION" \
+  --directory "$SF_RELEASES" --dry-run
+node scripts/android-release.js synchronise --allocation "$SF_ALLOCATION" \
+  --directory "$SF_RELEASES" --execute
+```
+
+This changes only `expo.android.versionCode` in app.json and the single literal
+`versionCode` in the existing ignored `android/app/build.gradle`. Native code may
+start stale; both receive the reserved code without prebuild. `expo.version`,
+native versionName 8.1.8 and `expo.extra.sanctifiVersion` are preserved. The current
+app.config.js preserves those fields; EAS autoIncrement and create-release.js
+remain outside this workflow. Dynamic version overrides, duplicate declarations,
+flavors/splits or unsupported native overrides require manual review. The final
+APK metadata remains authoritative and is checked by existing preparation.
+
+Allocation snapshots both original/target files privately. Synchronisation refuses
+later local edits, withdrawn or superseded reservations and attempted builds. Each
+file is replaced atomically; the pair is not one atomic transaction. After a crash,
+rerun only if each file still matches its recorded original or target bytes. If a
+`.allocation-<id>` temporary file remains, inspect it and running processes before
+removing that specific temporary file. Do not discard unrelated Futwick edits.
+If ledger append failed, retain the burned private reservation and reconcile its
+Reserved row before proceeding; the next allocation will still skip that code.
+
+Review and commit the generated app.json/ledger changes, retaining ignored native
+changes locally, then use the existing entry point:
+
+```bash
+node scripts/android-release.js prepare --intent new --allocation "$SF_ALLOCATION" \
+  --directory "$SF_RELEASES" --dry-run
+# Only after separate approval for a real build:
+node scripts/android-release.js prepare --intent new --allocation "$SF_ALLOCATION" \
+  --directory "$SF_RELEASES" --execute-build
+```
+
+A schema-v2 registry reservation is consumable for **one preparation attempt**.
+Preparation repeats full readiness checks under `.prepare-lock` before creating
+the attempt marker, then again after quality checks immediately before Gradle.
+The reservation must still be the newest valid private allocation (including any
+orphan reservation with no ledger row); its Reserved ledger row must match its
+identity; app/native files must equal its reserved targets; the archive destination
+must still be unused. Source state, allocation contents, ledger contents and metadata
+must match the initial preflight snapshot. The final check accepts only this run's
+exact attempt marker. A pre-lock change stops before consuming an attempt; a change
+after checks started stops the build and retains the consumed attempt.
+An exclusive, fsynced `.attempt-<code>` marker is created before quality checks or
+Gradle. Failed checks/builds and abrupt termination burn the attempt; allocate a
+new code for new bytes. Existing identical artifacts still use `--intent keep`.
+Legacy manually attested allocations remain accepted for compatibility, but do
+not acquire these new one-attempt semantics. Do not create new manual allocations
+as a workaround. Existing stage/verify/validate behavior and provenance records
+are preserved. There is still no remote publication, device test or implicit owner
+approval. The remaining sequence is Build -> Verify -> Stage -> Test -> Approve ->
+Publish, with publication and physical acceptance separately controlled.
 
 ## sancti.fi semantic identity and deferred native migration
 
@@ -286,11 +523,13 @@ permanent release-signing configuration/validator, and stops on missing, stale o
 ambiguous metadata. It does not prove that signing credentials are valid.
 Preserve local native work and review the established manual
 `npx expo prebuild --platform android --no-install` procedure separately if a
-refresh is needed; this CLI never runs it or edits generated files.
+refresh is needed; this CLI never runs prebuild. Only the explicit synchronise command edits the
+generated versionCode; preparation itself does not edit it.
 
 Version intent is mandatory:
 
-- **`--intent new`:** consumes a separately approved reservation, without allocating
+- **`--intent new`:** consumes a separately approved reservation (automatic registry
+  reservations above, or the legacy manual format below), without allocating
   or writing any version. The private allocation JSON must contain integer
   `versionCode` equal to the current app.json/native code, integer `highWaterMark`
   at least 80000188 and at least every other code recorded in the ledger, boolean

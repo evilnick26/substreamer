@@ -110,7 +110,7 @@ for (const dirty of [false, true]) {
       for (const name of ['mkdirSync', 'mkdtempSync', 'copyFileSync', 'writeFileSync', 'renameSync', 'linkSync']) fs[name] = () => { throw new Error('Help attempted a filesystem mutation'); };
     `);
     const before = fs.readdirSync(f.directory);
-    for (const args of [['--help'], ['-h'], ...['preflight', 'prepare', 'verify', 'validate', 'stage'].flatMap((command) => [[command, '--help'], [command, '-h']])]) {
+    for (const args of [['--help'], ['-h'], ...['allocate', 'synchronise', 'preflight', 'prepare', 'verify', 'validate', 'stage'].flatMap((command) => [[command, '--help'], [command, '-h']])]) {
       const result = spawnSync(process.execPath, ['--require', guard, f.copied, ...args],
         { cwd: f.directory, env: f.env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
@@ -129,7 +129,7 @@ test('help describes actual required arguments, intent, execution and safety dis
   assert.equal(result.status, 0);
   for (const text of ['--intent new|keep', '--allocation FILE', 'Reserved ledger row', 'private JSON', '--dry-run',
     '--execute-build', 'actual separately authorised Gradle build', 'verify APK --build-tools DIRECTORY',
-    'validate MANIFEST', 'stage APK', '--source-revision SHA', 'source revision stays unknown', 'No command changes versions']) {
+    'validate MANIFEST', 'stage APK', '--source-revision SHA', 'source revision stays unknown', 'Only synchronise changes versions']) {
     assert.ok(result.stdout.includes(text), text);
   }
 });
