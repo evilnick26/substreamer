@@ -373,8 +373,8 @@ function matchesSemanticAmendment(root, reservation, item, actual) {
       amendment.versionCode !== reservation.versionCode ||
       amendment.field !== 'expo.extra.sanctifiVersion' ||
       typeof amendment.from !== 'string' || typeof amendment.to !== 'string' ||
-      !/^\\d+\\.\\d+\\.\\d+$/.test(amendment.from) ||
-      !/^\\d+\\.\\d+\\.\\d+$/.test(amendment.to) ||
+      !/^\d+\.\d+\.\d+$/.test(amendment.from) ||
+      !/^\d+\.\d+\.\d+$/.test(amendment.to) ||
       amendment.from === amendment.to ||
       !Object.keys(amendment).every((key) =>
         ['schemaVersion', 'reservationId', 'versionCode', 'field', 'from', 'to', 'reason'].includes(key)) ||
@@ -385,9 +385,9 @@ function matchesSemanticAmendment(root, reservation, item, actual) {
   const current = JSON.parse(actual);
   // Require byte-for-byte equivalence after changing exactly the approved value.
   // Preserve the original JSON formatting by replacing only the field's value.
-  const matches = [...item.target.matchAll(/("sanctifiVersion"\\s*:\\s*")([^"]+)(")/g)];
+  const matches = [...item.target.matchAll(/("sanctifiVersion"\s*:\s*")([^"]+)(")/g)];
   if (matches.length !== 1 || matches[0][2] !== amendment.from) return false;
-  const expected = item.target.replace(/("sanctifiVersion"\\s*:\\s*")([^"]+)(")/,
+  const expected = item.target.replace(/("sanctifiVersion"\s*:\s*")([^"]+)(")/,
     (_, prefix, old, suffix) => prefix + amendment.to + suffix);
   return digest(actual) === digest(expected) &&
     current.expo?.extra?.sanctifiVersion === amendment.to;
