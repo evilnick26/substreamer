@@ -851,3 +851,21 @@ Beta/Stable enrolment without changing/rebuilding the APK; no mandatory V1
 selector is required. Promotion does not silently move existing Alpha clients to
 another channel. Startup/Settings checks, ordering/concurrency and any channel
 provisioning UI are owned by Issue 023, not this tooling.
+
+### Mount identity during a release operation
+
+Each stage/allocation/synchronisation/preparation invocation retains the initially
+verified `/media/data` mount ID, filesystem major:minor identity and mounted root.
+Repeated checks must match those values, rather than accepting a replacement
+writable volume. The deepest covering mount's ID, filesystem identity, root and
+target are also retained to detect a changed bind mount on the same filesystem.
+Preparation shares this baseline through its locked/pre-build checks and staging.
+Explicit external overrides remain independent; there is no process-global or
+persistent mount identity cache and no device-name or encryption-specific pin.
+
+These are comparisons between observations, not mount locking. They do not prevent
+an administrative unmount between a check and a filesystem operation, or detect a
+change undone between checks. Kernel mount/device IDs can be reused; this is not
+cryptographic volume authentication. A new invocation establishes a new baseline,
+so the owner must still mount the correct volume and inspect storage after any
+unexpected identity-change failure. Do not unmount/remount during release work.

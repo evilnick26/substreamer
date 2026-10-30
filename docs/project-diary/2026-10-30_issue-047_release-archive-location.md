@@ -126,3 +126,32 @@ fall back to the old home archive. No stale registry is created by this change.
 No versionCode was allocated or reserved, no `.allocations` registry was initialised,
 no app.json/native version metadata was modified, and no APK was built, signed,
 uploaded, published or promoted. Neither archive was moved, modified or deleted.
+
+## Review follow-up: retain the initially verified mount identity
+
+The owner asked whether repeated checks should compare mount identity. Confirmed:
+they previously accepted any distinct writable filesystem satisfying the layout,
+so a replacement volume could pass a later check. Added a small invocation-local
+baseline of the `/media/data` mount ID, major:minor identity and mounted root;
+rechecks must match. The covering mount ID/device/root/target is also compared to
+detect a changed same-filesystem bind mount. Allocation shares the baseline across
+assessment/locking, synchronisation across its checks, and preparation across
+preflight, locking, pre-build validation and staging. No global cache, persisted
+volume pin, mount lock, device-name requirement or encryption check is introduced.
+
+Added focused fixtures for replacement filesystems, remounts of the same device,
+changed mounted roots, changed covering mounts, harmless option/source-label
+changes and allocation's lock-to-assessment boundary. All use synthetic mount
+observations and mocked production writes; no real registry is initialised.
+
+Residual limits: snapshot checks cannot eliminate check-to-use races, transient
+changes undone between observations or kernel ID reuse. A new invocation establishes
+its own baseline and cannot authenticate a replacement volume. Keep the correct
+VeraCrypt volume mounted throughout operations; actual Futwick readiness remains
+pending. No allocation, APK build/signing/publication or archive modification was
+performed by this follow-up.
+
+Follow-up validation: release/signing suites **210 cases, 208 passed, 2 skipped,
+0 failed**; focused storage suite **28 passed**; TypeScript passed; full Jest
+**646 suites / 11,328 tests passed**, 2 suites / 8 tests skipped. `git diff --check`
+passed. Existing signing-runtime skips retain their prerequisite limitations.

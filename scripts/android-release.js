@@ -94,10 +94,10 @@ function existingRegularFile(file) {
 }
 
 // Hard-link promotion is exclusive and atomic; the temporary files share the destination filesystem.
-async function stageApk(source, buildTools, sourceRevision, directory = DEFAULT_DIRECTORY, run) {
+async function stageApk(source, buildTools, sourceRevision, directory = DEFAULT_DIRECTORY, run, storage = {}) {
   check(/^[a-f0-9]{40}$/.test(sourceRevision), 'Supply the exact full source revision used for this APK');
   const requestedDirectory = directory;
-  directory = releaseDirectory(directory);
+  directory = releaseDirectory(directory, storage);
   check(!fs.existsSync(requestedDirectory) || fs.lstatSync(requestedDirectory).isDirectory(), 'Staging directory must not be a symlink');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   check(fs.lstatSync(directory).isDirectory(), 'Staging directory must not be a symlink');
@@ -106,7 +106,7 @@ async function stageApk(source, buildTools, sourceRevision, directory = DEFAULT_
     const snapshot = path.join(temporary, 'candidate.apk');
     fs.copyFileSync(source, snapshot, fs.constants.COPYFILE_EXCL);
     const apk = await inspectApk(snapshot, buildTools, run);
-    releaseDirectory(directory);
+    releaseDirectory(directory, storage);
     const record = { ...apk, sourceRevision };
     const filename = `sanctifi-${apk.versionCode}.apk`;
     const destination = path.join(directory, filename);
@@ -175,7 +175,7 @@ function within(directory, ancestor) {
   return directory === ancestor || directory.startsWith(ancestor + '/');
 }
 
-function verifyArchiveMount(directory, mountinfo) {
+function verifyArchiveMount(directory, mountinfo, storage = {}, destination = true) {
   const decode = (value) => value.replace(/\\(040|011|012|134)/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)));
   const mounts = mountinfo.trim().split('\n').map((line) => {
     const parts = line.split(' - ');
@@ -184,7 +184,7 @@ function verifyArchiveMount(directory, mountinfo) {
     check(parts.length === 2 && fields.length >= 6 && /^\d+$/.test(fields[0]) &&
       /^\d+$/.test(fields[1]) && /^\d+:\d+$/.test(fields[2]) && fields[4].startsWith('/') && filesystem.length >= 3,
     'Cannot verify release storage: malformed Linux mountinfo');
-    return { id: fields[0], parent: fields[1], target: decode(fields[4]), device: fields[2], options: fields[5].split(','), superOptions: filesystem[2].split(',') };
+    return { id: fields[0], parent: fields[1], target: decode(fields[4]), root: decode(fields[3]), device: fields[2], options: fields[5].split(','), superOptions: filesystem[2].split(',') };
   });
   const covering = mounts.filter((mount) => mount.target === '/' || within(directory, mount.target));
   const exact = mounts.filter((mount) => mount.target === STORAGE_MOUNT);
@@ -199,23 +199,33 @@ function verifyArchiveMount(directory, mountinfo) {
     covering.every((mount) => ancestors.has(mount.id)) && deepest.device === exact[0].device &&
     [exact[0], deepest].every((mount) => mount.options.includes('rw') && mount.superOptions.includes('rw')),
   'Release storage unavailable: archive is obscured by another filesystem or mounted read-only');
+  const identity = JSON.stringify([exact[0].id, exact[0].device, exact[0].root]);
+  check(storage.mountIdentity === undefined || storage.mountIdentity === identity,
+    'Release storage identity changed during this operation; stop and inspect the mount');
+  storage.mountIdentity = identity;
+  if (destination) {
+    const coveringIdentity = JSON.stringify([deepest.id, deepest.device, deepest.root, deepest.target]);
+    check(storage.coveringIdentity === undefined || storage.coveringIdentity === coveringIdentity,
+      'Release archive covering mount changed during this operation; stop and inspect the mount');
+    storage.coveringIdentity = coveringIdentity;
+  }
   return directory;
 }
 
-function releaseDirectory(directory = DEFAULT_DIRECTORY) {
+function releaseDirectory(directory = DEFAULT_DIRECTORY, storage = {}) {
   const requested = path.resolve(directory);
   const production = within(requested, STORAGE_MOUNT);
-  const verify = (target) => {
+  const verify = (target, destination) => {
     let mountinfo;
     try { mountinfo = fs.readFileSync('/proc/self/mountinfo', 'utf8'); } catch {
       throw new Error('Cannot verify release storage: Linux /proc/self/mountinfo unavailable; no fallback archive is allowed');
     }
-    verifyArchiveMount(target, mountinfo);
+    verifyArchiveMount(target, mountinfo, storage, destination);
   };
-  if (production) verify(requested);
+  if (production) verify(requested, false);
   const physical = outsideGit(requested);
   check(!production || within(physical, STORAGE_MOUNT), 'Production archive symlink escapes the mounted storage');
-  if (within(physical, STORAGE_MOUNT)) verify(physical);
+  if (within(physical, STORAGE_MOUNT)) verify(physical, true);
   return physical;
 }
 
@@ -368,8 +378,8 @@ function readReservation(file, directory) {
   return record;
 }
 
-async function allocationEvidence(options, root, run) {
-  const directory = releaseDirectory(options.directory);
+async function allocationEvidence(options, root, run, storage) {
+  const directory = releaseDirectory(options.directory, storage);
   check(fs.lstatSync(directory).isDirectory(), 'Existing trusted archive required, including for initial allocation');
   check(options.history && existingRegularFile(options.history), 'Supply --history FILE with complete Futwick/server reconciliation');
   outsideGit(path.dirname(options.history));
@@ -461,13 +471,14 @@ async function allocationEvidence(options, root, run) {
 
 async function allocate(options, root = path.resolve(__dirname, '..'), run = runTool) {
   check(options.dryRun !== options.execute, 'Choose exactly one of --dry-run or --execute');
-  const assess = () => allocationEvidence(options, root, run);
+  const storage = {};
+  const assess = () => allocationEvidence(options, root, run, storage);
   if (options.dryRun) {
     const result = await assess();
     return { command: 'allocate', dryRun: true, versionCode: result.versionCode, highWaterMark: result.highWaterMark,
       historySha256: result.historySha256, evidence: result.evidence, changes: result.metadata.map(({ path, before, after }) => ({ path, before, after })), publication: 'none' };
   }
-  const directory = releaseDirectory(options.directory);
+  const directory = releaseDirectory(options.directory, storage);
   check(fs.lstatSync(directory).isDirectory(), 'Existing archive required');
   const lock = path.join(directory, '.prepare-lock');
   fs.mkdirSync(lock, { mode: 0o700 });
@@ -475,7 +486,7 @@ async function allocate(options, root = path.resolve(__dirname, '..'), run = run
     options = { ...options, locked: true };
     const result = await assess();
     check(Number(options.expectCode) === result.versionCode, `Approve the proposed allocation with --expect-code ${result.versionCode}; history may have changed`);
-    releaseDirectory(directory);
+    releaseDirectory(directory, storage);
     const registry = path.join(directory, '.allocations');
     if (options.initialize) {
       fs.mkdirSync(registry, { mode: 0o700 });
@@ -501,7 +512,8 @@ async function allocate(options, root = path.resolve(__dirname, '..'), run = run
 
 async function synchronise(options, root = path.resolve(__dirname, '..')) {
   check(options.dryRun !== options.execute, 'Choose exactly one of --dry-run or --execute');
-  const directory = releaseDirectory(options.directory);
+  const storage = {};
+  const directory = releaseDirectory(options.directory, storage);
   const record = readReservation(options.allocation, directory);
   const apply = () => {
     check(!fs.existsSync(path.join(directory, `.attempt-${record.versionCode}`)), 'Build already attempted; allocate a new code');
@@ -516,7 +528,7 @@ async function synchronise(options, root = path.resolve(__dirname, '..')) {
       check(current === item.before || current === item.after, `Metadata changed since allocation: ${item.path}; preserve local edits and allocate again`);
     }
     if (options.execute) {
-      releaseDirectory(directory);
+      releaseDirectory(directory, storage);
       for (const item of record.metadata) {
         const file = path.join(root, item.path);
         if (digest(fs.readFileSync(file)) === item.after) continue;
@@ -554,7 +566,7 @@ function allocationOptions(args, command) {
   return options;
 }
 
-async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env, attemptId) {
+async function preflight(options, root = path.resolve(__dirname, '..'), env = process.env, attemptId, storage = {}) {
   const report = { command: 'preflight', ok: true, errors: [], warnings: [], publication: 'none',
     apkVerification: 'Not performed by preflight', automatedChecks: 'Not run by preflight',
     manualAcceptance: 'Not performed: startup/manual discovery, browser in-place install, account/settings/offline preservation, navigation, online/offline playback, Up to Date' };
@@ -606,7 +618,7 @@ async function preflight(options, root = path.resolve(__dirname, '..'), env = pr
     report.warnings.push('Release ledger diagnostic context unavailable; inspect docs/android-release-ledger.md locally');
   }
   await attempt(async () => {
-    report.directory = releaseDirectory(options.directory);
+    report.directory = releaseDirectory(options.directory, storage);
     if (options.intent === 'new') {
       check(options.allocation, 'New artifact blocked: supply --allocation FILE. A new release requires a separately approved higher versionCode, a Reserved ledger entry and its matching private allocation attestation. ' + report.warnings.join('. '));
       const allocation = readJson(options.allocation);
@@ -708,8 +720,8 @@ function executeBuild(root, env, log) {
   } finally { fs.closeSync(fd); }
 }
 
-async function recheckPreparation(options, root, env, report, attemptId) {
-  const current = await preflight(options, root, env, attemptId);
+async function recheckPreparation(options, root, env, report, attemptId, storage) {
+  const current = await preflight(options, root, env, attemptId, storage);
   check(current.ok, 'Preparation readiness changed: ' + current.errors.join('. '));
   for (const key of ['source', 'expected', 'semanticVersion', 'directory', 'buildTools', 'allocation', 'allocationSha256', 'ledgerSha256', 'existingArtifact']) {
     check(JSON.stringify(current[key]) === JSON.stringify(report[key]), `Preparation ${key} changed since preflight; no build started`);
@@ -718,11 +730,12 @@ async function recheckPreparation(options, root, env, report, attemptId) {
 
 async function prepare(options, root = path.resolve(__dirname, '..'), env = process.env, build = executeBuild, run = runTool, checks = executeChecks) {
   check(options.dryRun !== options.executeBuild, 'Choose exactly one of --dry-run or --execute-build; real release builds require separate owner approval');
-  const report = await preflight(options, root, env);
+  const storage = {};
+  const report = await preflight(options, root, env, undefined, storage);
   report.command = 'prepare';
   report.dryRun = options.dryRun;
   if (!report.ok || options.dryRun) return report;
-  releaseDirectory(report.directory);
+  releaseDirectory(report.directory, storage);
   fs.mkdirSync(report.directory, { recursive: true, mode: 0o700 });
   const lock = path.join(report.directory, '.prepare-lock');
   try { fs.mkdirSync(lock, { mode: 0o700 }); } catch {
@@ -730,7 +743,7 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
     report.errors.push('Cannot acquire .prepare-lock; another preparation may be running. Inspect locally before removing a stale lock');
     return report;
   }
-  try { await recheckPreparation(options, root, env, report); } catch (error) {
+  try { await recheckPreparation(options, root, env, report, undefined, storage); } catch (error) {
     fs.rmdirSync(lock);
     report.ok = false;
     report.errors.push(error.message);
@@ -773,7 +786,7 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
       fs.renameSync(output, previous);
       moved = true;
     }
-    await recheckPreparation(options, root, env, report, attemptId);
+    await recheckPreparation(options, root, env, report, attemptId, storage);
     build(root, env, path.join(evidence, 'build.log'));
     check(existingRegularFile(output), 'Gradle succeeded without producing a fresh app-release.apk; no artifact staged');
     report.after = await sourceState(root);
@@ -791,7 +804,7 @@ async function prepare(options, root = path.resolve(__dirname, '..'), env = proc
       report.artifactSourceRevision = report.existingArtifact.sourceRevision;
       report.staging = 'Existing identical artifact retained; original provenance unchanged';
     } else {
-      report.staged = await stageApk(snapshot, report.buildTools, report.source.sourceRevision, report.directory, run);
+      report.staged = await stageApk(snapshot, report.buildTools, report.source.sourceRevision, report.directory, run, storage);
       check(report.staged.sha256 === report.apk.sha256, 'APK changed during staging; stop and inspect staging before any manual publication');
       report.artifactSourceRevision = report.source.sourceRevision;
       report.staging = 'Verified immutable artifact staged';

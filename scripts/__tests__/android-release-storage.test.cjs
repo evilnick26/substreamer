@@ -116,3 +116,47 @@ test('override symlink into production still requires the production mount', (t)
   t.mock.method(fs, 'readFileSync', (file, ...args) => file === '/proc/self/mountinfo' ? root : read(file, ...args));
   assert.throws(() => releaseDirectory(temporary), /distinct mounted filesystem/);
 });
+
+for (const [name, replacement] of [
+  ['different filesystem', valid.replace('253:8', '253:9')],
+  ['new mount of the same device', valid.replace('20 10', '21 10')],
+  ['different mounted root', valid.replace('253:8 / /media/data', '253:8 /other /media/data')],
+]) {
+  test(`rechecks reject ${name} relative to the initial identity`, () => {
+    const storage = {};
+    verifyArchiveMount(archive, valid, storage);
+    assert.throws(() => verifyArchiveMount(archive, replacement, storage), /storage identity changed/);
+    assert.equal(verifyArchiveMount(archive, replacement), archive, 'new operations establish their own baseline');
+  });
+}
+
+test('unchanged identity permits harmless option/source-label changes', () => {
+  const storage = {};
+  verifyArchiveMount(archive, valid, storage);
+  assert.equal(verifyArchiveMount(archive, valid.replaceAll('rw,relatime', 'rw,noatime').replace('/dev/unspecified', 'new-label'), storage), archive);
+});
+
+test('replacement covering bind mount on the same filesystem is detected', () => {
+  const storage = {};
+  const nested = valid + '30 20 253:8 /bound /media/data/Complete rw - ext4 ignored rw\n';
+  verifyArchiveMount(archive, nested, storage);
+  assert.throws(() => verifyArchiveMount(archive, nested.replace('30 20', '31 20'), storage), /covering mount changed/);
+});
+
+test('allocation retains mount identity across the lock and assessment boundary', async (t) => {
+  const read = fs.readFileSync;
+  const lstat = fs.lstatSync;
+  const stat = fs.statSync;
+  const realpath = fs.realpathSync;
+  let changed = false;
+  const lock = path.join(archive, '.prepare-lock');
+  t.mock.method(fs, 'readFileSync', (file, ...args) => file === '/proc/self/mountinfo' ? (changed ? valid.replace('253:8', '253:9') : valid) : read(file, ...args));
+  t.mock.method(fs, 'lstatSync', (file, ...args) => file === archive ? { isDirectory: () => true } : lstat(file, ...args));
+  t.mock.method(fs, 'statSync', (file, ...args) => file === archive ? { isDirectory: () => true } : stat(file, ...args));
+  t.mock.method(fs, 'realpathSync', (file, ...args) => file === archive ? archive : realpath(file, ...args));
+  t.mock.method(fs, 'mkdirSync', (file) => { assert.equal(file, lock); changed = true; });
+  t.mock.method(fs, 'rmdirSync', (file) => assert.equal(file, lock));
+  for (const method of ['writeFileSync', 'appendFileSync', 'openSync']) t.mock.method(fs, method, () => assert.fail('reservation write'));
+  await assert.rejects(allocate({ execute: true, dryRun: false }), /storage identity changed/);
+  assert.equal(changed, true);
+});
