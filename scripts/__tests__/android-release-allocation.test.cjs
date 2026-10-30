@@ -196,7 +196,8 @@ test('concurrent allocation processes issue exactly one approved code', async (t
   const script = `const { allocate } = require(process.argv[1]); allocate(JSON.parse(process.argv[2]), process.argv[3]).then(r => console.log(r.versionCode)).catch(e => { console.error(e.message); process.exitCode = 1; });`;
   const start = () => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['-e', script, path.resolve(__dirname, '../android-release.js'),
-      JSON.stringify({ ...f.options, dryRun: false, execute: true, expectCode: 80000190 }), f.root]);
+      JSON.stringify({ ...f.options, dryRun: false, execute: true, expectCode: 80000190 }), f.root],
+      { env: { ...process.env, FORCE_COLOR: '0', NODE_DISABLE_COLORS: '1' } });
     let stdout = ''; let stderr = '';
     child.stdout.on('data', (data) => { stdout += data; }); child.stderr.on('data', (data) => { stderr += data; });
     child.on('error', reject); child.on('close', (status) => resolve({ status, stdout, stderr }));
@@ -402,7 +403,8 @@ test('approved semantic amendment accepts only exact app.json value change, with
   assert.equal((await preflight(options, f.root, f.env)).ok, false);
   fs.writeFileSync(amendmentPath, JSON.stringify(amendment));
   f.commit();
-  assert.equal((await preflight(options, f.root, f.env)).ok, true);
+  const amendedReport = await preflight(options, f.root, f.env);
+  assert.equal(amendedReport.ok, true, JSON.stringify(amendedReport.errors));
   assert.deepEqual(fs.readFileSync(result.reservation), reservationBefore);
   assert.deepEqual(fs.readFileSync(f.ledger), ledgerBefore);
   const approved = fs.readFileSync(appPath, 'utf8');
