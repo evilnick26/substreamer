@@ -117,7 +117,7 @@ independently authenticate a manifest fetched from the same host.
 
 Gradle's standard output remains
 `android/app/build/outputs/apk/release/app-release.apk`. Do not rename it in
-Gradle. Default local staging is **`~/.local/share/sanctifi/releases/`**, outside
+Gradle. Default local staging is **`/media/data/Complete/Sanctifi/Releases/`**, outside
 the checkout and therefore outside Git. Keep any `--directory` override outside
 Git too. No APKs or private material are committed.
 
@@ -158,6 +158,79 @@ permission failure must be investigated, not worked around by overwriting files.
 Keep the staging directory under trusted local ownership; immutable naming is a
 publication rule, not protection against its owner's manual edits.
 
+## Permanent archive storage on Futwick
+
+The single authoritative local archive and future allocation registry is
+**`/media/data/Complete/Sanctifi/Releases`**. Normal stage, allocate, synchronise
+and prepare operations default there; there is no fallback to the former home
+archive. The directory remains outside Git and private release state stays there.
+
+The owner completed the migration from
+`/home/evilnick/.local/share/sanctifi/releases` and verified it with `diff -qr`
+(no differences). The new archive contains the 80000186 and 80000187 APKs and
+provenance sidecars. The original remains intact for deliberate manual recovery,
+not as a second active archive. No `.allocations` registry has been initialised;
+80000190 is still proposed and unallocated. These are owner-reported migration
+facts, not filesystem actions repeated by this change.
+
+The owner also supplied read-only Futwick `findmnt` results: both the exact
+`/media/data` mount point and the filesystem covering the release archive report
+`/media/data`, `ext4`, `rw,relatime`. The volume is owner-confirmed VeraCrypt-backed
+and normally mounted after startup. The guard verifies mount availability; neither
+an ext4 label nor a particular device name proves encryption.
+
+Before selecting production release storage, the CLI reads Linux
+`/proc/self/mountinfo`. It requires an unambiguous mount at **`/media/data`**, on a
+filesystem distinct from the process root filesystem, and read-write access at
+both that mount and the deepest mount covering the resolved archive path. A
+nested mount onto another filesystem, a hidden/ambiguous mount hierarchy, malformed
+mount information, a read-only mount or unavailable Linux mount information stops
+the operation. Bind mounts of the system-drive filesystem at `/media/data` fail.
+Mount paths decode Linux's octal space/tab/newline/backslash escapes; unrelated
+mounts and shared path prefixes do not count as covering the archive. Nested mounts
+on the same storage are accepted only when their parent hierarchy is consistent.
+No device name, encryption implementation or filesystem type is pinned.
+
+The check applies to both requested paths under `/media/data` and resolved physical
+paths, so an alias into production cannot bypass it and a production symlink cannot
+escape to another drive. It runs before archive/lock creation, reservation mutation,
+synchronisation and preparation, and is repeated after allocation/staging assessment
+and by preparation's existing rechecks. Missing storage fails before creating a
+replacement archive, registry, attempt marker or APK staging files. Read-only
+preflight/dry-run also reports unavailable production storage. Independent
+`verify`/`validate` of supplied local files and CLI help do not require this mount.
+
+`--directory DIRECTORY` remains an explicit override for tests or separately
+reviewed recovery. An override outside `/media/data` uses the existing outside-Git
+checks without requiring the production mount, and writes only to that selected
+location. Overrides physically pointing into `/media/data` retain the mount guard.
+Do not use an override to the old archive to bypass a missing mount or initialise
+a second registry. Temporary test archives do not read or mutate production state.
+
+If the volume is missing, mount the existing VeraCrypt volume at `/media/data`
+through the established Futwick procedure. Then check, read-only:
+
+```bash
+findmnt --mountpoint /media/data --output TARGET,FSTYPE,OPTIONS
+findmnt --target /media/data/Complete/Sanctifi/Releases --output TARGET,FSTYPE,OPTIONS
+```
+
+Confirm the existing archive/sidecars and any registry are visible, then rerun
+preflight. Do not run `mkdir` to reconstruct the archive while unmounted, copy
+fallback files back automatically, delete the old archive, or use `--initialize`
+as storage recovery. If unexpected release state appears underneath an unmounted
+mount point, stop and reconcile it separately; never merge registries blindly.
+Do not unmount/remount storage during a release operation: mountinfo is an
+availability snapshot, not a lock against administrative or forced unmount. The
+CLI does not mount/decrypt volumes or modify mount configuration.
+
+The owner's mount layout is confirmed; executing the new guard against actual
+Futwick mountinfo and reviewing archive permissions remain read-only readiness
+checks before operational use. Actual staging/hard-link execution needs separate
+authorisation; this change does not perform it. No real allocation/build/publication
+is part of readiness validation. See the
+[archive-location diary](project-diary/2026-10-30_issue-047_release-archive-location.md).
+
 ## Global build-number allocation and traceability
 
 **Historical reconciliation, 26 October 2026:** the owner confirms that Alpha
@@ -197,7 +270,7 @@ is proposed, **not reserved or confirmed free**. The historical 80000188 stateme
 above do not establish current availability.
 
 Use one trusted allocation directory on Futwick, normally the existing
-`~/.local/share/sanctifi/releases/`. Back it up, including hidden entries. Allocation
+`/media/data/Complete/Sanctifi/Releases/`. Back it up, including hidden entries. Allocation
 reconciles ledger rows, private `.allocations/<code>.json` reservations, every APK
 recursively in that directory and the selected archives, current standard Gradle
 output (if present), configured codes, and a fresh authoritative inventory. It
@@ -340,7 +413,7 @@ allocation, building or publication now.
 On Futwick, after those checks, choose real absolute private paths:
 
 ```bash
-SF_RELEASES="$HOME/.local/share/sanctifi/releases"
+SF_RELEASES=/media/data/Complete/Sanctifi/Releases
 SF_HISTORY=/absolute/private/reconciled-history.json
 node scripts/android-release.js allocate --history "$SF_HISTORY" \
   --directory "$SF_RELEASES" --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
@@ -566,7 +639,7 @@ those runtime groups executed. It then uses exactly
 existing signing setup. No auto-install, release tag, Git commit/push or EAS job
 is performed. Run one preparation/manual build at a time per checkout.
 
-The default archive remains `~/.local/share/sanctifi/releases/`; `--directory`
+The default archive remains `/media/data/Complete/Sanctifi/Releases/`; `--directory`
 may select another trusted directory outside every Git checkout, including through
 symlink ancestors. The guard resolves the nearest existing directory, then checks
 all physical ancestors for `.git` files, recognisable `.git` directories, or
@@ -778,3 +851,21 @@ Beta/Stable enrolment without changing/rebuilding the APK; no mandatory V1
 selector is required. Promotion does not silently move existing Alpha clients to
 another channel. Startup/Settings checks, ordering/concurrency and any channel
 provisioning UI are owned by Issue 023, not this tooling.
+
+### Mount identity during a release operation
+
+Each stage/allocation/synchronisation/preparation invocation retains the initially
+verified `/media/data` mount ID, filesystem major:minor identity and mounted root.
+Repeated checks must match those values, rather than accepting a replacement
+writable volume. The deepest covering mount's ID, filesystem identity, root and
+target are also retained to detect a changed bind mount on the same filesystem.
+Preparation shares this baseline through its locked/pre-build checks and staging.
+Explicit external overrides remain independent; there is no process-global or
+persistent mount identity cache and no device-name or encryption-specific pin.
+
+These are comparisons between observations, not mount locking. They do not prevent
+an administrative unmount between a check and a filesystem operation, or detect a
+change undone between checks. Kernel mount/device IDs can be reused; this is not
+cryptographic volume authentication. A new invocation establishes a new baseline,
+so the owner must still mount the correct volume and inspect storage after any
+unexpected identity-change failure. Do not unmount/remount during release work.

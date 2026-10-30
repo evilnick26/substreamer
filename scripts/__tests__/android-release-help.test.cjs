@@ -151,7 +151,7 @@ test('both new-release entry points refuse missing attestation and report actual
     android: { versionCode: 500, package: 'fi.sancti.client' }, extra: { sanctifiVersion: '0.1.1' } } }));
   const before = fs.readdirSync(f.directory);
   for (const args of [['preflight', '--intent', 'new'], ['prepare', '--dry-run', '--intent', 'new']]) {
-    const result = spawnSync(process.execPath, [f.copied, ...args], { cwd: f.directory, env: f.env, encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [f.copied, ...args, '--directory', path.join(f.directory, 'archive')], { cwd: f.directory, env: f.env, encoding: 'utf8' });
     assert.equal(result.status, 1, result.stderr);
     const report = JSON.parse(result.stdout);
     assert.equal(report.ok, false);
