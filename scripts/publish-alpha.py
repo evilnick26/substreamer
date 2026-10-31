@@ -160,7 +160,8 @@ def main():
         remote_preflight(code, checksum)
         return
 
-    # The privileged program is supplied as a quoted SSH command, never loaded\n    # from a user-writable file on the remote host. SSH/sudo prompt interactively.
+    # The privileged program is supplied as a quoted SSH command, never loaded
+    # from a user-writable file on the remote host. SSH/sudo prompt interactively.
     remote_script = r'''set -euo pipefail
 umask 022
 root=/opt/updates-site/client
@@ -206,7 +207,10 @@ cmp -s "$root/alpha.json" "$backup" || { echo "Live manifest changed" >&2; exit 
 mv -T -- "$tmp" "$root/alpha.json"
 echo "REMOTE_PROMOTED:$code:$sha"
 '''
-    if input("Type PUBLISH to authorise production changes on Obscurity: ").strip() != "PUBLISH":\n        print("Cancelled; nothing transferred or published.")\n        return\n    # Scratch name is chosen on remote by mktemp, avoiding races and shell injection.
+    if input("Type PUBLISH to authorise production changes on Obscurity: ").strip() != "PUBLISH":
+        print("Cancelled; nothing transferred or published.")
+        return
+    # Scratch name is chosen on remote by mktemp, avoiding races and shell injection.
     proc = subprocess.run(["ssh", REMOTE, "mktemp -d /tmp/sanctifi-publish.XXXXXXXX"],
                           text=True, capture_output=True, check=True)
     scratch = proc.stdout.strip()
@@ -216,7 +220,11 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,\n        # with no user-writable script to execute and no stdin collision.\n        command = "sudo bash -c " + shlex.quote(script)\n        # Deliberately blocked until mocked transport and remote preflight tests pass.\n        raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
+        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,
+        # with no user-writable script to execute and no stdin collision.
+        command = "sudo bash -c " + shlex.quote(script)
+        # Deliberately blocked until mocked transport and remote preflight tests pass.
+        raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
 
     finally:
         subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"], check=False)
