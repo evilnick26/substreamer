@@ -47,3 +47,7 @@ Added `--remote-preflight` to inspect Obscurity over SSH without sudo or writes.
 ## Futwick import failure and correction
 
 Owner attempted the expanded suite, but Python failed at import with `SyntaxError` on line 209: escaped `\\n` text had been accidentally inserted into executable source during the prior commit. No tests ran and no remote operations occurred. Replaced malformed literal escapes with actual source line breaks (commit `b20f7ee2`). Retest pending. Add a Python compilation check before future test instructions.
+
+## Futwick 13-test suite feedback
+
+Python compilation succeeded; 12 tests passed and one remote-preflight mock test failed because its simulated SSH output used literal escaped `\\n` text rather than newline characters. Corrected the fixture (commit `f59b375b`). Retest pending. No remote preflight was executed and no production changes were made.
