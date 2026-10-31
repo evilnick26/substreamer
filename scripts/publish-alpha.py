@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 
@@ -115,8 +116,7 @@ def main():
         print("LOCAL DRY RUN ONLY: no SSH, transfer, sudo or publication attempted.")
         return
 
-    # Unique remote scratch directory, no shared /tmp filenames. SSH prompts interactively.
-    # The remote installer performs all privileged actions in a single sudo invocation.
+    # The privileged program is supplied as a quoted SSH command, never loaded\n    # from a user-writable file on the remote host. SSH/sudo prompt interactively.
     remote_script = r'''set -euo pipefail
 umask 022
 root=/opt/updates-site/client
@@ -162,7 +162,7 @@ cmp -s "$root/alpha.json" "$backup" || { echo "Live manifest changed" >&2; exit 
 mv -T -- "$tmp" "$root/alpha.json"
 echo "REMOTE_PROMOTED:$code:$sha"
 '''
-    # Scratch name is chosen on remote by mktemp, avoiding races and shell injection.
+    if input("Type PUBLISH to authorise production changes on Obscurity: ").strip() != "PUBLISH":\n        print("Cancelled; nothing transferred or published.")\n        return\n    # Scratch name is chosen on remote by mktemp, avoiding races and shell injection.
     proc = subprocess.run(["ssh", REMOTE, "mktemp -d /tmp/sanctifi-publish.XXXXXXXX"],
                           text=True, capture_output=True, check=True)
     scratch = proc.stdout.strip()
@@ -172,10 +172,7 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        # Supply privileged program through SSH stdin, not from a writable remote file.
-        # sudo authenticates via the allocated terminal; stdin remains the program source.
-        # A dedicated local test must verify this TTY/stdin combination before execution.
-        raise RuntimeError("Remote promotion deliberately disabled pending tested privileged transport")
+        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,\n        # with no user-writable script to execute and no stdin collision.\n        command = "sudo bash -c " + shlex.quote(script)\n        run("ssh", "-tt", REMOTE, command)
 
     finally:
         subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"], check=False)
