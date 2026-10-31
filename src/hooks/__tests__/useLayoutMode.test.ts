@@ -1,3 +1,4 @@
+jest.mock('@/utils/deviceLayout', () => ({ IS_TABLET: true }));
 import { getLayoutMode } from '../useLayoutMode';
 
 jest.mock('react-native', () => ({
@@ -72,4 +73,12 @@ describe('useLayoutMode', () => {
     const { result } = renderHook(() => useLayoutMode());
     expect(result.current).toBe('wide');
   });
+});
+
+it('never gives a phone the tablet layout across the 900dp boundary', () => {
+  for (const width of [899, 900, 932, 1024]) {
+    expect(getLayoutMode(width, 430, false)).toBe('compact');
+  }
+  expect(getLayoutMode(899, 600, true)).toBe('compact');
+  expect(getLayoutMode(900, 600, true)).toBe('wide');
 });

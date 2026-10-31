@@ -6,7 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Appearance, AppState, Dimensions, LogBox, Platform, StyleSheet, View } from 'react-native';
-import * as ScreenOrientation from 'expo-screen-orientation';
+import { requestPhoneOrientation } from '@/services/phoneOrientation';
+import { IS_TABLET } from '@/utils/deviceLayout';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { I18nextProvider } from 'react-i18next';
@@ -176,29 +177,11 @@ try {
   } catch { /* non-critical: falls back to system default */ }
 })();
 
-// Phone vs tablet, at module scope, on Android 16's large-screen threshold (smallest
-// screen dimension >= 600dp). Falls back to "phone" if the Dimensions bridge is
-// unavailable — the safer default, since the phone-only orientation lock below is opt-out.
-let IS_TABLET = false;
-try {
-  const screenDims = Dimensions.get('screen');
-  IS_TABLET = Math.min(screenDims.width, screenDims.height) >= 600;
-} catch (e) {
-  // eslint-disable-next-line no-console
-  console.warn('[layout] Dimensions.get failed; assuming phone:', errMessage(e));
-}
-
-// Lock orientation to portrait on phones; tablets rotate freely, governed at runtime by
-// the orientation lock setting in layoutPreferencesStore. The whole call is wrapped
-// because the synchronous property access on ScreenOrientation.OrientationLock throws
-// when the native module is missing — the `.catch()` only covers promise rejection.
+// Phone screens default to portrait; the focused NPS owns temporary overrides.
 if (!IS_TABLET) {
-  try {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
-      .catch(() => { /* non-critical: orientation lock unavailable */ });
-  } catch {
-    /* non-critical: ScreenOrientation native module unavailable */
-  }
+  requestPhoneOrientation('portrait').catch(() => {
+    /* non-critical: orientation native module may be unavailable */
+  });
 }
 
 // Suppress ExpoKeepAwake errors that fire when the activity becomes

@@ -768,3 +768,52 @@ test('inline lyrics preserves sanctifi phone ordering, local version and album/a
   expect(push).toHaveBeenNthCalledWith(2, '/artist/artist-1');
   jest.restoreAllMocks();
 });
+
+describe('phone landscape presentation in the existing shell', () => {
+  it('renders a dedicated player without inline lyrics and keeps lyrics retrieval', () => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    expect(screen.getByTestId('phone-landscape-player')).toBeTruthy();
+    expect(screen.getByText('Test Album')).toBeTruthy();
+    expect(screen.queryByText('LyricsContent')).toBeNull();
+    expect(fetchLyrics).toHaveBeenCalledWith('track-1', 'Test Artist', 'Test Song');
+  });
+
+  it('keeps the full lyrics tab accessible in landscape', async () => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    fireEvent.press(screen.getByLabelText('Lyrics'));
+    await act(async () => {});
+    expect(screen.getByText('LyricsContent')).toBeTruthy();
+  });
+
+  it('preserves the active queue tab and lyrics owner when presentation rotates', async () => {
+    const screen = render(<PlayerPhonePortrait />);
+    fireEvent.press(screen.getByLabelText('Queue'));
+    await act(async () => {});
+    const calls = fetchLyrics.mock.calls.length;
+    screen.rerender(<PlayerPhonePortrait landscape />);
+    expect(screen.getByTestId('flash-list')).toBeTruthy();
+    expect(screen.getByLabelText('Queue').props.accessibilityState.selected).toBe(true);
+    expect(fetchLyrics).toHaveBeenCalledTimes(calls);
+    screen.rerender(<PlayerPhonePortrait />);
+    expect(screen.getByLabelText('Queue').props.accessibilityState.selected).toBe(true);
+  });
+});
+
+test('rotation preserves portrait synced lyrics but landscape always retains seeking without inline lyrics', () => {
+  Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
+    synced: true, source: 'structured', offsetMs: 0,
+    lines: [{ startMs: 0, text: 'Portrait lyrics only' }],
+  } } });
+  const screen = render(<PlayerPhonePortrait />);
+  expect(screen.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Portrait lyrics only');
+  expect(screen.queryByTestId('progress-bar')).toBeNull();
+  screen.rerender(<PlayerPhonePortrait landscape />);
+  expect(screen.getByTestId('phone-landscape-player')).toBeTruthy();
+  expect(screen.getByTestId('progress-bar')).toBeTruthy();
+  expect(screen.queryByTestId('inline-lyrics')).toBeNull();
+  expect(screen.queryByText('LyricsContent')).toBeNull();
+  screen.rerender(<PlayerPhonePortrait />);
+  expect(screen.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Portrait lyrics only');
+  expect(screen.queryByTestId('progress-bar')).toBeNull();
+  expect(layoutPreferencesStore.getState().displaySyncedLyricsInNps).toBe(true);
+});
