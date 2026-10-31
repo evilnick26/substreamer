@@ -63,3 +63,7 @@ Owner ran `--remote-preflight` on Futwick for candidate `80000190`, with interac
 ## Continued guarded development — backup preflight
 
 Following owner approval to continue development, expanded the read-only remote preflight to inspect the expected backup path for the currently live version, reject symlinks/non-files and refuse a conflicting existing backup. Added test assertions that the remote command includes these checks. These changes are committed on the development branch but not yet tested on Futwick. No server writes or publication. The privileged `--execute` promotion remains deliberately disabled; backup/recovery and privileged transport need further testing before release.
+
+## Futwick validation — backup preflight checks
+
+Owner ran Python compilation and the 13-test suite after the backup-preflight changes; reported `Ran 13 tests in 0.011s` and `OK`. The `LIVE_VERSION` output inside the unit tests is mocked. Next validation is a fresh attended, read-only `--remote-preflight` on Obscurity to exercise the new backup checks. No production changes.
