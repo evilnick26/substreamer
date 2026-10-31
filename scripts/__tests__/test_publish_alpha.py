@@ -250,7 +250,8 @@ class ManifestValidationTests(unittest.TestCase):
                                   for t in n.targets))
         template = ast.literal_eval(assignment.value)
         for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change",
-                      "retry-apk", "retry-apk-backup", "conflicting-apk", "conflicting-backup"):
+                      "retry-apk", "retry-apk-backup", "conflicting-apk", "conflicting-backup",
+                      "symlink-apk", "symlink-backup"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp) / "client"
                 (root / "apks").mkdir(parents=True)
@@ -274,6 +275,10 @@ class ManifestValidationTests(unittest.TestCase):
                     target.write_bytes(b"other" if fault == "conflicting-apk" else payload)
                 if fault in ("retry-apk-backup", "conflicting-backup"):
                     backup.write_bytes(b"other" if fault == "conflicting-backup" else old_bytes)
+                if fault == "symlink-apk":
+                    target.symlink_to(pathlib.Path(temp) / "missing-apk")
+                if fault == "symlink-backup":
+                    backup.symlink_to(pathlib.Path(temp) / "missing-backup")
                 bin_dir = pathlib.Path(temp) / "bin"
                 bin_dir.mkdir()
                 if fault in ("apk-install", "backup", "manifest-install", "promotion", "concurrent-change"):
@@ -335,6 +340,12 @@ class ManifestValidationTests(unittest.TestCase):
                     elif fault == "backup":
                         self.assertTrue(target.exists())
                         self.assertFalse(backup.exists())
+                    elif fault == "symlink-apk":
+                        self.assertTrue(target.is_symlink())
+                        self.assertFalse(backup.exists())
+                    elif fault == "symlink-backup":
+                        self.assertTrue(backup.is_symlink())
+                        self.assertFalse(target.exists())
                     elif fault == "conflicting-apk":
                         self.assertEqual(target.read_bytes(), b"other")
                         self.assertFalse(backup.exists())
