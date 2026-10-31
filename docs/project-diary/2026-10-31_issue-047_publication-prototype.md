@@ -131,3 +131,7 @@ Extended the sandboxed promotion test with four additional subcases: retry with 
 ## Conflicting-backup test expectation corrected
 
 Owner reported `Ran 20 tests in 0.949s` with one error in the `conflicting-backup` sandbox subcase. The test expected an APK target to exist, but the production Bash script checks backup collisions before any APK installation. The absence of the APK is the intended fail-closed behaviour. Corrected the test to assert that no target APK is created and the conflicting backup remains untouched. Publisher unchanged; Futwick revalidation pending; no production execution.
+
+## Futwick validation — partial-artifact retries and conflicts passing
+
+Owner confirmed `Ran 20 tests in 0.828s` / `OK` after correcting the conflicting-backup expectation. All ten sandbox subcases now pass, including retries with matching existing APK and backup, and fail-closed refusal for conflicting APK/backup. In particular, a conflicting backup is detected before any new APK is installed. This remains local disposable-directory testing, not privileged SSH/sudo or live production. `--execute` remains deliberately disabled; 80000190 remains unpublished. Next: privileged transport and final check/rename race review.
