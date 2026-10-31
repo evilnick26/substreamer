@@ -143,7 +143,7 @@ class ManifestValidationTests(unittest.TestCase):
     def test_transport_failure_matrix_and_cleanup(self):
         import subprocess
         scratch = "/tmp/sanctifi-publish.ABC12345"
-        for failure in ("ssh", "apk", "manifest", "blocked"):
+        for failure in ("ssh", "apk", "manifest", "promotion"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp)
                 apk = root / f"sanctifi-{CODE}.apk"
@@ -161,7 +161,7 @@ class ManifestValidationTests(unittest.TestCase):
                              if failure == "apk" else
                              [mock.Mock(), subprocess.CalledProcessError(1, "scp")]
                              if failure == "manifest" else
-                             [mock.Mock(), mock.Mock()])
+                             [mock.Mock(), mock.Mock(), subprocess.CalledProcessError(1, "ssh -tt")])
                 with mock.patch.object(publisher, "ARCHIVE", root), \
                      mock.patch.object(publisher.sys, "argv", argv), \
                      mock.patch.object(publisher, "remote_preflight") as preflight, \
@@ -174,7 +174,7 @@ class ManifestValidationTests(unittest.TestCase):
                         publisher.main()
                 preflight.assert_called_once_with(CODE, data["sha256"])
                 self.assertEqual(scp.call_count, {"ssh": 0, "apk": 1,
-                                                   "manifest": 2, "blocked": 2}[failure])
+                                                   "manifest": 2, "promotion": 3}[failure])
                 self.assertEqual(ssh.call_count, 1 if failure == "ssh" else 2)
                 if failure != "ssh":
                     self.assertEqual(ssh.call_args.args[0],
@@ -209,7 +209,8 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertIn('cmp -s "$root/alpha.json" "$backup"', source)
         self.assertIn('mv -T -- "$tmp" "$root/alpha.json"', source)
         self.assertIn('echo "REMOTE_PROMOTED:$code:$sha"', source)
-        self.assertIn('raise RuntimeError("Remote promotion disabled', source)
+        self.assertIn("run(*command)", source)
+        self.assertIn("command = privileged_ssh_argv(script)", source)
 
 
     def test_cleanup_reports_nonzero_ssh_exit(self):
