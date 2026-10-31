@@ -7,13 +7,10 @@ import { useRouter } from 'expo-router';
 import { BookmarkButton } from '@/components/BookmarkButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
-import { PlaybackRateButton } from '@/components/PlaybackRateButton';
 import { PlaybackSourceBadge } from '@/components/PlaybackSourceBadge';
 import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { RepeatButton } from '@/components/RepeatButton';
 import { ShuffleButton } from '@/components/ShuffleButton';
-import { SkipIntervalButton } from '@/components/SkipIntervalButton';
-import { SleepTimerCapsule } from '@/components/SleepTimerCapsule';
 import { getAlbumVersion } from '@/db/repository/albums';
 import { getDb } from '@/store/persistence/db';
 import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
@@ -22,7 +19,6 @@ import { usePlaybackState } from '@/hooks/usePlaybackState';
 import { useTheme } from '@/hooks/useTheme';
 import { retryPlayback, skipToNext, skipToPrevious, togglePlayPause } from '@/services/playerService';
 import type { Child } from '@/services/subsonicService';
-import { playbackSettingsStore } from '@/store/playbackSettingsStore';
 import { playerStore } from '@/store/playerStore';
 
 interface PlayerPhoneLandscapeProps {
@@ -56,7 +52,6 @@ export function PlayerPhoneLandscape({
   }, [albumId]);
   const albumVersion = versionResult?.albumId === albumId ? versionResult.version : null;
   const [available, setAvailable] = useState({ width: 0, height: 0 });
-  const narrow = available.width > 0 && available.width < 220;
   const compact = available.height > 0 && (available.height < 240 || available.width < 300);
   const { isPlaying, isBuffering } = usePlaybackState();
   const { canSkipNext, canSkipPrevious } = useCanSkip();
@@ -66,7 +61,6 @@ export function PlayerPhoneLandscape({
   const error = playerStore((s) => s.error);
   const retrying = playerStore((s) => s.retrying);
   const queueLength = playerStore((s) => s.queue.length);
-  const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
   const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
   // Reserve transport width and the column gap; use every remaining vertical pixel.
   const artSize = Math.max(0, Math.floor(Math.min(contentSize.height, contentSize.width - 220 - 12)));
@@ -113,7 +107,7 @@ export function PlayerPhoneLandscape({
             />
           </ScrollView>
           <View testID="landscape-transport" style={styles.controls}>
-            {!narrow && <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />}
+            <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />
             <Pressable accessibilityRole="button" accessibilityLabel={t('previousTrack')} disabled={!canSkipPrevious} onPress={skipToPrevious} style={styles.button}>
               <Ionicons name="play-back" size={28} color={canSkipPrevious ? colors.textPrimary : colors.textSecondary} />
             </Pressable>
@@ -123,18 +117,12 @@ export function PlayerPhoneLandscape({
             <Pressable accessibilityRole="button" accessibilityLabel={t('nextTrack')} disabled={!canSkipNext} onPress={skipToNext} style={styles.button}>
               <Ionicons name="play-forward" size={28} color={canSkipNext ? colors.textPrimary : colors.textSecondary} />
             </Pressable>
-            {!narrow && <RepeatButton size={24} />}
+            <RepeatButton size={24} />
           </View>
-          <ScrollView horizontal testID="landscape-secondary-scroll" style={styles.secondary} contentContainerStyle={styles.extras}>
-            <FavoriteButton trackId={currentTrack.id} />
-            <BookmarkButton />
-            {narrow && <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />}
-            {narrow && <RepeatButton size={24} />}
-            <PlaybackRateButton />
-            {showSkipInterval && <SkipIntervalButton direction="backward" size={28} />}
-            {showSkipInterval && <SkipIntervalButton direction="forward" size={28} />}
-            <SleepTimerCapsule />
-          </ScrollView>
+          <View testID="landscape-secondary-row" style={styles.secondary}>
+            <FavoriteButton trackId={currentTrack.id} style={styles.secondaryButton} />
+            <BookmarkButton style={styles.secondaryButton} />
+          </View>
         </View>
       </View>
     </View>
@@ -152,10 +140,10 @@ const styles = StyleSheet.create({
   details: { flex: 1, gap: 2 },
   metadata: { flex: 1 },
   metadataContent: { flexGrow: 1, justifyContent: 'center', gap: 2, paddingVertical: 2 },
-  secondary: { flexGrow: 0, flexShrink: 0, height: 44 },
+  secondary: { flexShrink: 0, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16, paddingHorizontal: 4 },
+  secondaryButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 20, fontWeight: '600' },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexShrink: 0 },
   button: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   play: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  extras: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 4 },
 });

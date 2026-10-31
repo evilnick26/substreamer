@@ -244,3 +244,103 @@ Final full Jest validation: **664 suites passed, 2 skipped; 11,468 tests passed,
 8 skipped; zero failures**. No new skips. All intended refinements are isolated
 to the phone landscape presenter/header/status-bar scope and their integration
 tests, with the diary and one English label added.
+
+## 31 October 2026 — Retain Android-native orientation and final UI housekeeping
+
+The owner reports that `95bbce969d4320cfc710f6cc800f7e52b8cfa1df` was built and
+tested successfully on the physical Android phone. Artwork prominence, compact
+Playing header, hidden Android status bar, non-scrolling fit, visible transport,
+year/metadata and absence of inline lyrics were confirmed on that device. The
+owner also confirms Android's native rotation suggestion button works with the
+NPS USER policy and chooses that mechanism for the client. These are owner-reported
+physical results, not cloud measurements. They supersede the prior provisional
+choice between automatic and manual experiments; historical entries remain intact.
+Issue #052 is still open pending physical acceptance of this final housekeeping.
+
+### Orientation decision and cleanup
+
+Fetched `origin/integration-052-056` before editing. Local and remote both resolved
+to `95bbce96`, with a clean working tree and zero divergence. Work stays on that
+branch; no new integration branch, history rewrite or sanctifi merge is involved.
+
+The phone NPS now always requests Android `ActivityInfo.SCREEN_ORIENTATION_USER`
+through the existing Expo platform orientation facility while focused and active.
+This leaves the system auto-rotate preference and native rotation suggestion in
+control. Background, blur and unmount restore PORTRAIT_UP; foreground/refocus
+reapplies USER only to the focused NPS. Unfocused mounted players do not issue
+orientation requests. The serialized request service and rejection recovery stay
+in place to prevent stale requests overriding restoration. The root phone portrait
+lock elsewhere and tablet behavior are unchanged. No forced landscape API remains.
+
+Removed DEV landscape/portrait/auto controls, error/retry experiment UI, manual
+state and explicit landscape policy. Removed NpsExperimentCard and its placement
+under Sound & Playback, npsExperimentStore and its persistence, obsolete strings
+and experiment-specific tests. No runtime reader/writer of the temporary setting
+remains. A previously stored experimental preference is unused and cannot affect
+the retained policy; no schema migration or ongoing legacy-key cleanup was added.
+Native policy failures remain logged; the existing foreground/refocus lifecycle
+retries naturally without adding a new control or user-facing setting.
+
+### Secondary row and overflow parity
+
+The landscape secondary row contains exactly Favorite then Bookmark, aligned at
+the far right of the controls column. Shared icons remain 24dp; both controls keep
+their existing state/actions and 44dp minimum targets, with a 16dp gap. There is
+no speed control or blank speed slot. Removed the optional skip controls and active
+Sleep Timer capsule from this row too, as required by the owner's explicit
+"only these two" composition. Shuffle/Repeat remain in the main transport rather
+than relocating into the secondary row on narrow dimensions. Metadata, seek/time,
+artwork calculation, header height, bottom tabs and status-bar handling are intact.
+
+The compact landscape header's More action continues to send the shared phone
+player source (`player-phone-portrait`, the existing name for both phone
+presentations) to MoreOptionsSheet. Its existing song-source gate already exposes
+Sleep Timer and Playback Speed, including offline. Tests verify that header source,
+menu visibility and both actions' close-before-opening behavior. No duplicate menu,
+new action or portrait menu change was needed. Playback-speed state/services, Sleep
+Timer functionality, full lyrics data/tab and portrait inline lyrics are unchanged.
+
+### Validation and device follow-up
+
+TypeScript passed. Focused Android/iOS validation passed **18 suites / 460 tests**,
+including USER/restoration lifecycle, pending/rejected orientation request ordering,
+phone/tablet routing, status-bar lifecycle, metadata/lyrics/portrait regressions,
+right-aligned control visibility/actions, Home and overflow sleep/speed actions.
+Final full-suite and validator results are recorded below.
+
+Exact source checks confirm portrait content/art sizing and subsequent portrait
+presenters/styles, tablet players, Home, root startup orientation and the status-bar
+hook are unchanged. Source searches find no experiment/store/header-control
+references; the only DEV string in src is the negative UI test assertion.
+
+The new build still needs phone acceptance of native suggestion with auto-rotate
+on/off, portrait restoration through navigation/background/foreground, status-bar
+restoration and no navigation-bar change, non-scrolling fit and unchanged artwork,
+right-aligned Favorite/Bookmark state/actions, and overflow Sleep Timer/Playback
+Speed. No new native APK/device test was performed here. Android system battery/GPS
+overlays identified by the owner were not treated as client UI and were untouched.
+
+Final validation: **660 suites passed, 2 skipped; 11,454 tests passed, 8 skipped;
+zero failures**, in 218.569 seconds. Manual experiment/card/store tests were
+removed with their obsolete implementation; useful production lifecycle and
+regression coverage remains. Intl passed; all 13 locale files passed translation
+validation (2,351 missing-key warnings with English fallback); the 7-module
+inventory and Android Expo/Metro/Hermes export passed. TypeScript and diff checks
+passed. Madge is not installed here; no result is claimed. The remote branch was
+re-fetched before publication and still matched `95bbce96`, with zero divergence.
+
+Changed files in this pass:
+
+- `src/hooks/usePhoneNpsOrientation.ts` and its test.
+- `src/services/phoneOrientation.ts` and its test.
+- `src/screens/player/player-phone.tsx`, `player-phone-portrait.tsx`, and their tests.
+- `src/components/player/PhoneLandscapeHeader.tsx` and `PlayerPhoneLandscape.tsx`.
+- `src/screens/settings-playback.tsx` and `src/i18n/locales/en.json`.
+- Deleted `src/components/settings/NpsExperimentCard.tsx`,
+  `src/components/settings/__tests__/NpsExperimentCard.test.tsx`,
+  `src/store/npsExperimentStore.ts`, and
+  `src/store/__tests__/npsExperimentStore.test.ts`.
+- This append-only Issue #052 diary entry.
+
+No native APK build or final physical-device acceptance is claimed. No merge into
+sanctifi, change to original issue branches, release or issue closure is performed.

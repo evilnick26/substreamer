@@ -2,16 +2,15 @@ jest.mock('@/hooks/usePhoneLandscapeStatusBar', () => ({ usePhoneLandscapeStatus
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: jest.fn() }));
 jest.mock('@/utils/deviceLayout', () => ({ __esModule: true, IS_TABLET: false }));
 jest.mock('@/hooks/usePhoneNpsOrientation', () => ({
-  usePhoneNpsOrientation: jest.fn(() => ({ mode: 'manual', manualLandscape: false, toggleManualLandscape: jest.fn(), error: false })),
+  usePhoneNpsOrientation: jest.fn(),
 }));
 jest.mock('@/hooks/useTheme', () => ({ useTheme: () => ({ colors: { textPrimary: '#fff', red: '#f00' } }) }));
 jest.mock('@/hooks/useIsTabletPortrait', () => ({ useIsTabletPortrait: jest.fn(() => false) }));
 jest.mock('@/screens/player/player-tablet-portrait', () => ({ PlayerTabletPortrait: () => null }));
 jest.mock('@/screens/player/player-phone-portrait', () => ({ PlayerPhonePortrait: jest.fn(() => null) }));
 
-import type { ReactElement } from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
-import { Alert, Platform, useWindowDimensions } from 'react-native';
+import { render } from '@testing-library/react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import { usePhoneNpsOrientation } from '@/hooks/usePhoneNpsOrientation';
 import * as DeviceLayout from '@/utils/deviceLayout';
 import { useIsTabletPortrait } from '@/hooks/useIsTabletPortrait';
@@ -23,10 +22,6 @@ beforeEach(() => {
   Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
   jest.mocked(useIsTabletPortrait).mockReturnValue(false);
   jest.clearAllMocks();
-  jest.mocked(usePhoneNpsOrientation).mockReturnValue({
-    mode: 'manual', manualLandscape: false, toggleManualLandscape: jest.fn(),
-    retryOrientation: jest.fn(), returnToPortrait: jest.fn(), error: false,
-  });
   Object.defineProperty(DeviceLayout, 'IS_TABLET', { configurable: true, value: false });
 });
 afterEach(() => jest.restoreAllMocks());
@@ -63,31 +58,10 @@ it('keeps a tablet below the wide threshold on its original fallback without pho
   expect(jest.mocked(PlayerPhonePortrait).mock.calls.at(-1)?.[0]?.landscape).toBeUndefined();
 });
 
-it('provides manual entry/return and actionable native-error recovery in the header', () => {
+it('requests the retained orientation lifecycle without rendering experiment controls', () => {
   jest.mocked(useWindowDimensions).mockReturnValue({ width: 844, height: 390, scale: 1, fontScale: 1 });
-  const toggle = jest.fn();
-  const retry = jest.fn();
-  const portrait = jest.fn();
-  jest.mocked(usePhoneNpsOrientation).mockReturnValue({
-    mode: 'manual', manualLandscape: true, toggleManualLandscape: toggle,
-    retryOrientation: retry, returnToPortrait: portrait, error: false,
-  });
-  const route = render(<PlayerRoute />);
-  const control = () => jest.mocked(PlayerPhonePortrait).mock.calls.at(-1)?.[0]?.orientationControl as ReactElement;
-  const header = render(control());
-  fireEvent.press(header.getByLabelText('DEV: portrait'));
-  expect(toggle).toHaveBeenCalled();
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  jest.mocked(usePhoneNpsOrientation).mockReturnValue({
-    mode: 'manual', manualLandscape: true, toggleManualLandscape: toggle,
-    retryOrientation: retry, returnToPortrait: portrait, error: true,
-  });
-  route.rerender(<PlayerRoute />);
-  header.rerender(control());
-  fireEvent.press(header.getByLabelText('DEV: rotation failed'));
-  const buttons = alert.mock.calls.at(-1)?.[2];
-  buttons?.find((button) => button.text === 'Retry')?.onPress?.();
-  buttons?.find((button) => button.text === 'DEV: portrait')?.onPress?.();
-  expect(retry).toHaveBeenCalled();
-  expect(portrait).toHaveBeenCalled();
+  const screen = render(<PlayerRoute />);
+  expect(usePhoneNpsOrientation).toHaveBeenCalled();
+  expect(screen.queryByText(/DEV:/)).toBeNull();
+  expect(jest.mocked(PlayerPhonePortrait).mock.calls.at(-1)?.[0]).toEqual({ landscape: true });
 });

@@ -1,5 +1,4 @@
 import Ionicons from '@react-native-vector-icons/ionicons/static';
-import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,10 +8,9 @@ import { useTheme } from '@/hooks/useTheme';
 
 export const PHONE_LANDSCAPE_HEADER_HEIGHT = 40;
 
-export function PhoneLandscapeHeader({ onClose, onMore, orientationControl }: {
+export function PhoneLandscapeHeader({ onClose, onMore }: {
   onClose: () => void;
   onMore: () => void;
-  orientationControl?: ReactNode;
 }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -24,7 +22,6 @@ export function PhoneLandscapeHeader({ onClose, onMore, orientationControl }: {
           <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>{t('npsPlaying')}</Text>
-        {orientationControl}
         <MoreOptionsButton onPress={onMore} color={colors.textPrimary} />
       </View>
     </View>

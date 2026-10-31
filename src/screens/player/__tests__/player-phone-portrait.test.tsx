@@ -867,10 +867,14 @@ describe('refined landscape parity', () => {
     expect(screen.queryByTestId('sleep-timer-button')).toBeNull();
     expect(screen.queryByTestId('cast-button')).toBeNull();
     expect(screen.queryByTestId('inline-lyrics')).toBeNull();
-    const row = screen.getByTestId('landscape-secondary-scroll');
+    const row = screen.getByTestId('landscape-secondary-row');
     const controls = row.findAll(node => node.props.accessibilityRole === 'button');
     const labels = [...new Set(controls.map(node => node.props.accessibilityLabel))];
-    expect(labels.slice(0, 2)).toEqual(['Add to Favorites', 'Add bookmark']);
+    expect(labels).toEqual(['Add to Favorites', 'Add bookmark']);
+    const { StyleSheet } = require('react-native');
+    expect(StyleSheet.flatten(row.props.style).justifyContent).toBe('flex-end');
+    expect(screen.queryByTestId('rate-button')).toBeNull();
+    expect(screen.queryByTestId('skip-interval')).toBeNull();
     const transport = screen.getByTestId('landscape-transport');
     expect(screen.getByTestId('landscape-metadata-scroll').findAll(node => node === transport)).toHaveLength(0);
     act(() => playbackSettingsStore.setState({ showSleepTimerButton: false, showSkipIntervalButtons: false }));
@@ -917,16 +921,16 @@ describe('refined landscape parity', () => {
 });
 
 
-it.each([[219, 239, 44, true], [220, 240, 44, false], [300, 240, 52, false]])(
-  'keeps transport pinned with compact/narrow fallback for %s by %s details', (width, height, size, narrow) => {
+it.each([[219, 239, 44], [220, 240, 44], [300, 240, 52]])(
+  'keeps transport pinned with compact sizing for %s by %s details', (width, height, size) => {
     const screen = render(<PlayerPhonePortrait landscape />);
     fireEvent(screen.getByTestId('landscape-details'), 'layout', { nativeEvent: { layout: { width, height } } });
     const transport = screen.getByTestId('landscape-transport');
     const { StyleSheet } = require('react-native');
     const play = transport.findAll(node => node.props.accessibilityLabel === 'Play' || node.props.accessibilityLabel === 'Pause')[0];
     expect(StyleSheet.flatten(play.props.style).width).toBe(size);
-    expect(transport.findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(!narrow);
-    expect(screen.getByTestId('landscape-secondary-scroll').findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(narrow);
+    expect(transport.findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(true);
+    expect(screen.getByTestId('landscape-secondary-row').findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(false);
     expect(screen.getByTestId('landscape-metadata-scroll').findAll(node => node.props.testID === 'landscape-transport')).toHaveLength(0);
   },
 );
@@ -942,6 +946,8 @@ test('the compact custom header restores the native portrait header and uses cur
     const screen = render(<PlayerPhonePortrait landscape />);
     const header = render(setOptions.mock.calls.at(-1)[0].header());
     expect(header.getByText('Playing')).toBeTruthy();
+    act(() => setOptions.mock.calls.at(-1)[0].header().props.onMore());
+    expect(require('@/store/moreOptionsStore').moreOptionsStore.getState()).toEqual(expect.objectContaining({ source: 'player-phone-portrait', entity: { type: 'song', item: MOCK_TRACK } }));
     const frame = StyleSheet.flatten(header.getByTestId('phone-landscape-header').props.style);
     expect(frame.paddingTop).toBe(0);
     expect(frame.paddingLeft).toBe(32);

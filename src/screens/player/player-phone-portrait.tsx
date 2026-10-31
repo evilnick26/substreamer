@@ -3,7 +3,7 @@ import Ionicons from "@react-native-vector-icons/ionicons/static";
 import { FlashList } from '@shopify/flash-list';
 import { Stack, useNavigation, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -86,10 +86,9 @@ const QUEUE_CONTENT_CONTAINER_STYLE = { paddingBottom: 12 } as const;
 
 interface PlayerPhonePortraitProps {
   landscape?: boolean;
-  orientationControl?: ReactNode;
 }
 
-export function PlayerPhonePortrait({ landscape = false, orientationControl }: PlayerPhonePortraitProps = {}) {
+export function PlayerPhonePortrait({ landscape = false }: PlayerPhonePortraitProps = {}) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -216,7 +215,6 @@ export function PlayerPhonePortrait({ landscape = false, orientationControl }: P
         <PhoneLandscapeHeader
           onClose={onClose}
           onMore={() => currentTrack && moreOptionsStore.getState().show({ type: 'song', item: currentTrack }, 'player-phone-portrait')}
-          orientationControl={orientationControl}
         />
       ) : undefined,
       headerLeft: () => (
@@ -238,15 +236,10 @@ export function PlayerPhonePortrait({ landscape = false, orientationControl }: P
             color={colors.textPrimary}
           />
         );
-        return orientationControl ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {orientationControl}
-            {moreOptions}
-          </View>
-        ) : moreOptions;
+        return moreOptions;
       },
     });
-  }, [currentTrack, navigation, onClose, colors.textPrimary, orientationControl, landscape]);
+  }, [currentTrack, navigation, onClose, colors.textPrimary, landscape]);
 
   const onClearConfirmed = useCallback(() => {
     onClose();
