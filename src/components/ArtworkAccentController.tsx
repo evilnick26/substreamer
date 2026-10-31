@@ -10,6 +10,8 @@ import {
   themeStore,
 } from '../store/themeStore';
 
+const MONOCHROME_ACCENT: ArtworkAccentPalette = { dark: '#909090', light: '#505050' };
+
 export function ArtworkAccentController() {
   const enabled = themeStore((s) => s.primaryColor === ARTWORK_PRIMARY_COLOR);
   const track = playerStore((s) => s.currentTrack);
@@ -40,7 +42,7 @@ export function ArtworkAccentController() {
       }
     };
     getSharedArtworkPalette(uri)
-      .then((result) => publish(result ? {
+      .then((result) => publish(result?.monochrome ? MONOCHROME_ACCENT : result?.dark && result.light ? {
         dark: result.dark.primary,
         light: result.light.primary,
       } : null))

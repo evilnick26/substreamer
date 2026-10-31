@@ -50,6 +50,23 @@ const PALETTE_B: Palette = {
   light: { primary: '#ffcccc', secondary: '#ccffcc' },
 };
 
+it('keeps the gradient fallback for monochrome artwork without a chromatic palette', async () => {
+  mockGetPalette.mockResolvedValue({ dark: null, light: null, monochrome: true });
+  const { result } = renderHook(() => useImagePalette('cov-a'));
+  await waitFor(() => expect(mockGetPalette).toHaveBeenCalledTimes(1));
+  await act(async () => {});
+  expect(result.current.primary).toBeNull();
+  expect(result.current.secondary).toBeNull();
+  expect(result.current.gradientOpacity.value).toBe(0);
+});
+
+it('preserves existing chromatic gradient colours even when sparse noise is classified as monochrome', async () => {
+  mockGetPalette.mockResolvedValue({ ...PALETTE_A, monochrome: true });
+  const { result } = renderHook(() => useImagePalette('cov-a'));
+  await waitFor(() => expect(result.current.primary).toBe('#112233'));
+  expect(result.current.secondary).toBe('#445566');
+});
+
 let uris: Record<string, string | null>;
 
 beforeEach(() => {

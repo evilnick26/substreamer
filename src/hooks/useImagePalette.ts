@@ -62,7 +62,7 @@ export function useImagePalette(
     (async () => {
       try {
         const result = await getSharedArtworkPalette(cachedUri);
-        if (!cancelled) setPalette(result);
+        if (!cancelled) setPalette(result?.dark || result?.light ? result : null);
       } catch {
         // Transient extraction failure (file mid-rewrite during a resize, a
         // remote blip, etc). Keep the last-good palette rather than blanking an

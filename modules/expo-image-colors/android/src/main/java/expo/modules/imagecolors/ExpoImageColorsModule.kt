@@ -69,7 +69,7 @@ class ExpoImageColorsModule : Module() {
 
   /**
    * Core extraction. Returns a Map suitable for the Expo Modules bridge to
-   * convert into the TS `Palette` interface, or null for no-usable-colour.
+   * convert into the TS `Palette` interface, or null without colour/neutrality evidence.
    */
   private fun extractPalette(pixels: IntArray): Map<String, Any?>? {
     val count = IntArray(hueBuckets)
@@ -80,6 +80,12 @@ class ExpoImageColorsModule : Module() {
 
     val oklab = DoubleArray(3)
     val rgbLin = DoubleArray(3)
+
+    var visibleCount = 0
+    var chromaticCount = 0
+    var sumChroma = 0.0
+    var sumA = 0.0
+    var sumLabB = 0.0
 
     for (px in pixels) {
       val a = (px ushr 24) and 0xFF
@@ -97,6 +103,12 @@ class ExpoImageColorsModule : Module() {
       val aa = oklab[1]
       val bb = oklab[2]
       val C = sqrt(aa * aa + bb * bb)
+
+      visibleCount++
+      if (C > 0.02) chromaticCount++
+      sumChroma += C
+      sumA += aa
+      sumLabB += bb
 
       if (L < rejectLMin || L > rejectLMax || C < rejectCMin) continue
 
@@ -124,9 +136,18 @@ class ExpoImageColorsModule : Module() {
         primaryIdx = i
       }
     }
-    if (primaryIdx < 0) return null
+    if (visibleCount == 0) return null
+    // Population and mean chroma tolerate sparse noise; mean-vector chroma
+    // preserves coherent subtle tints even when no hue bucket survives.
+    val monochrome = chromaticCount.toDouble() / visibleCount <= 0.005 &&
+      sumChroma / visibleCount <= 0.01 &&
+      sqrt(sumA * sumA + sumLabB * sumLabB) / visibleCount <= 0.003
+    if (primaryIdx < 0) return if (monochrome) mapOf(
+      "dark" to null, "light" to null, "monochrome" to true,
+    ) else null
 
     return mapOf(
+      "monochrome" to monochrome,
       "dark" to modeVariant(primaryIdx, count, sumR, sumG, sumB, dark = true),
       "light" to modeVariant(primaryIdx, count, sumR, sumG, sumB, dark = false),
     )
