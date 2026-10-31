@@ -43,3 +43,7 @@ Owner successfully ran local dry-run for `80000190`: candidate checksum matched 
 ## Read-only remote preflight (implementation awaiting Futwick validation)
 
 Added `--remote-preflight` to inspect Obscurity over SSH without sudo or writes. It verifies directory/manifest presence, refuses symlinked live manifest or target APK, checks that live versionCode is lower than the candidate, and detects conflicting existing APK bytes. It requires an explicit `PREFLIGHT_OK` marker. Added three mocked tests for command shape, missing marker and SSH failure. `--dry-run` remains fully local. This preflight does not yet validate backup state, filesystem writability under sudo, or recovery. The production `--execute` path **remains disabled** pending further safety work. Neither remote preflight nor tests have been run on Futwick yet; no live changes made.
+
+## Futwick import failure and correction
+
+Owner attempted the expanded suite, but Python failed at import with `SyntaxError` on line 209: escaped `\\n` text had been accidentally inserted into executable source during the prior commit. No tests ran and no remote operations occurred. Replaced malformed literal escapes with actual source line breaks (commit `b20f7ee2`). Retest pending. Add a Python compilation check before future test instructions.
