@@ -249,7 +249,8 @@ class ManifestValidationTests(unittest.TestCase):
                           and any(isinstance(t, ast.Name) and t.id == "remote_script"
                                   for t in n.targets))
         template = ast.literal_eval(assignment.value)
-        for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change"):
+        for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change",
+                      "retry-apk", "retry-apk-backup", "conflicting-apk", "conflicting-backup"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp) / "client"
                 (root / "apks").mkdir(parents=True)
@@ -267,9 +268,15 @@ class ManifestValidationTests(unittest.TestCase):
                 new["sha256"] = publisher.digest(scratch / "apk")
                 (scratch / "manifest.json").write_text(json.dumps(new) + "\n")
                 expected_new = (scratch / "manifest.json").read_bytes()
+                target = root / "apks" / f"sanctifi-{CODE}.apk"
+                backup = root / f"alpha-{CODE - 1}.backup.json"
+                if fault in ("retry-apk", "retry-apk-backup", "conflicting-apk"):
+                    target.write_bytes(b"other" if fault == "conflicting-apk" else payload)
+                if fault in ("retry-apk-backup", "conflicting-backup"):
+                    backup.write_bytes(b"other" if fault == "conflicting-backup" else old_bytes)
                 bin_dir = pathlib.Path(temp) / "bin"
                 bin_dir.mkdir()
-                if fault != "none":
+                if fault in ("apk-install", "backup", "manifest-install", "promotion", "concurrent-change"):
                     command, match = {
                         "apk-install": ("install", "*/apks/*"),
                         "backup": ("cp", "*"),
@@ -308,7 +315,7 @@ class ManifestValidationTests(unittest.TestCase):
                 target = root / "apks" / f"sanctifi-{CODE}.apk"
                 self.assertFalse(scratch.exists(), result.stderr)
                 self.assertFalse(list(root.glob(".alpha.json.*")))
-                if fault == "none":
+                if fault in ("none", "retry-apk", "retry-apk-backup"):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(live.read_bytes(), expected_new)
                     self.assertEqual(target.read_bytes(), payload)
@@ -328,6 +335,12 @@ class ManifestValidationTests(unittest.TestCase):
                     elif fault == "backup":
                         self.assertTrue(target.exists())
                         self.assertFalse(backup.exists())
+                    elif fault == "conflicting-apk":
+                        self.assertEqual(target.read_bytes(), b"other")
+                        self.assertFalse(backup.exists())
+                    elif fault == "conflicting-backup":
+                        self.assertEqual(target.read_bytes(), payload)
+                        self.assertEqual(backup.read_bytes(), b"other")
                     else:
                         self.assertEqual(backup.read_bytes(), old_bytes)
 
