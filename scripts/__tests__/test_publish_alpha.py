@@ -339,7 +339,7 @@ class ManifestValidationTests(unittest.TestCase):
                         self.assertEqual(target.read_bytes(), b"other")
                         self.assertFalse(backup.exists())
                     elif fault == "conflicting-backup":
-                        self.assertEqual(target.read_bytes(), payload)
+                        self.assertFalse(target.exists())
                         self.assertEqual(backup.read_bytes(), b"other")
                     else:
                         self.assertEqual(backup.read_bytes(), old_bytes)
