@@ -153,6 +153,17 @@ def cleanup_remote_scratch(scratch):
         return False
     return True
 
+
+def privileged_ssh_argv(script):
+    """Build the eventual interactive privileged transport; do not execute it.
+
+    -tt allocates a remote terminal even if SSH stdin is not a terminal.
+    A quoted bash -c argument prevents shell interpretation before sudo.
+    No passwords are stored or supplied on stdin.
+    """
+    return ["ssh", "-tt", REMOTE, "sudo bash -c " + shlex.quote(script)]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--code", type=int, required=True)
@@ -253,9 +264,9 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,
-        # with no user-writable script to execute and no stdin collision.
-        command = "sudo bash -c " + shlex.quote(script)
+        # Construct but DO NOT execute the privileged SSH command until reviewed.
+        # Forced remote TTY permits interactive sudo authentication.
+        command = privileged_ssh_argv(script)
         # Deliberately blocked until mocked transport and remote preflight tests pass.
         raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
 
