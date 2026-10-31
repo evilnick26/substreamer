@@ -172,7 +172,7 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,\n        # with no user-writable script to execute and no stdin collision.\n        command = "sudo bash -c " + shlex.quote(script)\n        run("ssh", "-tt", REMOTE, command)
+        # Quoted bash -c argument: sudo authenticates via the remote SSH TTY,\n        # with no user-writable script to execute and no stdin collision.\n        command = "sudo bash -c " + shlex.quote(script)\n        # Deliberately blocked until mocked transport and remote preflight tests pass.\n        raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
 
     finally:
         subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"], check=False)
