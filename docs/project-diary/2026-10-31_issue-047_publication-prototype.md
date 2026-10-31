@@ -35,3 +35,7 @@ Owner reported successful rerun after regression assertion fixes: `Ran 10 tests 
 ## Real candidate prepared on Futwick
 
 Owner ran `--prepare-manifest` for release `80000190`, reviewed and approved the preview, and saved `/tmp/sanctifi-alpha-80000190.json`. The reported SHA-256 was `2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`, matching the staged APK. Notes: “sancti.fi Client 0.1.2 — Release Type grouping. Albums can now be explored by release type, making it easier to navigate the library.” UX feedback: waiting for multiline input looked stalled; changed instructions ordering and added `> ` prompt (commit `a632c5d2`). Remote publication remains untested and disabled.
+
+## Local dry-run verified; remote transport investigation
+
+Owner successfully ran local dry-run for `80000190`: candidate checksum matched staged APK (`2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`); no SSH, sudo or publication occurred. Investigated avoiding execution of user-writable remote shell scripts as root. Added an explicit typed `PUBLISH` gate and constructed a shell-quoted privileged command intended for SSH TTY transport, but **left remote promotion explicitly disabled** until mocked transport, remote preflight and failure/recovery tests are completed. No production deployment was attempted.
