@@ -190,6 +190,7 @@ def main():
     manifest_check(data, code, checksum)
     print(f"Release: {code}; APK: {apk}; SHA-256: {checksum}", flush=True)
     print(f"Manifest: {args.manifest}; remote: {REMOTE}:{ROOT}/alpha.json", flush=True)
+    # Keep the exact reviewed bytes for later public verification.
     if args.dry_run:
         print("LOCAL DRY RUN ONLY: no SSH, transfer, sudo or publication attempted.")
         return
@@ -282,12 +283,14 @@ echo "REMOTE_PROMOTED:$code:$sha"
     with urllib.request.urlopen(f"{BASE}/alpha.json?verify={code}", timeout=30) as response:
         public = json.load(response)
     manifest_check(public, code, checksum)
+    if public != data:
+        raise RuntimeError("PUBLIC MANIFEST DIFFERS FROM REVIEWED CANDIDATE: publication may already be live")
     with urllib.request.urlopen(f"{BASE}/apks/sanctifi-{code}.apk", timeout=120) as response:
         h = hashlib.sha256()
         for block in iter(lambda: response.read(1024 * 1024), b""):
             h.update(block)
     if h.hexdigest() != checksum:
-        raise RuntimeError("PUBLIC APK CHECKSUM MISMATCH: inspect server immediately")
+        raise RuntimeError("PUBLIC APK CHECKSUM MISMATCH: publication may already be live; inspect server immediately")
     print(f"PUBLICATION VERIFIED: {code}, {checksum}")
 
 
