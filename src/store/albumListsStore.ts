@@ -52,7 +52,7 @@ export interface AlbumListsState {
   setRecentlyPlayed: (albums: AlbumID3[]) => void;
   setFrequentlyPlayed: (albums: AlbumID3[]) => void;
   setRandomSelection: (albums: AlbumID3[]) => void;
-  refreshRecentlyAdded: () => Promise<void>;
+  refreshRecentlyAdded: (size?: number) => Promise<boolean>;
   refreshRecentlyPlayed: () => Promise<void>;
   refreshFrequentlyPlayed: () => Promise<void>;
   refreshRandomSelection: () => Promise<void>;
@@ -82,20 +82,29 @@ async function persistList(
   listType: RepoAlbumListType,
   fetcher: (size: number) => Promise<AlbumID3[]>,
   set: (partial: Partial<AlbumListsState>) => void,
-): Promise<void> {
+  size: number = layoutPreferencesStore.getState().listLength,
+  isCurrent = () => true,
+): Promise<boolean> {
   try {
     await ensureCoverArtAuth();
-    const albums = await fetcher(layoutPreferencesStore.getState().listLength);
+    const albums = await fetcher(size);
+    if (!isCurrent()) return false;
     reconcileAlbumRatings(albums);
     const db = getDb();
-    if (db && albums.length > 0) {
-      await upsertAlbums(db, albums, undefined, getSortArticles(), { merge: true });
+    if (db) {
+      if (albums.length > 0) {
+        await upsertAlbums(db, albums, undefined, getSortArticles(), { merge: true });
+      }
+      if (!isCurrent()) return false;
       await replaceAlbumList(db, listType, albums.map((a) => a.id));
     }
+    if (!isCurrent()) return false;
     set({ [listType]: albums } as Partial<AlbumListsState>);
     prefetchCoverArt(albums);
+    return true;
   } catch {
     // Leave existing state — a transient fetch failure shouldn't blank the row.
+    return false;
   }
 }
 
@@ -120,6 +129,7 @@ export async function hydrateAlbumListsFromDb(): Promise<void> {
 }
 
 const PERSIST_KEY = 'substreamer-album-lists';
+let recentlyAddedRequest = 0;
 
 export const albumListsStore = create<AlbumListsState>()(
   persist(
@@ -135,8 +145,10 @@ export const albumListsStore = create<AlbumListsState>()(
       setFrequentlyPlayed: (albums) => set({ frequentlyPlayed: albums }),
       setRandomSelection: (albums) => set({ randomSelection: albums }),
 
-      refreshRecentlyAdded: async () => {
-        await persistList('recentlyAdded', getRecentlyAddedAlbums, set);
+      refreshRecentlyAdded: async (size) => {
+        const request = ++recentlyAddedRequest;
+        return persistList('recentlyAdded', getRecentlyAddedAlbums, set, size,
+          () => request === recentlyAddedRequest);
       },
 
       refreshRecentlyPlayed: async () => {

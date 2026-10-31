@@ -71,7 +71,6 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            href: null,
             title: t('home'),
             tabBarIcon: ({ color, size }) => (
               <WaveformLogo size={size} color={color} />

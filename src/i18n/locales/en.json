@@ -1195,5 +1195,9 @@
   "clientBuildLabel": "Build {{build}}",
   "clientUpdateTapHint": "Tap to check for updates",
   "clientUpdateCheckHint": "Checks for a newer sancti.fi Client release.",
-  "basedOnSubstreamer": "Based on Substreamer"
+  "basedOnSubstreamer": "Based on Substreamer",
+  "recentlyUploaded": "Recently Uploaded",
+  "homeAlbumsOffline": "Offline — showing the last available albums.",
+  "homeAlbumsError": "Unable to refresh albums. Showing the last available list.",
+  "homeAlbumsEmpty": "No recently uploaded albums."
 }

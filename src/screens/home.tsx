@@ -78,7 +78,7 @@ const SECTION_CONFIG: Record<
   recentlyAdded: {
     titleKey: 'recentlyAdded',
     emptyMessageKey: 'recentlyAddedEmpty',
-    refresh: () => albumListsStore.getState().refreshRecentlyAdded(),
+    refresh: async () => { await albumListsStore.getState().refreshRecentlyAdded(); },
   },
   recentlyPlayed: {
     titleKey: 'recentlyPlayed',

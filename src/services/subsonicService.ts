@@ -360,6 +360,7 @@ export async function getRecentlyAddedAlbums(size?: number): Promise<AlbumID3[]>
   const api = getApi();
   if (!api) return [];
   const response = await api.getAlbumList2({ type: 'newest', size: size ?? 20 });
+  if (response.status === 'failed') throw new Error('Unable to fetch newest albums');
   return response.albumList2?.album ?? [];
 }
 
