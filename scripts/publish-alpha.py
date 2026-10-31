@@ -297,6 +297,6 @@ echo "REMOTE_PROMOTED:$code:$sha"
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, KeyError, AssertionError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, AssertionError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"PUBLICATION FAILED: {error}", file=sys.stderr)
         sys.exit(1)
