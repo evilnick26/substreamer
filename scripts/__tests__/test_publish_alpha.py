@@ -139,6 +139,78 @@ class ManifestValidationTests(unittest.TestCase):
             transfer.assert_not_called()
             transport.assert_not_called()
 
+
+    def test_transport_failure_matrix_and_cleanup(self):
+        import subprocess
+        scratch = "/tmp/sanctifi-publish.ABC12345"
+        for failure in ("ssh", "apk", "manifest", "blocked"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp)
+                apk = root / f"sanctifi-{CODE}.apk"
+                apk.write_bytes(b"test")
+                manifest = root / "candidate.json"
+                data = candidate()
+                data["sha256"] = publisher.digest(apk)
+                manifest.write_text(json.dumps(data))
+                argv = ["publish-alpha.py", "--code", str(CODE),
+                        "--manifest", str(manifest), "--execute"]
+                ssh_results = ([subprocess.CalledProcessError(255, "ssh")]
+                               if failure == "ssh" else
+                               [mock.Mock(stdout=scratch + "\\n"), mock.Mock(returncode=0)])
+                transfers = ([subprocess.CalledProcessError(1, "scp")]
+                             if failure == "apk" else
+                             [mock.Mock(), subprocess.CalledProcessError(1, "scp")]
+                             if failure == "manifest" else
+                             [mock.Mock(), mock.Mock()])
+                with mock.patch.object(publisher, "ARCHIVE", root), \
+                     mock.patch.object(publisher.sys, "argv", argv), \
+                     mock.patch.object(publisher, "remote_preflight") as preflight, \
+                     mock.patch.object(publisher.subprocess, "run",
+                                       side_effect=ssh_results) as ssh, \
+                     mock.patch.object(publisher, "run",
+                                       side_effect=transfers) as scp, \
+                     mock.patch("builtins.input", return_value="PUBLISH"):
+                    with self.assertRaises((subprocess.CalledProcessError, RuntimeError)):
+                        publisher.main()
+                preflight.assert_called_once_with(CODE, data["sha256"])
+                self.assertEqual(scp.call_count, {"ssh": 0, "apk": 1,
+                                                   "manifest": 2, "blocked": 2}[failure])
+                self.assertEqual(ssh.call_count, 1 if failure == "ssh" else 2)
+                if failure != "ssh":
+                    self.assertEqual(ssh.call_args.args[0],
+                                     ["ssh", publisher.REMOTE, f"rm -rf -- {scratch}"])
+
+    def test_unexpected_remote_scratch_path_refuses_transfer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            apk = root / f"sanctifi-{CODE}.apk"
+            apk.write_bytes(b"test")
+            manifest = root / "candidate.json"
+            data = candidate()
+            data["sha256"] = publisher.digest(apk)
+            manifest.write_text(json.dumps(data))
+            argv = ["publish-alpha.py", "--code", str(CODE),
+                    "--manifest", str(manifest), "--execute"]
+            with mock.patch.object(publisher, "ARCHIVE", root), \
+                 mock.patch.object(publisher.sys, "argv", argv), \
+                 mock.patch.object(publisher, "remote_preflight"), \
+                 mock.patch.object(publisher.subprocess, "run",
+                                   return_value=mock.Mock(stdout="/tmp/unsafe;rm -rf /\\n")), \
+                 mock.patch.object(publisher, "run") as scp, \
+                 mock.patch("builtins.input", return_value="PUBLISH"):
+                with self.assertRaisesRegex(RuntimeError, "Unexpected remote temporary directory"):
+                    publisher.main()
+            scp.assert_not_called()
+
+    def test_remote_promotion_recovery_invariants(self):
+        # Static checks only: do not pretend the privileged remote script was executed.
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("trap 'rm -f -- \"$tmp\"; rm -rf -- \"$scratch\"' EXIT", source)
+        self.assertIn('cmp -s "$root/alpha.json" "$backup"', source)
+        self.assertIn('mv -T -- "$tmp" "$root/alpha.json"', source)
+        self.assertIn('echo "REMOTE_PROMOTED:$code:$sha"', source)
+        self.assertIn('raise RuntimeError("Remote promotion disabled', source)
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
