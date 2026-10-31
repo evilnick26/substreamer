@@ -39,3 +39,7 @@ Owner ran `--prepare-manifest` for release `80000190`, reviewed and approved the
 ## Local dry-run verified; remote transport investigation
 
 Owner successfully ran local dry-run for `80000190`: candidate checksum matched staged APK (`2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`); no SSH, sudo or publication occurred. Investigated avoiding execution of user-writable remote shell scripts as root. Added an explicit typed `PUBLISH` gate and constructed a shell-quoted privileged command intended for SSH TTY transport, but **left remote promotion explicitly disabled** until mocked transport, remote preflight and failure/recovery tests are completed. No production deployment was attempted.
+
+## Read-only remote preflight (implementation awaiting Futwick validation)
+
+Added `--remote-preflight` to inspect Obscurity over SSH without sudo or writes. It verifies directory/manifest presence, refuses symlinked live manifest or target APK, checks that live versionCode is lower than the candidate, and detects conflicting existing APK bytes. It requires an explicit `PREFLIGHT_OK` marker. Added three mocked tests for command shape, missing marker and SSH failure. `--dry-run` remains fully local. This preflight does not yet validate backup state, filesystem writability under sudo, or recovery. The production `--execute` path **remains disabled** pending further safety work. Neither remote preflight nor tests have been run on Futwick yet; no live changes made.
