@@ -71,7 +71,7 @@ class ManifestValidationTests(unittest.TestCase):
             result = json.loads(target.read_text())
             self.assertEqual(result["releaseNotes"], "First line\\nSecond line")
             self.assertEqual(result["sha256"], publisher.digest(apk))
-            self.assertTrue(target.read_text().endswith("\\n"))
+            self.assertTrue(target.read_text().endswith("\n"))
             with mock.patch.object(publisher, "ARCHIVE", root), mock.patch("builtins.input", return_value="YES"):
                 with self.assertRaises(FileExistsError):
                     publisher.prepare_manifest(CODE, "changed", target)
