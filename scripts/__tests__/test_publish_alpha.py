@@ -90,7 +90,7 @@ class ManifestValidationTests(unittest.TestCase):
             publisher.prepare_manifest(CODE, "  ", pathlib.Path("/tmp/unused.json"))
 
     def test_remote_preflight_read_only_command(self):
-        completed = mock.Mock(stdout="LIVE_VERSION: 80000189\\nAPK_TARGET: absent\\nPREFLIGHT_OK\\n")
+        completed = mock.Mock(stdout="LIVE_VERSION: 80000189\nAPK_TARGET: absent\nPREFLIGHT_OK\n")
         with mock.patch.object(publisher.subprocess, "run", return_value=completed) as run:
             publisher.remote_preflight(CODE, HASH)
         argv = run.call_args.args[0]
