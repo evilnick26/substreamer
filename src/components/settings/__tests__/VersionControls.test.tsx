@@ -95,7 +95,7 @@ test('newer release shows version/build and plain notes; browser opens only on e
   expect(latestMessage()).toContain('<b>Plain text release notes</b>');
   expect(Linking.openURL).not.toHaveBeenCalled();
   expect(clientUpdateChecker.claimPrompt).toHaveBeenCalledWith(80000187);
-  const download = latestButtons().find((button) => button.text === 'Download APK');
+  const download = latestButtons().find((button) => button.text === 'Download');
   await act(async () => download?.onPress?.());
   expect(Linking.openURL).toHaveBeenCalledWith(manifest.apkUrl);
 });
@@ -106,7 +106,7 @@ test('browser failure is reported', async () => {
   render(<SanctifiVersionLabel />);
   fireEvent.press(screen.getByRole('button', { name: 'Check for updates' }));
   await screen.findByText('Version 0.2.0 (build 80000187)');
-  await act(async () => latestButtons().find((button) => button.text === 'Download APK')?.onPress?.());
+  await act(async () => latestButtons().find((button) => button.text === 'Download')?.onPress?.());
   expect(latestMessage()).toContain('Unable to open the APK link');
 });
 
