@@ -172,6 +172,7 @@ def main():
     mode.add_argument("--prepare-manifest", action="store_true", help="Interactively create a local candidate only")
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--remote-preflight", action="store_true", help="Read-only SSH inspection; no sudo or writes")
+    mode.add_argument("--rehearse", action="store_true", help="Local checks plus read-only remote preflight; no transfer or writes")
     mode.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     code = args.code
@@ -195,8 +196,10 @@ def main():
         print("LOCAL DRY RUN ONLY: no SSH, transfer, sudo or publication attempted.")
         return
 
-    if args.remote_preflight:
+    if args.remote_preflight or args.rehearse:
         remote_preflight(code, checksum)
+        if args.rehearse:
+            print("REHEARSAL_OK: local validation and remote preflight passed; no transfer, sudo or publication.", flush=True)
         return
 
     # The privileged program is supplied as a quoted SSH command, never loaded
