@@ -219,3 +219,7 @@ Owner confirmed release 80000190 was tested after publication and approved by th
 ## Final UI polish — update action label
 
 After successful live Alpha 80000190 publication and tester acceptance, owner requested changing the update notification action from `Download APK` to `Download`. Located the canonical English string in `src/i18n/locales/en.json`; updated it and corresponding expectations in `ClientUpdateController.test.tsx` and `VersionControls.test.tsx` on `issue-047-publication-automation`. Historical diary mentions remain unchanged. No download behavior or release publication changed. Futwick targeted tests pending; 80000190 already published retains original wording until a future APK build. Branch integration remains subject to owner approval.
+
+## Final UI regression validation — passed
+
+Owner pulled final label-only change onto Futwick and ran the two targeted Jest test files across both Android and iOS projects. Results: 4/4 suites passed, 64/64 tests passed, 0 failures, 0 snapshots, 6.694 s. The English update notification action is now `Download` instead of `Download APK`; no change to download behaviour. Issue #047 is ready for owner-authorised integration into `sanctifi`; no merge has yet been performed. Published Alpha 80000190 retains the original wording until a subsequent build.
