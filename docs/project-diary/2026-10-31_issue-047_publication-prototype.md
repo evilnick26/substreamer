@@ -175,3 +175,7 @@ Reviewed full publisher flow. Nonblocking `flock` serialises cooperating publish
 ## Futwick validation — readiness hardening passed
 
 Owner reported `Ran 21 tests in 1.434s` / `OK` after public manifest comparison and RuntimeError handling changes. All 14 sandbox scenarios continue to pass. Remaining operational decision: whether any independent writer can update `/opt/updates-site/client/alpha.json`; `flock` protects cooperating publisher instances only. No live publication; `--execute` remains disabled.
+
+## Operational ownership decision — alpha.json
+
+Owner confirmed that, at present, they are the only person who updates the live `alpha.json`. Agreed operational model: attended publisher is the sole automated writer; avoid manual edits while a publication is running. Retain nonblocking `flock` for concurrent publisher runs and final manifest comparison for detecting unexpected prior changes. Accept residual non-atomic compare-to-rename race against noncooperating writers, with no evidence of another writer currently. This is not proof that no automated process exists. Proceed toward final attended rehearsal, but do not enable `--execute` or publish without explicit owner approval.
