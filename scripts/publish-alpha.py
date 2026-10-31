@@ -136,6 +136,23 @@ echo "PREFLIGHT_OK"
 
 
 
+
+def cleanup_remote_scratch(scratch):
+    """Best-effort cleanup; never hide the original transport error."""
+    try:
+        result = subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"],
+                                check=False)
+    except OSError as error:
+        print(f"WARNING: remote scratch cleanup could not run for {scratch}: {error}",
+              file=sys.stderr, flush=True)
+        return False
+    if result.returncode != 0:
+        print(f"WARNING: remote scratch cleanup failed for {scratch} "
+              f"(SSH exit {result.returncode}); manual inspection may be needed",
+              file=sys.stderr, flush=True)
+        return False
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--code", type=int, required=True)
@@ -240,7 +257,7 @@ echo "REMOTE_PROMOTED:$code:$sha"
         raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
 
     finally:
-        subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"], check=False)
+        cleanup_remote_scratch(scratch)
     print("Remote promotion reported success. Verify public HTTPS before declaring publication complete.", flush=True)
     import urllib.request
     with urllib.request.urlopen(f"{BASE}/alpha.json?verify={code}", timeout=30) as response:
