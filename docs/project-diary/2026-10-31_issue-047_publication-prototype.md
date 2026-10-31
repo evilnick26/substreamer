@@ -139,3 +139,7 @@ Owner confirmed `Ran 20 tests in 0.828s` / `OK` after correcting the conflicting
 ## Symlink collision tests — awaiting validation
 
 Added two sandbox subcases to assert the privileged promotion script refuses symlink APK and backup destinations (including dangling symlinks), preserves the live manifest, and cleans scratch without installing new files. Expected: 20 unittest methods, 12 sandbox subcases. No publisher changes, SSH/sudo or production execution. Remaining high-priority review: the current disabled `--execute` path constructs `sudo bash -c` without invoking SSH with a forced remote TTY; interactive sudo may fail in real use. Also the final compare-to-rename race remains. Do not enable promotion without resolving and testing transport.
+
+## Symlink tests revealed actual fail-open bug — fix pending validation
+
+Owner reported 20 test methods with two failing sandbox subcases: dangling symlink APK target unexpectedly allowed publication; dangling symlink backup target allowed APK creation. Root cause in production embedded Bash: `test ! -L "$target" && test ! -L "$backup" && test ! -L "$root/alpha.json"` is an AND list; with Bash `set -e`, a failing nonfinal command in an AND list does not necessarily abort the script, and the final successful check permits continuation. Replaced with explicit `if test -L ... || ...; then echo error; exit 1; fi`. This is a genuine publisher safety correction, not a test expectation change. Owner revalidation pending. `--execute` remains blocked; no production writes.
