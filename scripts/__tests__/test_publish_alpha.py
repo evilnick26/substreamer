@@ -98,6 +98,9 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertNotIn("sudo", argv[2])
         self.assertNotIn("install ", argv[2])
         self.assertNotIn("mv ", argv[2])
+        self.assertIn("BACKUP: absent", argv[2])
+        self.assertIn("Conflicting backup", argv[2])
+        self.assertIn("Symlink backup", argv[2])
         self.assertTrue(run.call_args.kwargs["check"])
 
     def test_remote_preflight_requires_success_marker(self):
