@@ -115,6 +115,16 @@ if test -e "$target"; then
 else
   echo "APK_TARGET: absent"
 fi
+current=$(python3 -c 'import json; print(json.load(open("/opt/updates-site/client/alpha.json"))["versionCode"])')
+backup="$root/alpha-$current.backup.json"
+test ! -L "$backup" || { echo "Symlink backup" >&2; exit 1; }
+if test -e "$backup"; then
+  test -f "$backup" || { echo "Backup is not a regular file" >&2; exit 1; }
+  cmp -s "$root/alpha.json" "$backup" || { echo "Conflicting backup" >&2; exit 1; }
+  echo "BACKUP: matches current live manifest"
+else
+  echo "BACKUP: absent"
+fi
 echo "PREFLIGHT_OK"
 '''
     command = "sh -c " + shlex.quote(remote.replace("__CODE__", str(code)).replace("__SHA__", checksum))
