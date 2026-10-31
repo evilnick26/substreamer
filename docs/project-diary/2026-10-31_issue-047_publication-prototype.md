@@ -59,3 +59,7 @@ Owner reported `Ran 13 tests in 0.014s` / `OK` after fixing the mock output fixt
 ## First real Obscurity read-only preflight — passed
 
 Owner ran `--remote-preflight` on Futwick for candidate `80000190`, with interactive SSH password. Output reported local SHA-256 `2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`, `LIVE_VERSION: 80000189`, `APK_TARGET: absent`, and `PREFLIGHT_OK`. No file transfers, sudo or publication. This confirms the read-only preflight checks, not the privileged installation/recovery path. Production `--execute` remains disabled pending transport and failure-path validation.
+
+## Continued guarded development — backup preflight
+
+Following owner approval to continue development, expanded the read-only remote preflight to inspect the expected backup path for the currently live version, reject symlinks/non-files and refuse a conflicting existing backup. Added test assertions that the remote command includes these checks. These changes are committed on the development branch but not yet tested on Futwick. No server writes or publication. The privileged `--execute` promotion remains deliberately disabled; backup/recovery and privileged transport need further testing before release.
