@@ -241,7 +241,6 @@ class ManifestValidationTests(unittest.TestCase):
         import ast
         import os
         import subprocess
-        import textwrap
         tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
         main = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
                     and n.name == "main")
