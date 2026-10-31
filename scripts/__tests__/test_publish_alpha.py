@@ -251,7 +251,7 @@ class ManifestValidationTests(unittest.TestCase):
         template = ast.literal_eval(assignment.value)
         for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change",
                       "retry-apk", "retry-apk-backup", "conflicting-apk", "conflicting-backup",
-                      "symlink-apk", "symlink-backup"):
+                      "symlink-apk", "symlink-backup", "lock-held", "symlink-lock"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp) / "client"
                 (root / "apks").mkdir(parents=True)
@@ -279,6 +279,13 @@ class ManifestValidationTests(unittest.TestCase):
                     target.symlink_to(pathlib.Path(temp) / "missing-apk")
                 if fault == "symlink-backup":
                     backup.symlink_to(pathlib.Path(temp) / "missing-backup")
+                held_lock = None
+                if fault == "lock-held":
+                    import fcntl
+                    held_lock = (root / ".alpha-publish.lock").open("w")
+                    fcntl.flock(held_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if fault == "symlink-lock":
+                    (root / ".alpha-publish.lock").symlink_to(pathlib.Path(temp) / "missing-lock")
                 bin_dir = pathlib.Path(temp) / "bin"
                 bin_dir.mkdir()
                 if fault in ("apk-install", "backup", "manifest-install", "promotion", "concurrent-change"):
@@ -318,6 +325,8 @@ class ManifestValidationTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 backup = root / f"alpha-{CODE - 1}.backup.json"
                 target = root / "apks" / f"sanctifi-{CODE}.apk"
+                if held_lock is not None:
+                    held_lock.close()
                 self.assertFalse(scratch.exists(), result.stderr)
                 self.assertFalse(list(root.glob(".alpha.json.*")))
                 if fault in ("none", "retry-apk", "retry-apk-backup"):
@@ -339,6 +348,9 @@ class ManifestValidationTests(unittest.TestCase):
                         self.assertFalse(backup.exists())
                     elif fault == "backup":
                         self.assertTrue(target.exists())
+                        self.assertFalse(backup.exists())
+                    elif fault in ("lock-held", "symlink-lock"):
+                        self.assertFalse(target.exists())
                         self.assertFalse(backup.exists())
                     elif fault == "symlink-apk":
                         self.assertTrue(target.is_symlink())
