@@ -211,6 +211,26 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertIn('echo "REMOTE_PROMOTED:$code:$sha"', source)
         self.assertIn('raise RuntimeError("Remote promotion disabled', source)
 
+
+    def test_cleanup_reports_nonzero_ssh_exit(self):
+        scratch = "/tmp/sanctifi-publish.ABC12345"
+        with mock.patch.object(publisher.subprocess, "run",
+                               return_value=mock.Mock(returncode=255)) as ssh, \
+             mock.patch.object(publisher.sys, "stderr", new_callable=__import__("io").StringIO) as stderr:
+            self.assertFalse(publisher.cleanup_remote_scratch(scratch))
+        self.assertIn("WARNING: remote scratch cleanup failed", stderr.getvalue())
+        self.assertIn(scratch, stderr.getvalue())
+        self.assertEqual(ssh.call_args.args[0],
+                         ["ssh", publisher.REMOTE, f"rm -rf -- {scratch}"])
+
+    def test_cleanup_reports_ssh_launch_failure(self):
+        scratch = "/tmp/sanctifi-publish.ABC12345"
+        with mock.patch.object(publisher.subprocess, "run",
+                               side_effect=OSError("ssh missing")), \
+             mock.patch.object(publisher.sys, "stderr", new_callable=__import__("io").StringIO) as stderr:
+            self.assertFalse(publisher.cleanup_remote_scratch(scratch))
+        self.assertIn("ssh missing", stderr.getvalue())
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
