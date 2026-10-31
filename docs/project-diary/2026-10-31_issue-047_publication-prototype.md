@@ -91,3 +91,7 @@ Added isolated tests for SSH scratch-creation failure, APK SCP failure, manifest
 ## Transport test failure and fixture correction
 
 Owner reported 14/17 passing. Three `test_transport_failure_matrix_and_cleanup` subcases (`apk`, `manifest`, `blocked`) saw zero SCP calls. Root cause: mocked scratch-path SSH stdout contained a literal backslash-n rather than a newline, failing path validation before transfers. Corrected escape in the test fixture. Awaiting Futwick revalidation; publisher and production files unchanged.
+
+## Futwick transport suite validated — 17/17
+
+Owner reported `Ran 17 tests in 0.035s` / `OK` after fixing the mocked SSH stdout newline. The transport failure matrix, unsafe scratch path refusal, and static promotion/recovery invariants passed. This validates mocked SSH/SCP control flow and cleanup attempts only; no isolated privileged-script execution or fault-injected recovery has been performed. `--execute` remains deliberately blocked. Next: sandboxed privileged promotion/fault-injection tests and review cleanup failure reporting before any production authorization.
