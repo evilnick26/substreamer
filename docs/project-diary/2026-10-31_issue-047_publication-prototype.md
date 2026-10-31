@@ -155,3 +155,7 @@ Owner confirmed `Ran 21 tests in 1.041s` / `OK` after adding the privileged SSH 
 ## Obscurity interactive authentication rehearsal — passed
 
 Owner ran from Futwick: `ssh -tt evilnick@obscurity 'sudo -v && sudo -n id -u'`. SSH requested the evilnick password, sudo separately requested the evilnick sudo password, command returned UID `0`, and the connection closed normally. This confirms an interactive remote TTY and sudo authentication work in the owner's environment, without release-file writes or APK transfer. Owner explicitly prefers both prompts. The full publisher transport has not yet been executed; `--execute` remains disabled and release 80000190 remains unpublished. Remaining: final check/rename race, full attended rehearsal and explicit publication approval.
+
+## Publisher concurrency lock — awaiting Futwick validation
+
+Added a nonblocking `flock` on a root-side `.alpha-publish.lock` file to serialise cooperating publisher invocations. A symlink lock path is explicitly refused. Extended the sandbox with two subcases: lock held by another process, and dangling symlink lock path. Both must fail before APK/backup changes and clean up scratch. Expected 21 unittest methods, 14 sandbox scenarios. This mitigates simultaneous publisher runs but does NOT close the compare-to-rename race against noncooperating external writers; further design review remains required. No live publication or privileged execution; `--execute` remains disabled.
