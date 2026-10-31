@@ -23,3 +23,7 @@ Added `scripts/publish-alpha.py` as an initial prototype, with local `--dry-run`
 Owner confirmed that release notes are the only routinely human-authored manifest field. Added `--prepare-manifest` mode to `scripts/publish-alpha.py`: read a multiline changelog terminated by a single-dot line, derive canonical schema/versionCode/versionName/URL/SHA-256 from the staged APK, show the JSON for review, require explicit `YES`, and create the local candidate with exclusive file creation. It does not contact Obscurity. Added tests for successful creation, cancellation, existing-file protection and empty notes. Existing unsafe privileged remote execution path remains disabled.
 
 **Validation pending:** tests have been committed but not executed on Futwick. Do not use `--execute`. Test candidate generation and dry-run only after fetching this branch. Further remote safety design and failure testing remain required.
+
+## Futwick test feedback and correction
+
+Owner ran `python3 -m unittest discover -s scripts/__tests__ -p 'test_publish_alpha.py' -v` on the branch. Nine tests passed; the manifest-save test failed with `JSONDecodeError: Extra data`. Investigation identified double-escaped Python newline literals in the generated JSON suffix, preview and multiline notes join. Corrected these to actual newline escape sequences in commit `4ee46532`. **Retest pending**; no production manifest or publication was performed.
