@@ -79,3 +79,7 @@ Reviewed current publisher and identified that `--execute` previously asked for 
 ## Execute preflight failure-path test added
 
 Owner confirmed Python compilation and 13/13 existing tests green after mandatory execute preflight gate. Added isolated test `test_execute_preflight_failure_prevents_confirmation_and_transfer`: creates a temporary APK/manifest, mocks remote preflight failure, asserts no confirmation prompt, SCP, or SSH transport. Test committed; Futwick execution pending. Production promotion remains disabled.
+
+## Futwick validation — 14 tests passing
+
+Owner confirmed `python3 -m py_compile` passed for publisher and tests, followed by `Ran 14 tests in 0.011s` / `OK`. The new `test_execute_preflight_failure_prevents_confirmation_and_transfer` passed, establishing that mocked preflight refusal stops before confirmation, SSH staging or SCP transfer. Production promotion remains disabled. Next: isolated transport failure tests and privileged promotion recovery review.
