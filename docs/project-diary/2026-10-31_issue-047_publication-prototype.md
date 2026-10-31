@@ -159,3 +159,7 @@ Owner ran from Futwick: `ssh -tt evilnick@obscurity 'sudo -v && sudo -n id -u'`.
 ## Publisher concurrency lock — awaiting Futwick validation
 
 Added a nonblocking `flock` on a root-side `.alpha-publish.lock` file to serialise cooperating publisher invocations. A symlink lock path is explicitly refused. Extended the sandbox with two subcases: lock held by another process, and dangling symlink lock path. Both must fail before APK/backup changes and clean up scratch. Expected 21 unittest methods, 14 sandbox scenarios. This mitigates simultaneous publisher runs but does NOT close the compare-to-rename race against noncooperating external writers; further design review remains required. No live publication or privileged execution; `--execute` remains disabled.
+
+## Lock failure cleanup regression — fix pending validation
+
+Owner reported 21 tests with two sandbox failures (`lock-held`, `symlink-lock`): both correctly rejected publication but left remote scratch directory behind. Root cause: new lock checks ran before the EXIT cleanup trap was registered. Moved `trap 'rm -rf -- "$scratch"' EXIT` immediately after `scratch=__SCRATCH__`, before lock checks. No test expectations weakened. Checked publisher and test source for literal `/n`: none found; escaped `\\n` occurrences are intentional in source strings. Awaiting Futwick rerun. `--execute` remains disabled; release 80000190 unpublished.
