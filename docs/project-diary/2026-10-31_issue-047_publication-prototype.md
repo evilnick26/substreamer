@@ -179,3 +179,7 @@ Owner reported `Ran 21 tests in 1.434s` / `OK` after public manifest comparison 
 ## Operational ownership decision — alpha.json
 
 Owner confirmed that, at present, they are the only person who updates the live `alpha.json`. Agreed operational model: attended publisher is the sole automated writer; avoid manual edits while a publication is running. Retain nonblocking `flock` for concurrent publisher runs and final manifest comparison for detecting unexpected prior changes. Accept residual non-atomic compare-to-rename race against noncooperating writers, with no evidence of another writer currently. This is not proof that no automated process exists. Proceed toward final attended rehearsal, but do not enable `--execute` or publish without explicit owner approval.
+
+## Clarification — sole entity updating alpha.json
+
+Owner clarified explicitly that they are not merely the only person but the only entity updating live `alpha.json`: no other automated writer exists. The attended publisher will become the controlled publication path; concurrent invocations remain guarded by `flock`. Residual compare-to-rename race with an external writer is accepted under this operating model, which should be revisited if ownership changes. Final nonpublishing rehearsal remains pending; `--execute` remains disabled and release 80000190 unpublished.
