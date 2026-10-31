@@ -67,3 +67,7 @@ Following owner approval to continue development, expanded the read-only remote 
 ## Futwick validation — backup preflight checks
 
 Owner ran Python compilation and the 13-test suite after the backup-preflight changes; reported `Ran 13 tests in 0.011s` and `OK`. The `LIVE_VERSION` output inside the unit tests is mocked. Next validation is a fresh attended, read-only `--remote-preflight` on Obscurity to exercise the new backup checks. No production changes.
+
+## Live Obscurity backup preflight — passed
+
+Owner reran attended read-only `--remote-preflight` for `80000190`. Server reported `LIVE_VERSION: 80000189`, `APK_TARGET: absent`, `BACKUP: absent`, `PREFLIGHT_OK`. Local APK SHA-256 remained `2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`. No writes, sudo, or publication occurred. Privileged promotion and recovery paths remain disabled and unvalidated.
