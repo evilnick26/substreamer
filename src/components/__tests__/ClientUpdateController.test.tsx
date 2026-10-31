@@ -225,7 +225,7 @@ test('Download remains an explicit action on the automatic dialog', async () => 
   render(<ClientUpdateController ready />);
   await settle();
   expect(Linking.openURL).not.toHaveBeenCalled();
-  const download = themedAlertStore.getState().buttons.find((button) => button.text === 'Download APK');
+  const download = themedAlertStore.getState().buttons.find((button) => button.text === 'Download');
   expect(download).toBeDefined();
   await act(async () => download!.onPress!());
   expect(Linking.openURL).toHaveBeenCalledWith(manifest.apkUrl);
