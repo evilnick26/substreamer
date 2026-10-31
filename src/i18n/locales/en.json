@@ -1189,7 +1189,7 @@
   "clientUpdateError_network": "Unable to reach the Alpha release. Check your connection and try again.",
   "clientUpdateError_timeout": "The update check timed out. Please try again.",
   "clientUpdateError_manifest": "The Alpha release information is invalid. Please try again later.",
-  "clientUpdateDownload": "Download APK",
+  "clientUpdateDownload": "Download",
   "clientUpdateBrowserFailed": "Unable to open the APK link in your browser. Please try again.",
   "clientVersionLabel": "Version {{version}}",
   "clientBuildLabel": "Build {{build}}",
