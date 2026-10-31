@@ -51,3 +51,7 @@ Owner attempted the expanded suite, but Python failed at import with `SyntaxErro
 ## Futwick 13-test suite feedback
 
 Python compilation succeeded; 12 tests passed and one remote-preflight mock test failed because its simulated SSH output used literal escaped `\\n` text rather than newline characters. Corrected the fixture (commit `f59b375b`). Retest pending. No remote preflight was executed and no production changes were made.
+
+## Futwick remote-preflight unit tests green
+
+Owner reported `Ran 13 tests in 0.014s` / `OK` after fixing the mock output fixture. The remote preflight has not yet been exercised against Obscurity; production promotion remains disabled. Next: attended read-only `--remote-preflight` for candidate 80000190.
