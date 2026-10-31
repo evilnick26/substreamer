@@ -211,7 +211,10 @@ current=$(python3 -c 'import json; print(json.load(open("/opt/updates-site/clien
 test "$current" -lt "$code" || { echo "Refusing non-increasing live version" >&2; exit 1; }
 target="$root/apks/sanctifi-$code.apk"
 backup="$root/alpha-$current.backup.json"
-test ! -L "$target" && test ! -L "$backup" && test ! -L "$root/alpha.json"
+if test -L "$target" || test -L "$backup" || test -L "$root/alpha.json"; then
+  echo "Refusing symlink publication destination" >&2
+  exit 1
+fi
 if test -e "$target"; then
   test "$(sha256sum "$target" | cut -d' ' -f1)" = "$sha" || { echo "Conflicting APK" >&2; exit 1; }
 fi
