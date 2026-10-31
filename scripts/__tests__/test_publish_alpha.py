@@ -114,6 +114,31 @@ class ManifestValidationTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 publisher.remote_preflight(CODE, HASH)
 
+    def test_execute_preflight_failure_prevents_confirmation_and_transfer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            apk = root / f"sanctifi-{CODE}.apk"
+            apk.write_bytes(b"test")
+            checksum = publisher.digest(apk)
+            manifest = root / "candidate.json"
+            data = candidate()
+            data["sha256"] = checksum
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            argv = ["publish-alpha.py", "--code", str(CODE),
+                    "--manifest", str(manifest), "--execute"]
+            with mock.patch.object(publisher, "ARCHIVE", root), \
+                 mock.patch.object(publisher.sys, "argv", argv), \
+                 mock.patch.object(publisher, "remote_preflight", side_effect=RuntimeError("preflight refused")) as preflight, \
+                 mock.patch.object(publisher, "run") as transfer, \
+                 mock.patch.object(publisher.subprocess, "run") as transport, \
+                 mock.patch("builtins.input") as confirm:
+                with self.assertRaisesRegex(RuntimeError, "preflight refused"):
+                    publisher.main()
+            preflight.assert_called_once_with(CODE, checksum)
+            confirm.assert_not_called()
+            transfer.assert_not_called()
+            transport.assert_not_called()
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
