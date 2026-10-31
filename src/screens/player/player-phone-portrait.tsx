@@ -2,7 +2,7 @@ import Ionicons from "@react-native-vector-icons/ionicons/static";
 import { FlashList } from '@shopify/flash-list';
 import { Stack, useNavigation, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -33,6 +33,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MarqueeText } from '@/components/MarqueeText';
 import { MoreOptionsButton } from '@/components/MoreOptionsButton';
 import { PlaybackRateButton } from '@/components/PlaybackRateButton';
+import { PlayerPhoneLandscape } from '@/components/player/PlayerPhoneLandscape';
 import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { PlayerTabBar, type PlayerTab } from '@/components/PlayerTabBar';
 import { RepeatButton } from '@/components/RepeatButton';
@@ -83,7 +84,12 @@ const TAB_SLIDE_DISTANCE = 12;
  *  handed a fresh object on every parent re-render. */
 const QUEUE_CONTENT_CONTAINER_STYLE = { paddingBottom: 12 } as const;
 
-export function PlayerPhonePortrait() {
+interface PlayerPhonePortraitProps {
+  landscape?: boolean;
+  orientationControl?: ReactNode;
+}
+
+export function PlayerPhonePortrait({ landscape = false, orientationControl }: PlayerPhonePortraitProps = {}) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -215,17 +221,25 @@ export function PlayerPhonePortrait() {
           <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
         </GHPressable>
       ),
-      headerRight: () =>
-        currentTrack ? (
+      headerRight: () => {
+        if (!currentTrack) return null;
+        const moreOptions = (
           <MoreOptionsButton
             onPress={() =>
               moreOptionsStore.getState().show({ type: 'song', item: currentTrack }, 'player-phone-portrait')
             }
             color={colors.textPrimary}
           />
-        ) : null,
+        );
+        return orientationControl ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {orientationControl}
+            {moreOptions}
+          </View>
+        ) : moreOptions;
+      },
     });
-  }, [currentTrack, navigation, onClose, colors.textPrimary]);
+  }, [currentTrack, navigation, onClose, colors.textPrimary, orientationControl]);
 
   const onClearConfirmed = useCallback(() => {
     onClose();
@@ -322,7 +336,7 @@ export function PlayerPhonePortrait() {
           </Stack.Toolbar>
         </>
       )}
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }, landscape && { paddingLeft: insets.left, paddingRight: insets.right }]}>
         {/* Gradient background */}
         <View style={[absoluteFill, { backgroundColor: colors.background }]} />
         <Animated.View
@@ -348,14 +362,20 @@ export function PlayerPhonePortrait() {
             ]}
             pointerEvents={activeTab === 'player' ? 'auto' : 'none'}
           >
-            <PlayerContent
+            {landscape ? <PlayerPhoneLandscape
+              currentTrack={currentTrack}
+              queueLoading={queueLoading}
+              handleSeek={handleSeek}
+              handleShuffle={handleShuffle}
+              shuffling={shuffling}
+            /> : <PlayerContent
               currentTrack={currentTrack}
               colors={colors}
               queueLoading={queueLoading}
               handleSeek={handleSeek}
               handleShuffle={handleShuffle}
               shuffling={shuffling}
-            />
+            />}
           </Animated.View>
 
           {/* Queue tab — below header */}

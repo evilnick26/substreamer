@@ -578,3 +578,33 @@ describe('PlayerPhonePortrait', () => {
     expect(getByText('Second Song')).toBeTruthy();
   });
 });
+
+describe('phone landscape presentation in the existing shell', () => {
+  it('renders a dedicated player without inline lyrics and keeps lyrics retrieval', () => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    expect(screen.getByTestId('phone-landscape-player')).toBeTruthy();
+    expect(screen.getByText('Test Album')).toBeTruthy();
+    expect(screen.queryByText('LyricsContent')).toBeNull();
+    expect(fetchLyrics).toHaveBeenCalledWith('track-1', 'Test Artist', 'Test Song');
+  });
+
+  it('keeps the full lyrics tab accessible in landscape', async () => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    fireEvent.press(screen.getByLabelText('Lyrics'));
+    await act(async () => {});
+    expect(screen.getByText('LyricsContent')).toBeTruthy();
+  });
+
+  it('preserves the active queue tab and lyrics owner when presentation rotates', async () => {
+    const screen = render(<PlayerPhonePortrait />);
+    fireEvent.press(screen.getByLabelText('Queue'));
+    await act(async () => {});
+    const calls = fetchLyrics.mock.calls.length;
+    screen.rerender(<PlayerPhonePortrait landscape />);
+    expect(screen.getByTestId('flash-list')).toBeTruthy();
+    expect(screen.getByLabelText('Queue').props.accessibilityState.selected).toBe(true);
+    expect(fetchLyrics).toHaveBeenCalledTimes(calls);
+    screen.rerender(<PlayerPhonePortrait />);
+    expect(screen.getByLabelText('Queue').props.accessibilityState.selected).toBe(true);
+  });
+});

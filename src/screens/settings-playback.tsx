@@ -11,6 +11,7 @@ import { DownloadingCard } from '../components/settings/DownloadingCard';
 import { EqualizerCard } from '../components/settings/EqualizerCard';
 import { LookaheadCacheCard } from '../components/settings/LookaheadCacheCard';
 import { PlaybackModeCard } from '../components/settings/PlaybackModeCard';
+import { NpsExperimentCard } from '../components/settings/NpsExperimentCard';
 import { PlayerControlsCard } from '../components/settings/PlayerControlsCard';
 import { RemoteControlsCard } from '../components/settings/RemoteControlsCard';
 import { ReplayGainCard } from '../components/settings/ReplayGainCard';
@@ -111,6 +112,7 @@ export function SettingsPlaybackScreen() {
           <PlaybackModeCard />
           <LookaheadCacheCard />
           <PlayerControlsCard />
+          <NpsExperimentCard />
           <SkipIntervalsCard />
           <RemoteControlsCard />
           {/* Battery-optimization exemption — affects background playback, so it
