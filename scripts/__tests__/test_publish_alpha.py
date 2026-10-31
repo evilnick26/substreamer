@@ -249,7 +249,7 @@ class ManifestValidationTests(unittest.TestCase):
                           and any(isinstance(t, ast.Name) and t.id == "remote_script"
                                   for t in n.targets))
         template = ast.literal_eval(assignment.value)
-        for fault in ("none", "apk-install", "backup", "manifest-install", "promotion"):
+        for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp) / "client"
                 (root / "apks").mkdir(parents=True)
@@ -275,16 +275,24 @@ class ManifestValidationTests(unittest.TestCase):
                         "backup": ("cp", "*"),
                         "manifest-install": ("install", "*/.alpha.json.*"),
                         "promotion": ("mv", "*"),
+                        "concurrent-change": ("install", "*/.alpha.json.*"),
                     }[fault]
                     original = subprocess.run(["which", command], check=True,
                                               capture_output=True, text=True).stdout.strip()
                     wrapper = bin_dir / command
-                    wrapper.write_text(
-                        "#!/bin/sh\n"
-                        "case \"$*\" in\n"
-                        f"  {match}) exit 73 ;;\n"
-                        "esac\n"
-                        f"exec {original} \"$@\"\n")
+                    if fault == "concurrent-change":
+                        wrapper.write_text(
+                            "#!/bin/sh\n"
+                            f"{original} \"$@\" || exit $?\n"
+                            f"case \"$*\" in {match}) "
+                            f"printf \"%s\\n\" \"{{\\\"changed\\\":true}}\" > {root / 'alpha.json'} ;; esac\n")
+                    else:
+                        wrapper.write_text(
+                            "#!/bin/sh\n"
+                            "case \"$*\" in\n"
+                            f"  {match}) exit 73 ;;\n"
+                            "esac\n"
+                            f"exec {original} \"$@\"\n")
                     wrapper.chmod(0o755)
                 script = (template.replace("/opt/updates-site/client", str(root))
                           .replace("__CODE__", str(CODE))
@@ -308,7 +316,11 @@ class ManifestValidationTests(unittest.TestCase):
                     self.assertIn("REMOTE_PROMOTED", result.stdout)
                 else:
                     self.assertNotEqual(result.returncode, 0, fault)
-                    self.assertEqual(live.read_bytes(), old_bytes)
+                    if fault == "concurrent-change":
+                        self.assertNotEqual(live.read_bytes(), old_bytes)
+                        self.assertIn(b"changed", live.read_bytes())
+                    else:
+                        self.assertEqual(live.read_bytes(), old_bytes)
                     self.assertNotIn("REMOTE_PROMOTED", result.stdout)
                     if fault == "apk-install":
                         self.assertFalse(target.exists())
