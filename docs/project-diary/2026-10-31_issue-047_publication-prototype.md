@@ -163,3 +163,7 @@ Added a nonblocking `flock` on a root-side `.alpha-publish.lock` file to seriali
 ## Lock failure cleanup regression — fix pending validation
 
 Owner reported 21 tests with two sandbox failures (`lock-held`, `symlink-lock`): both correctly rejected publication but left remote scratch directory behind. Root cause: new lock checks ran before the EXIT cleanup trap was registered. Moved `trap 'rm -rf -- "$scratch"' EXIT` immediately after `scratch=__SCRATCH__`, before lock checks. No test expectations weakened. Checked publisher and test source for literal `/n`: none found; escaped `\\n` occurrences are intentional in source strings. Awaiting Futwick rerun. `--execute` remains disabled; release 80000190 unpublished.
+
+## Futwick validation — lock cleanup correction passed
+
+Owner confirmed `Ran 21 tests in 1.274s` / `OK` following relocation of the EXIT cleanup trap before the publication lock checks. All fourteen sandbox scenarios pass, including lock-held and symlink-lock rejection with scratch cleanup. This verifies the cleanup regression correction in the disposable sandbox. No production changes, release 80000190 remains unpublished, `--execute` disabled. Next: review publication sequence and remaining concurrency limitation before an attended end-to-end rehearsal.
