@@ -59,8 +59,8 @@ def prepare_manifest(code, notes, output):
         "releaseNotes": notes,
     }
     manifest_check(data, code, checksum)
-    contents = json.dumps(data, indent=2, ensure_ascii=False) + "\\n"
-    print("\\nProposed manifest:\\n" + contents, flush=True)
+    contents = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    print("\nProposed manifest:\n" + contents, flush=True)
     if input("Save this manifest? Type YES to confirm: ").strip() != "YES":
         print("Cancelled; nothing saved.")
         return
@@ -83,7 +83,7 @@ def prompt_release_notes():
         if line == ".":
             break
         lines.append(line)
-    return "\\n".join(lines).strip()
+    return "\n".join(lines).strip()
 
 
 def main():
