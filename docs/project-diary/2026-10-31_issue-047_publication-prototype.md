@@ -103,3 +103,7 @@ Added `cleanup_remote_scratch()` so a nonzero SSH cleanup exit or SSH-launch OSE
 ## Futwick validation — 19/19 tests passing
 
 Owner reported `Ran 19 tests in 0.063s` / `OK` following the cleanup warning changes. This validates mocked transport and cleanup error reporting. It does not validate privileged installation or rollback; `--execute` remains disabled and Obscurity production files remain unchanged. Next engineering milestone: isolated promotion-script fault injection around backup creation and atomic manifest replacement.
+
+## Isolated shell promotion fault-injection test — pending Futwick validation
+
+Added one test with five subcases executing the **actual embedded Bash promotion program** against temporary local `client/`, `apks/` and `scratch/` paths: successful promotion, APK install failure, backup copy failure, staged-manifest install failure, and final atomic `mv` failure. The test removes root ownership flags only in its disposable copy and injects failures via temporary PATH wrappers; it checks old live manifest preservation on failures, backup/target state, scratch and temp-file cleanup, and success marker on success. No SSH/sudo, no Obscurity production writes, and `--execute` remains blocked. Expected suite: 20 tests (with five sandbox subcases); validation pending. This is not a proof of actual privileged permissions, concurrency safety, or post-promotion HTTPS verification. Follow-up: test unexpected concurrent live changes, assess partial-artifact cleanup/retry semantics, and privileged transport details.
