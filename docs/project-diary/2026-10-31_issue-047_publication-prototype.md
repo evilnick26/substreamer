@@ -135,3 +135,7 @@ Owner reported `Ran 20 tests in 0.949s` with one error in the `conflicting-backu
 ## Futwick validation — partial-artifact retries and conflicts passing
 
 Owner confirmed `Ran 20 tests in 0.828s` / `OK` after correcting the conflicting-backup expectation. All ten sandbox subcases now pass, including retries with matching existing APK and backup, and fail-closed refusal for conflicting APK/backup. In particular, a conflicting backup is detected before any new APK is installed. This remains local disposable-directory testing, not privileged SSH/sudo or live production. `--execute` remains deliberately disabled; 80000190 remains unpublished. Next: privileged transport and final check/rename race review.
+
+## Symlink collision tests — awaiting validation
+
+Added two sandbox subcases to assert the privileged promotion script refuses symlink APK and backup destinations (including dangling symlinks), preserves the live manifest, and cleans scratch without installing new files. Expected: 20 unittest methods, 12 sandbox subcases. No publisher changes, SSH/sudo or production execution. Remaining high-priority review: the current disabled `--execute` path constructs `sudo bash -c` without invoking SSH with a forced remote TTY; interactive sudo may fail in real use. Also the final compare-to-rename race remains. Do not enable promotion without resolving and testing transport.
