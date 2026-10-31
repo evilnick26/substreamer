@@ -69,13 +69,19 @@ public class ExpoImageColorsModule: Module {
   private static let dominantChromaExponent = 0.5
 
   /// Core extraction. Returns a dict suitable for the Expo Modules bridge to
-  /// convert into the TS `Palette` interface, or nil for no-usable-colour.
+  /// convert into the TS `Palette` interface, or nil without colour/neutrality evidence.
   private static func extractPalette(rgba: [UInt8], width: Int, height: Int) -> [String: Any?]? {
     var count = [Int](repeating: 0, count: hueBuckets)
     var sumR = [Double](repeating: 0, count: hueBuckets)
     var sumG = [Double](repeating: 0, count: hueBuckets)
     var sumB = [Double](repeating: 0, count: hueBuckets)
     var vibrance = [Double](repeating: 0, count: hueBuckets)
+
+    var visibleCount = 0
+    var chromaticCount = 0
+    var sumChroma = 0.0
+    var sumA = 0.0
+    var sumLabB = 0.0
 
     let pixelCount = width * height
     for i in 0..<pixelCount {
@@ -95,6 +101,12 @@ public class ExpoImageColorsModule: Module {
       let aa = lab.1
       let bb = lab.2
       let C = (aa * aa + bb * bb).squareRoot()
+
+      visibleCount += 1
+      if C > 0.02 { chromaticCount += 1 }
+      sumChroma += C
+      sumA += aa
+      sumLabB += bb
 
       if L < rejectLMin || L > rejectLMax || C < rejectCMin { continue }
 
@@ -123,9 +135,18 @@ public class ExpoImageColorsModule: Module {
         primaryIdx = i
       }
     }
-    if primaryIdx < 0 { return nil }
+    if visibleCount == 0 { return nil }
+    // Population and mean chroma tolerate sparse noise; mean-vector chroma
+    // preserves coherent subtle tints even when no hue bucket survives.
+    let monochrome = Double(chromaticCount) / Double(visibleCount) <= 0.005 &&
+      sumChroma / Double(visibleCount) <= 0.01 &&
+      (sumA * sumA + sumLabB * sumLabB).squareRoot() / Double(visibleCount) <= 0.003
+    if primaryIdx < 0 {
+      return monochrome ? ["dark": nil, "light": nil, "monochrome": true] : nil
+    }
 
     return [
+      "monochrome": monochrome,
       "dark": modeVariant(primaryIdx, count, sumR, sumG, sumB, dark: true),
       "light": modeVariant(primaryIdx, count, sumR, sumG, sumB, dark: false),
     ]

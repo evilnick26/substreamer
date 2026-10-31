@@ -158,3 +158,39 @@ it('does not publish an obsolete cover result after the track changes', async ()
   await act(async () => resolveOld(PALETTE));
   expect(mockThemeStore.getState().artworkAccent?.coverKey).toBe('new|');
 });
+
+it('publishes theme-specific neutral accents for decoded monochrome artwork', async () => {
+  mockGetPalette.mockResolvedValue({ dark: null, light: null, monochrome: true });
+  act(() => {
+    mockThemeStore.setState({ primaryColor: 'artwork' });
+    mockPlayerStore.setState({ currentTrack: { coverArt: 'grey' } });
+  });
+  render(<ArtworkAccentController />);
+  await waitFor(() => expect(mockThemeStore.getState().artworkAccent).toEqual({
+    coverKey: 'grey|', palette: { dark: '#909090', light: '#505050' },
+  }));
+});
+
+it('uses neutral accents when sparse colour noise also produced a chromatic palette', async () => {
+  mockGetPalette.mockResolvedValue({ ...PALETTE, monochrome: true });
+  act(() => {
+    mockThemeStore.setState({ primaryColor: 'artwork' });
+    mockPlayerStore.setState({ currentTrack: { coverArt: 'noisy-grey' } });
+  });
+  render(<ArtworkAccentController />);
+  await waitFor(() => expect(mockThemeStore.getState().artworkAccent?.palette).toEqual({
+    dark: '#909090', light: '#505050',
+  }));
+});
+
+it('preserves the fallback for a successfully decoded image without usable colour or neutrality', async () => {
+  mockGetPalette.mockResolvedValue(null);
+  act(() => {
+    mockThemeStore.setState({ primaryColor: 'artwork' });
+    mockPlayerStore.setState({ currentTrack: { coverArt: 'unusable' } });
+  });
+  render(<ArtworkAccentController />);
+  await waitFor(() => expect(mockThemeStore.getState().artworkAccent).toEqual({
+    coverKey: 'unusable|', palette: null,
+  }));
+});
