@@ -75,3 +75,7 @@ Owner reran attended read-only `--remote-preflight` for `80000190`. Server repor
 ## Execution-path safety review
 
 Reviewed current publisher and identified that `--execute` previously asked for confirmation and staged files without automatically re-running the remote read-only preflight. Added mandatory `remote_preflight(code, checksum)` before the confirmation prompt or any transfer, so stale/conflicting live state fails closed. This is a code change only; Futwick tests pending. The execution path is still deliberately blocked before privileged remote command invocation. Outstanding: transport mocks, robust privileged promotion and recovery checks, explicit publication approval.
+
+## Execute preflight failure-path test added
+
+Owner confirmed Python compilation and 13/13 existing tests green after mandatory execute preflight gate. Added isolated test `test_execute_preflight_failure_prevents_confirmation_and_transfer`: creates a temporary APK/manifest, mocks remote preflight failure, asserts no confirmation prompt, SCP, or SSH transport. Test committed; Futwick execution pending. Production promotion remains disabled.
