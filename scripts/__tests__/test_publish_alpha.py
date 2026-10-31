@@ -231,6 +231,95 @@ class ManifestValidationTests(unittest.TestCase):
             self.assertFalse(publisher.cleanup_remote_scratch(scratch))
         self.assertIn("ssh missing", stderr.getvalue())
 
+
+    def test_sandboxed_promotion_success_and_faults(self):
+        """Execute the real embedded shell logic against disposable local paths.
+
+        Strip root ownership flags solely for the sandbox. Never contact SSH or
+        use the production directory. Failures are injected by PATH wrappers.
+        """
+        import ast
+        import os
+        import subprocess
+        import textwrap
+        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "main")
+        assignment = next(n for n in ast.walk(main)
+                          if isinstance(n, ast.Assign)
+                          and any(isinstance(t, ast.Name) and t.id == "remote_script"
+                                  for t in n.targets))
+        template = ast.literal_eval(assignment.value)
+        for fault in ("none", "apk-install", "backup", "manifest-install", "promotion"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
+                root = pathlib.Path(temp) / "client"
+                (root / "apks").mkdir(parents=True)
+                old = candidate()
+                old["versionCode"] = CODE - 1
+                old["apkUrl"] = f"{publisher.BASE}/apks/sanctifi-{CODE - 1}.apk"
+                old_bytes = (json.dumps(old) + "\\n").encode()
+                live = root / "alpha.json"
+                live.write_bytes(old_bytes)
+                scratch = pathlib.Path(temp) / "scratch"
+                scratch.mkdir()
+                payload = b"test"
+                (scratch / "apk").write_bytes(payload)
+                new = candidate()
+                new["sha256"] = publisher.digest(scratch / "apk")
+                (scratch / "manifest.json").write_text(json.dumps(new) + "\\n")
+                expected_new = (scratch / "manifest.json").read_bytes()
+                bin_dir = pathlib.Path(temp) / "bin"
+                bin_dir.mkdir()
+                if fault != "none":
+                    command, match = {
+                        "apk-install": ("install", "*/apks/*"),
+                        "backup": ("cp", "*"),
+                        "manifest-install": ("install", "*/.alpha.json.*"),
+                        "promotion": ("mv", "*"),
+                    }[fault]
+                    original = subprocess.run(["which", command], check=True,
+                                              capture_output=True, text=True).stdout.strip()
+                    wrapper = bin_dir / command
+                    wrapper.write_text(
+                        "#!/bin/sh\\n"
+                        "case \"$*\" in\\n"
+                        f"  {match}) exit 73 ;;\\n"
+                        "esac\\n"
+                        f"exec {original} \"$@\"\\n")
+                    wrapper.chmod(0o755)
+                script = (template.replace("/opt/updates-site/client", str(root))
+                          .replace("__CODE__", str(CODE))
+                          .replace("__SHA__", new["sha256"])
+                          .replace("__SCRATCH__", str(scratch))
+                          .replace("install -o root -g root -m 0644",
+                                   "install -m 0644"))
+                env = os.environ.copy()
+                env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+                result = subprocess.run(["bash", "-c", script], env=env,
+                                        capture_output=True, text=True)
+                backup = root / f"alpha-{CODE - 1}.backup.json"
+                target = root / "apks" / f"sanctifi-{CODE}.apk"
+                self.assertFalse(scratch.exists(), result.stderr)
+                self.assertFalse(list(root.glob(".alpha.json.*")))
+                if fault == "none":
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(live.read_bytes(), expected_new)
+                    self.assertEqual(target.read_bytes(), payload)
+                    self.assertEqual(backup.read_bytes(), old_bytes)
+                    self.assertIn("REMOTE_PROMOTED", result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0, fault)
+                    self.assertEqual(live.read_bytes(), old_bytes)
+                    self.assertNotIn("REMOTE_PROMOTED", result.stdout)
+                    if fault == "apk-install":
+                        self.assertFalse(target.exists())
+                        self.assertFalse(backup.exists())
+                    elif fault == "backup":
+                        self.assertTrue(target.exists())
+                        self.assertFalse(backup.exists())
+                    else:
+                        self.assertEqual(backup.read_bytes(), old_bytes)
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
