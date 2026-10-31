@@ -127,3 +127,7 @@ Owner confirmed `Ran 20 tests in 0.469s` / `OK` after adding the sixth sandbox p
 ## Partial-artifact retry and conflict tests — pending Futwick validation
 
 Extended the sandboxed promotion test with four additional subcases: retry with a matching preexisting APK; retry with both matching APK and current-manifest backup; reject a preexisting conflicting APK; reject a conflicting backup without replacing the live manifest. These are direct execution of the embedded shell program in disposable directories, not mocked SSH. Expected 20 test methods, ten sandbox subcases. No change to production publisher, and `--execute` remains blocked. Caveat: test coverage does not yet establish safe behavior for truncated files, symlinks, permissions, or the final check/rename race; no automatic rollback is implemented. Awaiting owner validation.
+
+## Conflicting-backup test expectation corrected
+
+Owner reported `Ran 20 tests in 0.949s` with one error in the `conflicting-backup` sandbox subcase. The test expected an APK target to exist, but the production Bash script checks backup collisions before any APK installation. The absence of the APK is the intended fail-closed behaviour. Corrected the test to assert that no target APK is created and the conflicting backup remains untouched. Publisher unchanged; Futwick revalidation pending; no production execution.
