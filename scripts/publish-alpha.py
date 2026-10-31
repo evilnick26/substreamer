@@ -3,12 +3,10 @@
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 
 ARCHIVE = Path("/media/data/Complete/Sanctifi/Releases")
 REMOTE = "evilnick@obscurity"
@@ -123,13 +121,11 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".sh") as file:
-            file.write(script)
-            file.flush()
-            run("scp", file.name, f"{REMOTE}:{scratch}/install.sh")
-        # Interactive terminal for sudo password; remote script is staged under user-owned scratch.
-        # Root script is inspected locally and contains no secrets.
-        run("ssh", "-tt", REMOTE, f"sudo bash {scratch}/install.sh")
+        # Supply privileged program through SSH stdin, not from a writable remote file.
+        # sudo authenticates via the allocated terminal; stdin remains the program source.
+        # A dedicated local test must verify this TTY/stdin combination before execution.
+        raise RuntimeError("Remote promotion deliberately disabled pending tested privileged transport")
+
     finally:
         subprocess.run(["ssh", REMOTE, f"rm -rf -- {scratch}"], check=False)
     print("Remote promotion reported success. Verify public HTTPS before declaring publication complete.", flush=True)
