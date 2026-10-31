@@ -17,3 +17,9 @@ Added `scripts/publish-alpha.py` as an initial prototype, with local `--dry-run`
 - Add meaningful remote read-only preflight and clear reporting.
 - Validate against staged release and compare existing live manifest; review exact release notes.
 - Obtain separate owner approval before executing live publication.
+
+## Continued implementation — interactive manifest authoring
+
+Owner confirmed that release notes are the only routinely human-authored manifest field. Added `--prepare-manifest` mode to `scripts/publish-alpha.py`: read a multiline changelog terminated by a single-dot line, derive canonical schema/versionCode/versionName/URL/SHA-256 from the staged APK, show the JSON for review, require explicit `YES`, and create the local candidate with exclusive file creation. It does not contact Obscurity. Added tests for successful creation, cancellation, existing-file protection and empty notes. Existing unsafe privileged remote execution path remains disabled.
+
+**Validation pending:** tests have been committed but not executed on Futwick. Do not use `--execute`. Test candidate generation and dry-run only after fetching this branch. Further remote safety design and failure testing remain required.
