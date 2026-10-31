@@ -355,6 +355,15 @@ class ManifestValidationTests(unittest.TestCase):
                     else:
                         self.assertEqual(backup.read_bytes(), old_bytes)
 
+    def test_privileged_ssh_transport_requires_tty_and_quotes_script(self):
+        import shlex
+        script = "printf '%s\\n' \"one; two\"; echo \"$HOME\""
+        argv = publisher.privileged_ssh_argv(script)
+        self.assertEqual(argv[:3], ["ssh", "-tt", publisher.REMOTE])
+        self.assertEqual(argv[3], "sudo bash -c " + shlex.quote(script))
+        self.assertEqual(shlex.split(argv[3]), ["sudo", "bash", "-c", script])
+        self.assertNotIn("password", " ".join(argv).lower())
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
