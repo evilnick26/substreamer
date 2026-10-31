@@ -8,6 +8,7 @@
 import i18next from 'i18next';
 
 import { getDateTimeFormat } from './intl';
+import type { DateFormat } from '../store/layoutPreferencesStore';
 
 const PLACEHOLDER = '—';
 
@@ -50,4 +51,18 @@ export function formatShortDateTime(value: Date | string | number | null | undef
     hour: '2-digit',
     minute: '2-digit',
   }).format(d);
+}
+
+/** Server added date using the existing Appearance & Layout month/day preference. */
+export function formatAddedDate(
+  value: Date | string | number | null | undefined,
+  dateFormat: DateFormat,
+): string {
+  const d = toValidDate(value);
+  // Unset server timestamps can arrive as year 1 or epoch 0.
+  if (!d || d.getTime() <= 0) return PLACEHOLDER;
+  const year = String(d.getFullYear()).padStart(4, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return dateFormat === 'yyyy/dd/mm' ? `${year}/${day}/${month}` : `${year}/${month}/${day}`;
 }

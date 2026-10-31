@@ -16,11 +16,14 @@ jest.mock('../../components/GradientBackground', () => ({ GradientBackground: ({
 jest.mock('../../components/BottomChrome', () => ({ BottomChrome: () => null }));
 jest.mock('../../components/BannerStack', () => ({ BannerStack: () => null }));
 jest.mock('../../components/SearchResultsOverlay', () => ({ SearchResultsOverlay: () => null }));
-jest.mock('../../components/SearchableHeader', () => ({ SearchableHeader: () => null }));
-jest.mock('../../components/WaveformLogo', () => ({ __esModule: true, default: () => null }));
-jest.mock('../../screens/home', () => {
+jest.mock('../../components/SearchableHeader', () => {
   const { Text } = require('react-native');
-  return { HomeScreen: () => <Text>Retained Home screen</Text> };
+  return { SearchableHeader: () => <Text>Shared search and filter controls</Text> };
+});
+jest.mock('../../components/WaveformLogo', () => ({ __esModule: true, default: () => null }));
+jest.mock('../../screens/sanctifi-home', () => {
+  const { Text } = require('react-native');
+  return { HomeScreen: () => <Text>sanctifi Home screen</Text> };
 });
 jest.mock('../../screens/favorites', () => {
   const { Text } = require('react-native');
@@ -54,15 +57,15 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
-test('authenticated cold startup lands on Library and only the four retained tabs are visible', async () => {
+test('authenticated cold startup lands on Library and all five tabs are visible', async () => {
   renderRouter(routes, { initialUrl: '/' });
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/library'));
   expect(screen.getByRole(tabRole, { name: /Library/ })).toBeTruthy();
   expect(screen.getByRole(tabRole, { name: /Shelf/ })).toBeTruthy();
   expect(screen.getByRole(tabRole, { name: /Search/ })).toBeTruthy();
   expect(screen.getByRole(tabRole, { name: /Settings/ })).toBeTruthy();
-  expect(screen.queryByRole(tabRole, { name: /Home/ })).toBeNull();
-  expect(screen.getAllByRole(tabRole)).toHaveLength(4);
+  expect(screen.getByRole(tabRole, { name: /Home/ })).toBeTruthy();
+  expect(screen.getAllByRole(tabRole)).toHaveLength(5);
 });
 
 test('the tab navigator declares Library as its initial and Back destination', async () => {
@@ -78,12 +81,14 @@ test('the tab navigator declares Library as its initial and Back destination', a
   expect(navigator.props.backBehavior).toBe('initialRoute');
 });
 
-test('the hidden Home route remains reachable without being advertised as a tab', async () => {
+test('Home is reachable from its route and tab', async () => {
   renderRouter(routes, { initialUrl: '/(tabs)' });
-  await screen.findByText('Retained Home screen');
-  expect(screen.queryByRole(tabRole, { name: /Home/ })).toBeNull();
+  await screen.findByText('sanctifi Home screen');
+  expect(screen.getByRole(tabRole, { name: /Home/ })).toBeTruthy();
   fireEvent.press(screen.getByRole(tabRole, { name: /Library/ }));
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/library'));
+  fireEvent.press(screen.getByRole(tabRole, { name: /Home/ }));
+  await screen.findByText('sanctifi Home screen');
 });
 
 test.each([['Search', '/search', 'Search screen'], ['Settings', '/settings', 'Settings screen'],
@@ -114,7 +119,7 @@ test('the production root anchors ambiguous / links on its redirecting index', (
   expect(source).toContain("router.replace('/(tabs)/library')");
 });
 
-test('navigator Back from another tab returns to Library rather than hidden Home', async () => {
+test('navigator Back from another tab returns to Library rather than Home', async () => {
   renderRouter(routes, { initialUrl: '/library' });
   fireEvent.press(screen.getByRole(tabRole, { name: /Search/ }));
   await waitFor(() => expect(store.getRouteInfo().pathname).toBe('/search'));
@@ -146,4 +151,21 @@ test('Shelf keeps the heart, original title, route, order and selection semantic
   expect(screen.getByRole(tabRole, { name: /Shelf/, selected: true })).toBeTruthy();
   expect(screen.queryByRole(tabRole, { name: /Favourites|Favorites/ })).toBeNull();
   expect(screen.getByText('Favourites screen')).toBeTruthy();
+});
+
+
+test('Home hides the inherited header while Library and other tabs retain it', async () => {
+  renderRouter(routes, { initialUrl: '/library' });
+  expect(screen.getByText('Shared search and filter controls')).toBeTruthy();
+  const declarations = screen.UNSAFE_getByType(Tabs).props.children;
+  expect(declarations.find((child: React.ReactElement<{ name: string }>) => child.props.name === 'index').props.options.headerShown).toBe(false);
+  for (const name of ['library', 'favorites', 'search', 'settings']) {
+    expect(declarations.find((child: React.ReactElement<{ name: string }>) => child.props.name === name).props.options.headerShown).toBeUndefined();
+  }
+  fireEvent.press(screen.getByRole(tabRole, { name: /Home/ }));
+  await screen.findByText('sanctifi Home screen');
+  expect(screen.queryByText('Shared search and filter controls')).toBeNull();
+  fireEvent.press(screen.getByRole(tabRole, { name: /Library/ }));
+  await screen.findByText('Library screen');
+  expect(screen.getByText('Shared search and filter controls')).toBeTruthy();
 });

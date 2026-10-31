@@ -1583,6 +1583,14 @@ describe('deleteShare', () => {
 });
 
 describe('getRecentlyAddedAlbums (success path)', () => {
+  it('rejects protocol failures instead of returning an empty library', async () => {
+    const { default: SubsonicAPI } = require('subsonic-api');
+    SubsonicAPI.prototype.getAlbumList2 = jest.fn().mockResolvedValue({ status: 'failed', error: { code: 40 } });
+    const { getRecentlyAddedAlbums, getApi } = require('../subsonicService');
+    getApi();
+    await expect(getRecentlyAddedAlbums(20)).rejects.toThrow('Unable to fetch newest albums');
+  });
+
   it('returns albums from API response', async () => {
     const { default: SubsonicAPI } = require('subsonic-api');
     SubsonicAPI.prototype.getAlbumList2 = jest.fn().mockResolvedValue({

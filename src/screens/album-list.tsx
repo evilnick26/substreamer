@@ -22,7 +22,7 @@ const TYPE_TO_TITLE_KEY: Record<AlbumListType, string> = {
 };
 
 const TYPE_TO_REFRESH: Record<AlbumListType, () => Promise<void>> = {
-  recentlyAdded: () => albumListsStore.getState().refreshRecentlyAdded(),
+  recentlyAdded: async () => { await albumListsStore.getState().refreshRecentlyAdded(); },
   recentlyPlayed: () => albumListsStore.getState().refreshRecentlyPlayed(),
   frequentlyPlayed: () => albumListsStore.getState().refreshFrequentlyPlayed(),
   randomSelection: () => albumListsStore.getState().refreshRandomSelection(),
