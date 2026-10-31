@@ -187,3 +187,7 @@ Owner clarified explicitly that they are not merely the only person but the only
 ## Nonpublishing rehearsal mode — awaiting Futwick validation
 
 Added `--rehearse` mode to the existing publisher: validates the local APK and reviewed manifest, runs the existing read-only remote preflight, and prints `REHEARSAL_OK`. It performs no staging, transfer, sudo, or publication and does not exercise privileged promotion. Owner can run against candidate 80000190 with `/tmp/sanctifi-alpha-80000190.json`. `--execute` still intentionally blocked. This is a safe pre-publication gate, not a complete dry-run of privileged promotion. Final live publication remains subject to explicit approval.
+
+## Futwick attended nonpublishing rehearsal — passed
+
+Owner confirmed `Ran 21 tests in 1.408s` / `OK`, then ran `python3 scripts/publish-alpha.py --code 80000190 --manifest /tmp/sanctifi-alpha-80000190.json --rehearse`. Local SHA-256 reported `2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`; interactive SSH password prompt succeeded; Obscurity reported `LIVE_VERSION: 80000189`, `APK_TARGET: absent`, `BACKUP: absent`, `PREFLIGHT_OK`, and `REHEARSAL_OK`. No transfer, sudo, or publication. `--execute` still disabled; release 80000190 unpublished. Before enabling, review error/recovery procedure and require explicit approval.
