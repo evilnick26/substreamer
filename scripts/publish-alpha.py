@@ -72,12 +72,12 @@ def prepare_manifest(code, notes, output):
 
 
 def prompt_release_notes():
-    print("Enter release notes. Finish with a line containing only a single dot (.).")
     print("No editor, credentials or network connection required.")
+    print("Enter release notes below. Finish with a line containing only a single dot (.).")
     lines = []
     while True:
         try:
-            line = input()
+            line = input("> ")
         except EOFError as error:
             raise ValueError("Release notes input ended unexpectedly") from error
         if line == ".":
