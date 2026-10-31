@@ -99,3 +99,7 @@ Owner reported `Ran 17 tests in 0.035s` / `OK` after fixing the mocked SSH stdou
 ## Cleanup failure reporting and tests — pending Futwick validation
 
 Added `cleanup_remote_scratch()` so a nonzero SSH cleanup exit or SSH-launch OSError emits an explicit warning identifying the scratch directory while preserving the original transport/promotion exception. The helper is called from the existing `finally` block; successful cleanup remains silent. Added two focused unit tests for cleanup exit failure and launch failure (expected suite: 19). No remote execution or publication. **Important outstanding limitation:** these tests do not exercise privileged promotion rollback or prove remote cleanup succeeded; remote promotion remains blocked. Validation on Futwick pending.
+
+## Futwick validation — 19/19 tests passing
+
+Owner reported `Ran 19 tests in 0.063s` / `OK` following the cleanup warning changes. This validates mocked transport and cleanup error reporting. It does not validate privileged installation or rollback; `--execute` remains disabled and Obscurity production files remain unchanged. Next engineering milestone: isolated promotion-script fault injection around backup creation and atomic manifest replacement.
