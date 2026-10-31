@@ -252,7 +252,7 @@ class ManifestValidationTests(unittest.TestCase):
         template = ast.literal_eval(assignment.value)
         for fault in ("none", "apk-install", "backup", "manifest-install", "promotion", "concurrent-change",
                       "retry-apk", "retry-apk-backup", "conflicting-apk", "conflicting-backup",
-                      "symlink-apk", "symlink-backup", "lock-held", "symlink-lock"):
+                      "symlink-apk", "symlink-backup", "lock-held", "symlink-lock", "manifest-tampered"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp) / "client"
                 (root / "apks").mkdir(parents=True)
@@ -270,6 +270,13 @@ class ManifestValidationTests(unittest.TestCase):
                 new["sha256"] = publisher.digest(scratch / "apk")
                 (scratch / "manifest.json").write_text(json.dumps(new) + "\n")
                 expected_new = (scratch / "manifest.json").read_bytes()
+                import hashlib
+                reviewed_manifest_sha = hashlib.sha256(expected_new).hexdigest()
+                if fault == "manifest-tampered":
+                    # Core fields remain valid; only editorial notes differ.
+                    changed = dict(new)
+                    changed["releaseNotes"] = "Altered after review"
+                    (scratch / "manifest.json").write_text(json.dumps(changed) + "\n")
                 target = root / "apks" / f"sanctifi-{CODE}.apk"
                 backup = root / f"alpha-{CODE - 1}.backup.json"
                 if fault in ("retry-apk", "retry-apk-backup", "conflicting-apk"):
@@ -317,6 +324,7 @@ class ManifestValidationTests(unittest.TestCase):
                 script = (template.replace("/opt/updates-site/client", str(root))
                           .replace("__CODE__", str(CODE))
                           .replace("__SHA__", new["sha256"])
+                          .replace("__MANIFEST_SHA__", reviewed_manifest_sha)
                           .replace("__SCRATCH__", str(scratch))
                           .replace("install -o root -g root -m 0644",
                                    "install -m 0644"))
@@ -350,7 +358,7 @@ class ManifestValidationTests(unittest.TestCase):
                     elif fault == "backup":
                         self.assertTrue(target.exists())
                         self.assertFalse(backup.exists())
-                    elif fault in ("lock-held", "symlink-lock"):
+                    elif fault in ("lock-held", "symlink-lock", "manifest-tampered"):
                         self.assertFalse(target.exists())
                         self.assertFalse(backup.exists())
                     elif fault == "symlink-apk":
