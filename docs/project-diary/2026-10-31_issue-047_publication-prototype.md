@@ -111,3 +111,7 @@ Added one test with five subcases executing the **actual embedded Bash promotion
 ## Sandbox fixture failure and correction
 
 Owner reported 20 tests with two failures and two errors, all in the five-case sandbox promotion test. Investigation found the fixture generated JSON and wrapper shell scripts using literal backslash-n characters rather than newline escapes, causing `JSONDecodeError: Extra data` before the intended fault-injection stages. Corrected only the sandbox test fixture's newline escapes; production publisher unchanged. Awaiting Futwick rerun. No promotion or production changes.
+
+## Futwick sandbox validation — 20/20 passing
+
+Owner confirmed `Ran 20 tests in 0.602s` / `OK` after correcting sandbox JSON and shell-wrapper newline escapes. The five sandbox subcases now pass: normal promotion, APK install failure, backup creation failure, staged-manifest install failure and atomic rename failure. These execute the embedded Bash logic in disposable local directories with root ownership flags removed, not SSH/sudo against production. Remaining: concurrent modification testing, partial-artifact recovery/retry semantics, privileged SSH/sudo transport, HTTPS verification and explicit go/no-go review. `--execute` remains blocked; release 80000190 unpublished.
