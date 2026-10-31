@@ -119,3 +119,7 @@ Owner confirmed `Ran 20 tests in 0.602s` / `OK` after correcting sandbox JSON an
 ## Concurrent live-manifest change fault injection — pending validation
 
 Extended the isolated Bash promotion test with a sixth subcase. A disposable `install` wrapper stages the candidate manifest and then simulates another actor modifying the live `alpha.json` before the publisher's final `cmp` guard. The expected result is refusal to promote, preservation of the externally changed live manifest (not an automatic rollback), retention of the original backup, and cleanup of scratch/temp files. This tests detection of a change at this specific point, not full concurrency safety or a change between the final check and rename. Expected total remains 20 unittest methods, with six sandbox subcases. No production execution; `--execute` remains blocked. Futwick validation pending.
+
+## Futwick validation — concurrent-change scenario passed
+
+Owner confirmed `Ran 20 tests in 0.469s` / `OK` after adding the sixth sandbox promotion scenario. This verifies that a change injected after manifest staging and before the final comparison causes promotion refusal and preserves the externally modified manifest under the tested conditions. The check-to-rename race remains unaddressed; partial-artifact retry semantics and privileged transport still need review. No production changes; `--execute` remains blocked.
