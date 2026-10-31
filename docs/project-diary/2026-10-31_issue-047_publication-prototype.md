@@ -123,3 +123,7 @@ Extended the isolated Bash promotion test with a sixth subcase. A disposable `in
 ## Futwick validation — concurrent-change scenario passed
 
 Owner confirmed `Ran 20 tests in 0.469s` / `OK` after adding the sixth sandbox promotion scenario. This verifies that a change injected after manifest staging and before the final comparison causes promotion refusal and preserves the externally modified manifest under the tested conditions. The check-to-rename race remains unaddressed; partial-artifact retry semantics and privileged transport still need review. No production changes; `--execute` remains blocked.
+
+## Partial-artifact retry and conflict tests — pending Futwick validation
+
+Extended the sandboxed promotion test with four additional subcases: retry with a matching preexisting APK; retry with both matching APK and current-manifest backup; reject a preexisting conflicting APK; reject a conflicting backup without replacing the live manifest. These are direct execution of the embedded shell program in disposable directories, not mocked SSH. Expected 20 test methods, ten sandbox subcases. No change to production publisher, and `--execute` remains blocked. Caveat: test coverage does not yet establish safe behavior for truncated files, symlinks, permissions, or the final check/rename race; no automatic rollback is implemented. Awaiting owner validation.
