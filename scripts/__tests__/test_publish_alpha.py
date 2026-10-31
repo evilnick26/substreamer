@@ -256,7 +256,7 @@ class ManifestValidationTests(unittest.TestCase):
                 old = candidate()
                 old["versionCode"] = CODE - 1
                 old["apkUrl"] = f"{publisher.BASE}/apks/sanctifi-{CODE - 1}.apk"
-                old_bytes = (json.dumps(old) + "\\n").encode()
+                old_bytes = (json.dumps(old) + "\n").encode()
                 live = root / "alpha.json"
                 live.write_bytes(old_bytes)
                 scratch = pathlib.Path(temp) / "scratch"
@@ -265,7 +265,7 @@ class ManifestValidationTests(unittest.TestCase):
                 (scratch / "apk").write_bytes(payload)
                 new = candidate()
                 new["sha256"] = publisher.digest(scratch / "apk")
-                (scratch / "manifest.json").write_text(json.dumps(new) + "\\n")
+                (scratch / "manifest.json").write_text(json.dumps(new) + "\n")
                 expected_new = (scratch / "manifest.json").read_bytes()
                 bin_dir = pathlib.Path(temp) / "bin"
                 bin_dir.mkdir()
@@ -280,11 +280,11 @@ class ManifestValidationTests(unittest.TestCase):
                                               capture_output=True, text=True).stdout.strip()
                     wrapper = bin_dir / command
                     wrapper.write_text(
-                        "#!/bin/sh\\n"
-                        "case \"$*\" in\\n"
-                        f"  {match}) exit 73 ;;\\n"
-                        "esac\\n"
-                        f"exec {original} \"$@\"\\n")
+                        "#!/bin/sh\n"
+                        "case \"$*\" in\n"
+                        f"  {match}) exit 73 ;;\n"
+                        "esac\n"
+                        f"exec {original} \"$@\"\n")
                     wrapper.chmod(0o755)
                 script = (template.replace("/opt/updates-site/client", str(root))
                           .replace("__CODE__", str(CODE))
