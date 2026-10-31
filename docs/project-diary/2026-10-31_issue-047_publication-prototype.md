@@ -115,3 +115,7 @@ Owner reported 20 tests with two failures and two errors, all in the five-case s
 ## Futwick sandbox validation — 20/20 passing
 
 Owner confirmed `Ran 20 tests in 0.602s` / `OK` after correcting sandbox JSON and shell-wrapper newline escapes. The five sandbox subcases now pass: normal promotion, APK install failure, backup creation failure, staged-manifest install failure and atomic rename failure. These execute the embedded Bash logic in disposable local directories with root ownership flags removed, not SSH/sudo against production. Remaining: concurrent modification testing, partial-artifact recovery/retry semantics, privileged SSH/sudo transport, HTTPS verification and explicit go/no-go review. `--execute` remains blocked; release 80000190 unpublished.
+
+## Concurrent live-manifest change fault injection — pending validation
+
+Extended the isolated Bash promotion test with a sixth subcase. A disposable `install` wrapper stages the candidate manifest and then simulates another actor modifying the live `alpha.json` before the publisher's final `cmp` guard. The expected result is refusal to promote, preservation of the externally changed live manifest (not an automatic rollback), retention of the original backup, and cleanup of scratch/temp files. This tests detection of a change at this specific point, not full concurrency safety or a change between the final check and rename. Expected total remains 20 unittest methods, with six sandbox subcases. No production execution; `--execute` remains blocked. Futwick validation pending.
