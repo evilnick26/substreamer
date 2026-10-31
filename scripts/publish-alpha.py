@@ -41,12 +41,57 @@ def manifest_check(data, code, expected):
         raise ValueError("Invalid release notes")
 
 
+
+def prepare_manifest(code, notes, output):
+    """Generate a reviewed local candidate; never modify an existing file."""
+    if not isinstance(notes, str) or not notes.strip() or len(notes) > 4000:
+        raise ValueError("Release notes must be nonempty and at most 4000 characters")
+    apk = ARCHIVE / f"sanctifi-{code}.apk"
+    if not apk.is_file() or apk.is_symlink():
+        raise ValueError(f"Missing or symlink APK: {apk}")
+    checksum = digest(apk)
+    data = {
+        "schemaVersion": 1,
+        "versionCode": code,
+        "versionName": "8.1.8",
+        "apkUrl": f"{BASE}/apks/sanctifi-{code}.apk",
+        "sha256": checksum,
+        "releaseNotes": notes,
+    }
+    manifest_check(data, code, checksum)
+    contents = json.dumps(data, indent=2, ensure_ascii=False) + "\\n"
+    print("\\nProposed manifest:\\n" + contents, flush=True)
+    if input("Save this manifest? Type YES to confirm: ").strip() != "YES":
+        print("Cancelled; nothing saved.")
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Exclusive creation avoids accidental replacement, including symlinks.
+    with output.open("x", encoding="utf-8") as stream:
+        stream.write(contents)
+    print(f"Manifest saved: {output}", flush=True)
+
+
+def prompt_release_notes():
+    print("Enter release notes. Finish with a line containing only a single dot (.).")
+    print("No editor, credentials or network connection required.")
+    lines = []
+    while True:
+        try:
+            line = input()
+        except EOFError as error:
+            raise ValueError("Release notes input ended unexpectedly") from error
+        if line == ".":
+            break
+        lines.append(line)
+    return "\\n".join(lines).strip()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--code", type=int, required=True)
-    parser.add_argument("--manifest", type=Path, required=True, help="Reviewed candidate JSON on Futwick")
+    parser.add_argument("--manifest", type=Path, help="Reviewed candidate JSON on Futwick")
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--prepare-manifest", action="store_true", help="Interactively create a local candidate only")\n    mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     code = args.code
