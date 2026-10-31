@@ -130,3 +130,112 @@ against `getAlbumList2?type=newest&size=20`, then reopen Home and time appearanc
 Test airplane mode with/without cached rows, connection failure/Retry, a genuinely
 empty server list and an album not yet included in the full library sync. Verify
 existing downloaded playback and Back behavior. No merge was performed.
+
+## Android acceptance feedback and UI refinements — 31 October 2026
+
+### Physical-device foundation accepted
+
+Read the owner's [PR feedback](https://github.com/evilnick26/substreamer/pull/62#issuecomment-6544082349)
+before editing. The original implementation was successfully built on futwick and
+run on a physical Android phone. The owner accepts it as a functional foundation:
+artwork, artist names and album titles display correctly. This is owner-reported
+device evidence; the cloud checkout still does not share futwick's filesystem.
+The reported screenshot exposed inherited header controls and an oversized logo
+extending beyond the display's right edge. The previous asset/style checks did
+not establish native layout correctness.
+
+### Requested refinements and implementation
+
+- Home alone sets `headerShown: false` in the tab navigator. This removes its
+  inherited Search, Offline, Favorites and grid controls. Other tabs retain their
+  existing header. Home uses the safe-area top inset plus 12 points of padding,
+  with safe-area left/right insets, instead of shared search-header height.
+- The existing transparent PNG is unchanged. A container with 16-point horizontal
+  margins measures its available width using `onLayout`; the Image receives that
+  numeric width and its proportional height (`width * 261 / 1263`). Both dimensions
+  start at zero until measurement. Resizing remeasures the container. No intrinsic
+  asset dimension, device width assumption, fixed logo height or cropping is used.
+  `resizeMode="contain"` and the theme-provided background remain in effect.
+- The first 20 albums are grouped under one heading per server-added calendar day.
+  Day groups follow their first appearance in the server's newest-first list;
+  albums within a day retain their order. Full year is included so different years
+  cannot collapse into one heading. Dates use the device's local calendar day.
+- `formatAddedDate` in the existing `utils/dateFormat.ts` reuses its Date/string/
+  number parsing and unavailable-date convention, with the existing
+  `layoutPreferencesStore.dateFormat` preference. Month/Day renders YYYY/MM/DD;
+  Day/Month renders YYYY/DD/MM. Changing the preference updates headings without
+  another request. No new setting or dependency was added.
+- Missing/invalid dates and unset server timestamps (Go zero time or epoch zero)
+  are labelled **Added date unavailable**. Neither release date/year nor current
+  time is substituted. Artwork, compact rows, Album Details routes, focus refresh,
+  cached/offline/error behavior, Library startup and Android Back are preserved.
+  Home's shared BannerStack is hidden with the header; its existing inline offline
+  and error messages remain. The shared banners remain on other tabs.
+
+### Added-date investigation and limits
+
+The endpoint already returns `AlbumID3.created`; it does not expose a separate
+indexing-completion timestamp. In the API wrapper, JSON responses are returned
+without date revival (`modules/subsonic-api/src/index.ts:194-220`), so network dates
+can be strings despite the Date type. Existing SQL mapping stores the timestamp
+(`src/db/repository/mappers.ts:152`) and rehydrates a Date
+(`src/db/repository/albums.ts:125`). The formatter accepts both representations.
+No persistence changes are necessary.
+
+Navidrome source at the previously recorded reference commit confirms
+`server/subsonic/helpers.go:470-483` maps `created` from `albumCreatedAt`, separately
+from release year. `helpers.go:346-356` uses CreatedAt by default, UpdatedAt under
+RecentlyAddedByModTime, with legacy fallbacks. `model/mediafile.go:390` derives
+CreatedAt from track BirthTime. Thus these are the server's **Added** dates (also
+used by the existing Album Details Added field), not invented upload dates or
+release dates. They are not guaranteed to be the moment Navidrome indexed an
+album. The deployed server payload/configuration has not been independently
+captured here. Missing dates are reported honestly by the unavailable heading.
+
+### Refinement validation
+
+- Final `npx tsc --noEmit`: passed.
+- Focused Android/iOS Home, real Router and date formatter tests: **6 suites /
+  76 tests passed**. Tests cover same-day grouping, date preference changes,
+  raw JSON strings and cached Date objects, unknown/invalid/zero timestamps,
+  same-day and cross-year order, row routes, the 20 cap, cached offline/error and
+  refresh behavior, header removal limited to Home, safe-area placement and
+  numeric logo resizing at widths 288, 328 and 736.
+- Android coverage: Home **100% statements / 96.15% branches**; date formatter
+  **100% statements / 100% branches**. Existing locale-based detail formatters
+  also retain their output and unavailable-date behavior.
+- Full final Jest run: **650 suites / 11,382 tests passed** in 284.336 seconds.
+  Existing **2 suites / 8 tests** remain skipped for the absent private migration
+  fixture. No new skips or remaining failures.
+- Intl and translation validators passed. Translation validation reports the
+  existing Crowdin backlog plus the new unavailable-date label: **2,299 missing-key
+  warnings**; all 13 locale files validate and fall back to English where needed.
+- Madge with TypeScript configuration: no circular dependencies; the same three
+  vector-icon static entry points remain unresolved. `git diff --check` passed.
+- The unchanged logo was composited at width 288 on light (#f5f5f5) and dark
+  (#121212) backgrounds and inspected: the complete logo remains legible. These
+  are asset/frame checks, not screenshots of a revised native Android screen.
+  No revised APK was built in the cloud; physical layout acceptance remains on
+  futwick as requested.
+
+### Revised futwick acceptance
+
+Keep local work before updating. If already on the issue branch:
+
+```sh
+git fetch origin issue-056-minimal-home
+git switch issue-056-minimal-home
+git pull --ff-only origin issue-056-minimal-home
+npm run android:device
+```
+
+If testing on the earlier local `test-issue-056` branch instead, fetch first, switch
+to it, then run `git merge --ff-only origin/issue-056-minimal-home`. No dependency
+changes were made. Build with the established futwick SDK/signing setup.
+
+Verify the revised APK in light/dark themes, narrow portrait and landscape widths:
+logo begins below the status bar, remains entirely visible and resizes without
+stretching. Home must have no inherited controls while Library retains them.
+Verify same-day grouping and both existing date preferences, cached/offline dates,
+row navigation and refresh after leaving/reopening Home. This revision still needs
+physical Android acceptance; PR 62 remains open and unmerged.

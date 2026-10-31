@@ -16,7 +16,10 @@ jest.mock('../../components/GradientBackground', () => ({ GradientBackground: ({
 jest.mock('../../components/BottomChrome', () => ({ BottomChrome: () => null }));
 jest.mock('../../components/BannerStack', () => ({ BannerStack: () => null }));
 jest.mock('../../components/SearchResultsOverlay', () => ({ SearchResultsOverlay: () => null }));
-jest.mock('../../components/SearchableHeader', () => ({ SearchableHeader: () => null }));
+jest.mock('../../components/SearchableHeader', () => {
+  const { Text } = require('react-native');
+  return { SearchableHeader: () => <Text>Shared search and filter controls</Text> };
+});
 jest.mock('../../components/WaveformLogo', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../screens/sanctifi-home', () => {
   const { Text } = require('react-native');
@@ -148,4 +151,21 @@ test('Shelf keeps the heart, original title, route, order and selection semantic
   expect(screen.getByRole(tabRole, { name: /Shelf/, selected: true })).toBeTruthy();
   expect(screen.queryByRole(tabRole, { name: /Favourites|Favorites/ })).toBeNull();
   expect(screen.getByText('Favourites screen')).toBeTruthy();
+});
+
+
+test('Home hides the inherited header while Library and other tabs retain it', async () => {
+  renderRouter(routes, { initialUrl: '/library' });
+  expect(screen.getByText('Shared search and filter controls')).toBeTruthy();
+  const declarations = screen.UNSAFE_getByType(Tabs).props.children;
+  expect(declarations.find((child: React.ReactElement<{ name: string }>) => child.props.name === 'index').props.options.headerShown).toBe(false);
+  for (const name of ['library', 'favorites', 'search', 'settings']) {
+    expect(declarations.find((child: React.ReactElement<{ name: string }>) => child.props.name === name).props.options.headerShown).toBeUndefined();
+  }
+  fireEvent.press(screen.getByRole(tabRole, { name: /Home/ }));
+  await screen.findByText('sanctifi Home screen');
+  expect(screen.queryByText('Shared search and filter controls')).toBeNull();
+  fireEvent.press(screen.getByRole(tabRole, { name: /Library/ }));
+  await screen.findByText('Library screen');
+  expect(screen.getByText('Shared search and filter controls')).toBeTruthy();
 });
