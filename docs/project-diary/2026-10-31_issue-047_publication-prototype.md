@@ -211,3 +211,7 @@ Owner confirmed `Ran 21 tests in 1.768s` / `OK` after adding the exact staged-ma
 ## First production publication — SUCCESS
 
 Owner executed the attended publisher on Futwick with `--code 80000190 --manifest /tmp/sanctifi-alpha-80000190.json --execute`, entered `PUBLISH`, and completed interactive SSH and sudo authentication. Preflight confirmed live version 80000189, APK target absent and backup absent. APK and manifest SCP completed. Privileged promotion reported `REMOTE_PROMOTED:80000190:2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`. Publisher then fetched public HTTPS manifest and APK and reported `PUBLICATION VERIFIED: 80000190, 2dd94baa9f8ac44bd228f4a6ea92689138e6c1a1a587b95ea6557b0a99224dc8`. Publication is successful; live Alpha is 80000190. Earlier Futwick final validation: 21 tests passing, 15 disposable sandbox scenarios. No automatic rollback or recovery was needed. Follow-up: optional user-facing updater test on device and branch integration only after explicit owner approval.
+
+## Post-publication tester acceptance
+
+Owner confirmed release 80000190 was tested after publication and approved by the tester, whose verbatim feedback on Release Type grouping was: “Oh, that seems sensible”. This confirms positive user-facing acceptance of the feature in the published Alpha. No defects were reported in this feedback. Publication infrastructure remains separately validated by the earlier public HTTPS manifest/APK verification. No further deployment action required from this report.
