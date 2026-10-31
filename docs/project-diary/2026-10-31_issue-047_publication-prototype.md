@@ -83,3 +83,7 @@ Owner confirmed Python compilation and 13/13 existing tests green after mandator
 ## Futwick validation — 14 tests passing
 
 Owner confirmed `python3 -m py_compile` passed for publisher and tests, followed by `Ran 14 tests in 0.011s` / `OK`. The new `test_execute_preflight_failure_prevents_confirmation_and_transfer` passed, establishing that mocked preflight refusal stops before confirmation, SSH staging or SCP transfer. Production promotion remains disabled. Next: isolated transport failure tests and privileged promotion recovery review.
+
+## Transport and recovery tests added (awaiting Futwick validation)
+
+Added isolated tests for SSH scratch-creation failure, APK SCP failure, manifest SCP failure, deliberate promotion block, cleanup attempts after staging, and rejection of unsafe scratch paths. Added static assertions for privileged script's temporary-file cleanup, live-manifest comparison, atomic rename, success marker, and continued disabled promotion. These static checks do **not** simulate actual privileged failure/recovery, and cleanup SSH failure is currently ignored by the publisher. No production execution; test suite expected to increase from 14 to 17. Remaining: real sandboxed promotion fault injection, stronger cleanup reporting, privileged command transport, post-publication verification and rollback policy.
