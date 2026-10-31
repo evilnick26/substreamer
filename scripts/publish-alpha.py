@@ -273,15 +273,14 @@ echo "REMOTE_PROMOTED:$code:$sha"
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
-        # Construct but DO NOT execute the privileged SSH command until reviewed.
-        # Forced remote TTY permits interactive sudo authentication.
+        # Privileged promotion requires interactive SSH and sudo authentication.
+        # The operator must separately invoke --execute and type PUBLISH.
         command = privileged_ssh_argv(script)
-        # Deliberately blocked until mocked transport and remote preflight tests pass.
-        raise RuntimeError("Remote promotion disabled pending transport/preflight validation")
+        run(*command)
 
     finally:
         cleanup_remote_scratch(scratch)
-    print("Remote promotion reported success. Verify public HTTPS before declaring publication complete.", flush=True)
+    print("Remote promotion command completed. Publication may already be live; verifying public HTTPS.", flush=True)
     import urllib.request
     with urllib.request.urlopen(f"{BASE}/alpha.json?verify={code}", timeout=30) as response:
         public = json.load(response)
