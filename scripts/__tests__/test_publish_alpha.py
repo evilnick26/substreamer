@@ -2,6 +2,8 @@
 import importlib.util
 import pathlib
 import tempfile
+from unittest import mock
+import json
 import unittest
 
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "publish-alpha.py"
@@ -57,6 +59,35 @@ class ManifestValidationTests(unittest.TestCase):
         d["versionCode"] = True
         with self.assertRaises(ValueError):
             publisher.manifest_check(d, CODE, HASH)
+
+    def test_prepare_manifest_creates_reviewed_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            apk = root / f"sanctifi-{CODE}.apk"
+            apk.write_bytes(b"test")
+            target = root / "candidate.json"
+            with mock.patch.object(publisher, "ARCHIVE", root), mock.patch("builtins.input", return_value="YES"):
+                publisher.prepare_manifest(CODE, "First line\\nSecond line", target)
+            result = json.loads(target.read_text())
+            self.assertEqual(result["releaseNotes"], "First line\\nSecond line")
+            self.assertEqual(result["sha256"], publisher.digest(apk))
+            self.assertTrue(target.read_text().endswith("\\n"))
+            with mock.patch.object(publisher, "ARCHIVE", root), mock.patch("builtins.input", return_value="YES"):
+                with self.assertRaises(FileExistsError):
+                    publisher.prepare_manifest(CODE, "changed", target)
+
+    def test_prepare_manifest_cancelled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / f"sanctifi-{CODE}.apk").write_bytes(b"test")
+            target = root / "candidate.json"
+            with mock.patch.object(publisher, "ARCHIVE", root), mock.patch("builtins.input", return_value="no"):
+                publisher.prepare_manifest(CODE, "Notes", target)
+            self.assertFalse(target.exists())
+
+    def test_empty_notes_rejected(self):
+        with self.assertRaises(ValueError):
+            publisher.prepare_manifest(CODE, "  ", pathlib.Path("/tmp/unused.json"))
 
     def test_digest(self):
         import hashlib
