@@ -87,6 +87,45 @@ def prompt_release_notes():
     return "\n".join(lines).strip()
 
 
+
+def remote_preflight(code, checksum):
+    """Read-only inspection of the release target; never uses sudo."""
+    remote = r'''set -eu
+root=/opt/updates-site/client
+code=__CODE__
+sha=__SHA__
+test -d "$root" && test -d "$root/apks"
+test -f "$root/alpha.json" && test ! -L "$root/alpha.json"
+python3 - "$root/alpha.json" "$code" <<'PY'
+import json,sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    current=json.load(f)
+old=current["versionCode"]
+new=int(sys.argv[2])
+if type(old) is not int or old >= new:
+    raise SystemExit("Preflight refused: live version is not lower than candidate")
+print("LIVE_VERSION:", old)
+PY
+target="$root/apks/sanctifi-$code.apk"
+test ! -L "$target" || { echo "Symlink APK target" >&2; exit 1; }
+if test -e "$target"; then
+  test -f "$target"
+  test "$(sha256sum "$target" | cut -d' ' -f1)" = "$sha" || { echo "Conflicting APK" >&2; exit 1; }
+  echo "APK_TARGET: matching existing file"
+else
+  echo "APK_TARGET: absent"
+fi
+echo "PREFLIGHT_OK"
+'''
+    command = "sh -c " + shlex.quote(remote.replace("__CODE__", str(code)).replace("__SHA__", checksum))
+    result = subprocess.run(["ssh", REMOTE, command], text=True, check=True,
+                            capture_output=True)
+    if "PREFLIGHT_OK" not in result.stdout.splitlines():
+        raise RuntimeError("Remote preflight did not report success")
+    print(result.stdout, end="", flush=True)
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--code", type=int, required=True)
@@ -94,6 +133,7 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--prepare-manifest", action="store_true", help="Interactively create a local candidate only")
     mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--remote-preflight", action="store_true", help="Read-only SSH inspection; no sudo or writes")
     mode.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     code = args.code
@@ -114,6 +154,10 @@ def main():
     print(f"Manifest: {args.manifest}; remote: {REMOTE}:{ROOT}/alpha.json", flush=True)
     if args.dry_run:
         print("LOCAL DRY RUN ONLY: no SSH, transfer, sudo or publication attempted.")
+        return
+
+    if args.remote_preflight:
+        remote_preflight(code, checksum)
         return
 
     # The privileged program is supplied as a quoted SSH command, never loaded\n    # from a user-writable file on the remote host. SSH/sudo prompt interactively.
