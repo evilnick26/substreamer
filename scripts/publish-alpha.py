@@ -217,6 +217,9 @@ cmp -s "$root/alpha.json" "$backup" || { echo "Live manifest changed" >&2; exit 
 mv -T -- "$tmp" "$root/alpha.json"
 echo "REMOTE_PROMOTED:$code:$sha"
 '''
+    # Revalidate the live server immediately before requesting publication approval.
+    # A failed preflight must stop before scratch creation or file transfer.
+    remote_preflight(code, checksum)
     if input("Type PUBLISH to authorise production changes on Obscurity: ").strip() != "PUBLISH":
         print("Cancelled; nothing transferred or published.")
         return
