@@ -1,3 +1,11 @@
+jest.mock('@/components/SleepTimerButton', () => {
+  const { View } = require('react-native');
+  return { SleepTimerButton: () => <View testID="sleep-timer-button" /> };
+});
+jest.mock('@/components/RoutePicker', () => {
+  const { View } = require('react-native');
+  return { CastButton: () => <View testID="cast-button" /> };
+});
 jest.mock('@/store/persistence/kvStorage', () => require('@/store/persistence/__mocks__/kvStorage'));
 
 jest.mock('@/hooks/useTheme', () => ({
@@ -29,9 +37,6 @@ jest.mock('@/hooks/useCanSkip', () => ({
   useCanSkip: () => ({ canSkipNext: true, canSkipPrevious: true }),
 }));
 
-jest.mock('@/hooks/useIsStarred', () => ({
-  useIsStarred: () => false,
-}));
 
 jest.mock('@/hooks/useThemedAlert', () => ({
   useThemedAlert: () => ({
@@ -105,7 +110,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@/components/CachedImage', () => {
   const { View } = require('react-native');
-  return { CachedImage: (props: { coverArtId?: string }) => <View testID={`cover-${props.coverArtId}`} /> };
+  return { CachedImage: (props: { coverArtId?: string; resizeMode?: string }) => <View {...props} testID={`cover-${props.coverArtId}`} /> };
 });
 
 jest.mock('@/components/MarqueeText', () => {
@@ -210,6 +215,10 @@ jest.mock('@/services/playerService', () => ({
   togglePlayPause: jest.fn(),
 }));
 
+jest.mock('@/services/bookmarkService', () => ({
+  capturePlayerSnapshot: jest.fn(), buildAutoName: jest.fn(() => 'Saved queue'), commitBookmark: jest.fn(),
+}));
+
 jest.mock('@/services/moreOptionsService', () => ({
   toggleStar: jest.fn(),
 }));
@@ -285,6 +294,7 @@ const MOCK_QUEUE: Child[] = [
 ];
 
 beforeEach(() => {
+  require('@/store/favoritesStore').favoritesStore.setState({ overrides: {}, songIds: new Set() });
   layoutPreferencesStore.getState().setShowAlbumVersion(true);
   fetchLyrics.mockClear();
   // Unrelated player tests should not resolve optional metadata asynchronously.
@@ -816,4 +826,129 @@ test('rotation preserves portrait synced lyrics but landscape always retains see
   expect(screen.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Portrait lyrics only');
   expect(screen.queryByTestId('progress-bar')).toBeNull();
   expect(layoutPreferencesStore.getState().displaySyncedLyricsInNps).toBe(true);
+});
+
+
+describe('refined landscape parity', () => {
+  it('shows year/version preference and retains artist/album navigation', async () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
+    getAlbumVersion.mockResolvedValue('Deluxe Edition');
+    playerStore.setState({ currentTrack: { ...MOCK_TRACK, year: 2024 } });
+    const screen = render(<PlayerPhonePortrait landscape />);
+    expect(screen.getByText('(2024) Test Album')).toBeTruthy();
+    expect(await screen.findByText('Deluxe Edition')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('landscape-artist-link'));
+    fireEvent.press(screen.getByTestId('landscape-album-link'));
+    expect(push).toHaveBeenNthCalledWith(1, '/artist/artist-1');
+    expect(push).toHaveBeenNthCalledWith(2, '/album/album-1');
+    act(() => layoutPreferencesStore.getState().setShowAlbumVersion(false));
+    expect(screen.queryByTestId('landscape-album-version')).toBeNull();
+    expect(screen.getByText('(2024) Test Album')).toBeTruthy();
+    jest.restoreAllMocks();
+  });
+
+  it('does not apply late album versions to a different track and disables unavailable links', async () => {
+    let complete!: (version: string) => void;
+    getAlbumVersion.mockImplementationOnce(() => new Promise<string>((resolve) => { complete = resolve; }));
+    const screen = render(<PlayerPhonePortrait landscape />);
+    act(() => playerStore.setState({ currentTrack: { ...MOCK_TRACK, albumId: undefined, artistId: undefined, year: 0 } }));
+    await act(async () => complete('Old album version'));
+    expect(screen.queryByText('Old album version')).toBeNull();
+    expect(screen.getByTestId('landscape-artist-link').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('landscape-album-link').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByText('Test Album')).toBeTruthy();
+  });
+
+  it('removes standalone sleep/Cast even when settings enable them, preserving Favorite and Bookmark first', () => {
+    const { playbackSettingsStore } = require('@/store/playbackSettingsStore');
+    act(() => playbackSettingsStore.setState({ showSleepTimerButton: true, showSkipIntervalButtons: true }));
+    const screen = render(<PlayerPhonePortrait landscape />);
+    expect(screen.queryByTestId('sleep-timer-button')).toBeNull();
+    expect(screen.queryByTestId('cast-button')).toBeNull();
+    expect(screen.queryByTestId('inline-lyrics')).toBeNull();
+    const row = screen.getByTestId('landscape-secondary-scroll');
+    const controls = row.findAll(node => node.props.accessibilityRole === 'button');
+    const labels = [...new Set(controls.map(node => node.props.accessibilityLabel))];
+    expect(labels.slice(0, 2)).toEqual(['Add to Favorites', 'Add bookmark']);
+    const transport = screen.getByTestId('landscape-transport');
+    expect(screen.getByTestId('landscape-metadata-scroll').findAll(node => node === transport)).toHaveLength(0);
+    act(() => playbackSettingsStore.setState({ showSleepTimerButton: false, showSkipIntervalButtons: false }));
+  });
+
+  it('keeps favorite state/offline behavior and both bookmark paths', () => {
+    const { favoritesStore } = require('@/store/favoritesStore');
+    const { toggleStar } = require('@/services/moreOptionsService');
+    const { offlineModeStore } = require('@/store/offlineModeStore');
+    const { bookmarksStore } = require('@/store/bookmarksStore');
+    const { bookmarkSheetStore } = require('@/store/bookmarkSheetStore');
+    const { capturePlayerSnapshot, commitBookmark } = require('@/services/bookmarkService');
+    const snapshot = { queue: MOCK_QUEUE, currentIndex: 0, positionSec: 30 };
+    capturePlayerSnapshot.mockReturnValue(snapshot);
+    act(() => { offlineModeStore.setState({ offlineMode: false }); bookmarksStore.setState({ autoName: true }); });
+    const screen = render(<PlayerPhonePortrait landscape />);
+    fireEvent.press(screen.getByLabelText('Add to Favorites'));
+    expect(toggleStar).toHaveBeenLastCalledWith('song', 'track-1');
+    act(() => favoritesStore.getState().setOverride('track-1', true));
+    expect(screen.getByLabelText('Remove from Favorites')).toBeTruthy();
+    act(() => offlineModeStore.setState({ offlineMode: true }));
+    expect(screen.getByLabelText('Remove from Favorites').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('Add bookmark'));
+    expect(commitBookmark).toHaveBeenLastCalledWith(snapshot, 'Saved queue');
+    act(() => bookmarksStore.setState({ autoName: false }));
+    fireEvent.press(screen.getByLabelText('Add bookmark'));
+    expect(bookmarkSheetStore.getState()).toEqual(expect.objectContaining({ visible: true, snapshot, initialName: 'Saved queue' }));
+    act(() => { offlineModeStore.setState({ offlineMode: false }); playerStore.setState({ queue: [] }); });
+    expect(screen.getByLabelText('Add bookmark').props.accessibilityState.disabled).toBe(true);
+    bookmarkSheetStore.getState().hide();
+  });
+
+  it.each([[800, 310, 310], [480, 220, 220], [420, 260, 188]])('uses the largest square for a measured %s by %s content area', (width, height, expected) => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    fireEvent(screen.getByTestId('landscape-content-area'), 'layout', { nativeEvent: { layout: { width, height } } });
+    const { StyleSheet } = require('react-native');
+    const frame = StyleSheet.flatten(screen.getByTestId('landscape-artwork').props.style);
+    expect(frame.width).toBe(expected);
+    expect(frame.height).toBe(expected);
+    expect(screen.getByTestId('cover-cover-1').props.resizeMode).toBe('contain');
+    expect(frame.height).toBeLessThanOrEqual(height);
+    expect(width - frame.width - 12).toBeGreaterThanOrEqual(220);
+  });
+});
+
+
+it.each([[219, 239, 44, true], [220, 240, 44, false], [300, 240, 52, false]])(
+  'keeps transport pinned with compact/narrow fallback for %s by %s details', (width, height, size, narrow) => {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    fireEvent(screen.getByTestId('landscape-details'), 'layout', { nativeEvent: { layout: { width, height } } });
+    const transport = screen.getByTestId('landscape-transport');
+    const { StyleSheet } = require('react-native');
+    const play = transport.findAll(node => node.props.accessibilityLabel === 'Play' || node.props.accessibilityLabel === 'Pause')[0];
+    expect(StyleSheet.flatten(play.props.style).width).toBe(size);
+    expect(transport.findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(!narrow);
+    expect(screen.getByTestId('landscape-secondary-scroll').findAll(node => node.props.testID === 'shuffle-button').length > 0).toBe(narrow);
+    expect(screen.getByTestId('landscape-metadata-scroll').findAll(node => node.props.testID === 'landscape-transport')).toHaveLength(0);
+  },
+);
+
+test('the compact custom header restores the native portrait header and uses current safe-area insets', () => {
+  const { Platform, StyleSheet } = require('react-native');
+  const original = Platform.OS;
+  Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+  const setOptions = jest.fn();
+  jest.spyOn(require('expo-router'), 'useNavigation').mockReturnValue({ setOptions });
+  jest.spyOn(require('react-native-safe-area-context'), 'useSafeAreaInsets').mockReturnValue({ top: 0, bottom: 24, left: 32, right: 0 });
+  try {
+    const screen = render(<PlayerPhonePortrait landscape />);
+    const header = render(setOptions.mock.calls.at(-1)[0].header());
+    expect(header.getByText('Playing')).toBeTruthy();
+    const frame = StyleSheet.flatten(header.getByTestId('phone-landscape-header').props.style);
+    expect(frame.paddingTop).toBe(0);
+    expect(frame.paddingLeft).toBe(32);
+    screen.rerender(<PlayerPhonePortrait />);
+    expect(setOptions.mock.calls.at(-1)[0].header).toBeUndefined();
+  } finally {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: original });
+    jest.restoreAllMocks();
+  }
 });

@@ -3,7 +3,7 @@ import Ionicons from "@react-native-vector-icons/ionicons/static";
 import { FlashList } from '@shopify/flash-list';
 import { Stack, useNavigation, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { type ReactNode, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -33,6 +33,7 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
 import { MarqueeText } from '@/components/MarqueeText';
 import { MoreOptionsButton } from '@/components/MoreOptionsButton';
+import { PhoneLandscapeHeader, PHONE_LANDSCAPE_HEADER_HEIGHT } from '@/components/player/PhoneLandscapeHeader';
 import { PlayerPhoneLandscape } from '@/components/player/PlayerPhoneLandscape';
 import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { PlayerTabBar, type PlayerTab } from '@/components/PlayerTabBar';
@@ -208,9 +209,16 @@ export function PlayerPhonePortrait({ landscape = false, orientationControl }: P
   }));
 
   /* ---- Header: dismiss button + more options ---- */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (Platform.OS === 'ios') return;
     navigation.setOptions({
+      header: landscape ? () => (
+        <PhoneLandscapeHeader
+          onClose={onClose}
+          onMore={() => currentTrack && moreOptionsStore.getState().show({ type: 'song', item: currentTrack }, 'player-phone-portrait')}
+          orientationControl={orientationControl}
+        />
+      ) : undefined,
       headerLeft: () => (
         <GHPressable
           onPress={onClose}
@@ -238,7 +246,7 @@ export function PlayerPhonePortrait({ landscape = false, orientationControl }: P
         ) : moreOptions;
       },
     });
-  }, [currentTrack, navigation, onClose, colors.textPrimary, orientationControl]);
+  }, [currentTrack, navigation, onClose, colors.textPrimary, orientationControl, landscape]);
 
   const onClearConfirmed = useCallback(() => {
     onClose();
@@ -303,9 +311,7 @@ export function PlayerPhonePortrait({ landscape = false, orientationControl }: P
     [colors, handleClearQueue, handleShuffle, handleShareQueue, shuffling, queue.length],
   );
 
-  const headerTopPadding = Platform.OS === 'ios'
-    ? insets.top + HEADER_BAR_HEIGHT
-    : insets.top + HEADER_BAR_HEIGHT;
+  const headerTopPadding = insets.top + (landscape ? PHONE_LANDSCAPE_HEADER_HEIGHT : HEADER_BAR_HEIGHT);
 
   if (!currentTrack) {
     return (

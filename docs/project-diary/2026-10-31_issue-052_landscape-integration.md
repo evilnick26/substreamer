@@ -121,3 +121,126 @@ validation before device testing. Cloud and futwick are separate working trees;
 explicit commit, push and fetch are required to transfer completed work.
 
 Historical diary entries were left unchanged.
+
+## 31 October 2026 — Landscape refinement and portrait parity audit
+
+The owner reports a successful physical Android build/test of the initial
+prototype and a promising result, with layout refinements still required. That
+report concerns the previous implementation; the changes below have not yet been
+physically validated. Work started from a clean `integration-052-056` checkout at
+`0b830c417cbc74e0ddcb2220ffa275a3abd3e2fb`, matching its fetched remote tip.
+
+### Audit before implementation
+
+Read the current portrait and landscape source plus relevant history, rather than
+assuming all owner/workstation changes had separate diary entries. Relevant
+changes include `478e7375` (year/version), `9f3f8ca6` (version visibility),
+`b2ddc53c` (artist navigation), `85159739` (decluttering and overflow options),
+`8b5efc0c` (final portrait layout), and subsequent inline-lyrics integration.
+
+The portrait code shows artwork, progress or optional inline lyrics, transport,
+then linked metadata. Album metadata includes year, optional local version and
+album navigation. Favorite/Bookmark sit together beside metadata; the active
+Sleep Timer capsule overlays artwork. Sleep Timer, playback speed and output
+selection remain accessible through existing overflow functionality.
+
+The initial landscape presenter omitted year/version preference and navigation,
+and retained standalone Sleep Timer and Cast controls from the earlier upstream
+layout. These omissions/presentation differences were reported before editing.
+The side-by-side composition, static metadata and absence of inline lyrics are
+intentional landscape differences. The owner explicitly prefers Favorite and
+Bookmark in their existing lower landscape row, so those remain first in that
+row and continue using the shared controls/state handlers.
+
+Product decisions left unchanged: landscape still offers playback rate and
+optional skip controls directly, while portrait moved them to overflow; the
+existing active countdown capsule remains in landscape's lower row. The removed
+Sleep Timer control is the standalone icon, not the conditional active capsule.
+Whether those remaining secondary controls/capsule should also be relocated or
+removed is not decided here.
+
+### Implementation
+
+- Android phone landscape uses a compact 40dp custom header (previous Android
+  header budget 56dp) with a 14sp "Playing" label. Current cutout/top insets are
+  respected. A layout effect switches headers before paint and restores the
+  normal native header in portrait. Portrait content sizing/ordering is unchanged.
+- Reduced landscape gaps and vertical padding. Metadata/seek content retains a
+  vertical overflow fallback; primary transport is outside it and remains pinned.
+  Measured details dimensions select compact text and a 44dp play button on short
+  or narrow areas (52dp otherwise). Extremely narrow columns relocate Shuffle and
+  Repeat to the horizontal secondary row; Favorite and Bookmark remain first.
+- Added linked artist/album metadata, positive album year, and the same optional
+  local album-version lookup/preference as portrait. Late album-version results
+  are ignored after album changes/unmount. No server fetch or metadata duplication
+  is introduced. Removed standalone SleepTimerButton and CastButton imports/rendering
+  only from landscape; underlying stores, output controls and overflow actions
+  are unchanged. Full lyrics tab, retrieval/storage and portrait inline lyrics
+  remain unchanged; main landscape content never renders inline lyrics.
+- A phone-only status-bar hook owns a React Native StatusBar stack entry while
+  Android landscape NPS is focused and foreground-active. It pops that exact entry
+  on portrait, blur, background or unmount, restoring the existing Expo/root policy.
+  Unrelated renders do not repeatedly push/reset it. The override is nonanimated
+  and installed in a layout effect; no Android navigation-bar API is called.
+- Header padding follows live safe-area insets. Artwork and details measure the
+  actual remaining content area after header, tabs and safe areas, so hiding the
+  status bar can reclaim space without a hardcoded status-bar-height subtraction.
+
+### Artwork sizing and limits
+
+Portrait artwork sizing is byte-for-byte unchanged. It fits the portrait width
+(minus its existing 64dp horizontal padding, capped at 400dp) and its existing
+height/tier budget. Landscape no longer allocates art via the old 1:1.4 column
+ratio. Its square is the largest that fits the measured body height and width,
+reserving a 220dp transport/details column and 12dp separation:
+`max(0, floor(min(bodyHeight, bodyWidth - 220 - 12)))`.
+There is no additional artwork percentage reduction or estimated height reserve.
+The square uses contain scaling, preserving the whole cover without stretching or
+cropping non-square source images.
+
+Equal portrait/landscape size is constrained by the remaining landscape height.
+Even with the status bar hidden, the 40dp header, 52dp bottom tabs, actual safe
+areas/navigation region and 4dp body vertical padding still consume space. If the
+portrait cover is larger than that measured square, equal size cannot fit without
+changing those controls/regions; this implementation uses the largest available
+square. It does not shrink portrait artwork to manufacture parity.
+
+The owner provided a 1200 x 2608 pixel panel resolution at approximately 416 ppi.
+This identifies the physical short edge but not Android logical display density,
+window insets, or displayed artwork dimensions. Physical ppi must not be treated
+as React Native PixelRatio. No paired portrait/landscape artwork measurements were
+available. Automated layout-event tests are not a substitute for that comparison.
+Verify actual size parity and constraints on futwick, particularly after status-bar
+inset updates.
+
+### Validation and remaining device work
+
+Focused Android/iOS checks: 14 suites / 218 tests passed. TypeScript passed. Tests
+cover year/version visibility and stale results, metadata links, removed controls,
+Favorite state/offline handling and Bookmark auto/manual/disabled paths, maximum
+square bounds/contain mode, compact/narrow transport behavior, custom header reset,
+phone/tablet selection, orientation lifecycle and status-bar ownership/restoration
+across repeated rotation, focus and foreground changes. Original portrait tests,
+Home tests and tablet player tests remain passing.
+
+Exact source comparisons confirm portrait PlayerContent/artwork sizing and all
+subsequent portrait presenters/styles are unchanged. Home, tablet players and the
+orientation lifecycle/service are unchanged. Android Expo/Metro/Hermes export,
+Intl, all 13 translation validators and the 7-module inventory check passed.
+Translation validation reports 2,481 missing-key warnings with existing English
+fallback, including the new Playing label. No Madge result is claimed because it
+is not installed here. Final full-suite counts are recorded below.
+
+Physical checks still required: same-phone artwork-size comparison; normal fit
+without vertical scrolling; cutouts/navigation bars and large text; both automatic
+rotation directions; manual landscape with system auto-rotate off; header/status
+bar flicker or jumps; restoration on close, album/artist navigation, background/
+foreground and repeated rotations; metadata/version preference, lower-row controls
+and full lyrics access. No native APK/device test or navigation-bar change was
+performed in this cloud session. Do not treat the earlier device test as acceptance
+of these refinements. Historical diary sections remain unchanged.
+
+Final full Jest validation: **664 suites passed, 2 skipped; 11,468 tests passed,
+8 skipped; zero failures**. No new skips. All intended refinements are isolated
+to the phone landscape presenter/header/status-bar scope and their integration
+tests, with the diary and one English label added.

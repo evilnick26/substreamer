@@ -1,3 +1,4 @@
+jest.mock('@/hooks/usePhoneLandscapeStatusBar', () => ({ usePhoneLandscapeStatusBar: jest.fn() }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: jest.fn() }));
 jest.mock('@/utils/deviceLayout', () => ({ __esModule: true, IS_TABLET: false }));
 jest.mock('@/hooks/usePhoneNpsOrientation', () => ({
@@ -35,6 +36,7 @@ it.each([[390, 844, false], [844, 390, true], [900, 430, true], [932, 430, true]
     jest.mocked(useWindowDimensions).mockReturnValue({ width, height, scale: 1, fontScale: 1 });
     render(<PlayerRoute />);
     expect(jest.mocked(PlayerPhonePortrait).mock.calls.at(-1)?.[0]?.landscape).toBe(landscape);
+    expect(require('@/hooks/usePhoneLandscapeStatusBar').usePhoneLandscapeStatusBar).toHaveBeenLastCalledWith(landscape);
   },
 );
 
@@ -51,6 +53,7 @@ it('retains tablet portrait route selection', () => {
   const screen = render(<PlayerRoute />);
   expect(screen.UNSAFE_getByType(PlayerTabletPortrait)).toBeTruthy();
   expect(PlayerPhonePortrait).not.toHaveBeenCalled();
+  expect(require('@/hooks/usePhoneLandscapeStatusBar').usePhoneLandscapeStatusBar).not.toHaveBeenCalled();
 });
 
 it('keeps a tablet below the wide threshold on its original fallback without phone orientation handling', () => {

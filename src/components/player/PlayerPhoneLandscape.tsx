@@ -1,7 +1,8 @@
 import Ionicons from '@react-native-vector-icons/ionicons/static';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 
 import { BookmarkButton } from '@/components/BookmarkButton';
 import { CachedImage } from '@/components/CachedImage';
@@ -10,11 +11,12 @@ import { PlaybackRateButton } from '@/components/PlaybackRateButton';
 import { PlaybackSourceBadge } from '@/components/PlaybackSourceBadge';
 import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { RepeatButton } from '@/components/RepeatButton';
-import { CastButton } from '@/components/RoutePicker';
 import { ShuffleButton } from '@/components/ShuffleButton';
 import { SkipIntervalButton } from '@/components/SkipIntervalButton';
-import { SleepTimerButton } from '@/components/SleepTimerButton';
 import { SleepTimerCapsule } from '@/components/SleepTimerCapsule';
+import { getAlbumVersion } from '@/db/repository/albums';
+import { getDb } from '@/store/persistence/db';
+import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
 import { useCanSkip } from '@/hooks/useCanSkip';
 import { usePlaybackState } from '@/hooks/usePlaybackState';
 import { useTheme } from '@/hooks/useTheme';
@@ -37,6 +39,25 @@ export function PlayerPhoneLandscape({
 }: PlayerPhoneLandscapeProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const router = useRouter();
+  const albumId = currentTrack.albumId ?? null;
+  const artistId = currentTrack.artistId ?? null;
+  const showAlbumVersion = layoutPreferencesStore((s) => s.showAlbumVersion);
+  const [versionResult, setVersionResult] = useState<{ albumId: string; version: string | null } | null>(null);
+  useEffect(() => {
+    let active = true;
+    const db = albumId ? getDb() : null;
+    if (db && albumId) {
+      getAlbumVersion(db, albumId)
+        .then((version) => { if (active) setVersionResult({ albumId, version }); })
+        .catch(() => { if (active) setVersionResult({ albumId, version: null }); });
+    }
+    return () => { active = false; };
+  }, [albumId]);
+  const albumVersion = versionResult?.albumId === albumId ? versionResult.version : null;
+  const [available, setAvailable] = useState({ width: 0, height: 0 });
+  const narrow = available.width > 0 && available.width < 220;
+  const compact = available.height > 0 && (available.height < 240 || available.width < 300);
   const { isPlaying, isBuffering } = usePlaybackState();
   const { canSkipNext, canSkipPrevious } = useCanSkip();
   const position = playerStore((s) => s.position);
@@ -46,79 +67,95 @@ export function PlayerPhoneLandscape({
   const retrying = playerStore((s) => s.retrying);
   const queueLength = playerStore((s) => s.queue.length);
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
-  const showSleepTimer = playbackSettingsStore((s) => s.showSleepTimerButton);
-  const [artSize, setArtSize] = useState(0);
+  const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
+  // Reserve transport width and the column gap; use every remaining vertical pixel.
+  const artSize = Math.max(0, Math.floor(Math.min(contentSize.height, contentSize.width - 220 - 12)));
 
   if (queueLoading) return <ActivityIndicator style={styles.loading} color={colors.textSecondary} />;
 
   return (
     <View testID="phone-landscape-player" style={styles.container}>
-      <View
-        style={styles.artColumn}
-        onLayout={({ nativeEvent: { layout } }) => setArtSize(Math.floor(Math.max(0, Math.min(layout.width, layout.height))))}
-      >
-        {artSize > 0 && (
-          <View style={[styles.artwork, { width: artSize, height: artSize }]}>
-            <CachedImage
-              coverArtId={currentTrack.coverArt ?? undefined}
-              albumId={currentTrack.albumId}
-              size={600}
-              style={styles.image}
-              resizeMode="cover"
+      <View testID="landscape-content-area" style={styles.body} onLayout={({ nativeEvent: { layout } }) => setContentSize({ width: layout.width, height: layout.height })}>
+        <View style={[styles.artColumn, { width: artSize }]}>
+          {artSize > 0 && (
+            <View testID="landscape-artwork" style={[styles.artwork, { width: artSize, height: artSize, backgroundColor: colors.card }]}>
+              <CachedImage
+                coverArtId={currentTrack.coverArt ?? undefined}
+                albumId={currentTrack.albumId}
+                size={600}
+                style={styles.image}
+                resizeMode="contain"
+              />
+              <View style={styles.source}><PlaybackSourceBadge /></View>
+            </View>
+          )}
+        </View>
+        <View
+          testID="landscape-details"
+          style={styles.details}
+          onLayout={({ nativeEvent: { layout } }) => setAvailable({ width: layout.width, height: layout.height })}
+        >
+          <ScrollView testID="landscape-metadata-scroll" style={styles.metadata} contentContainerStyle={styles.metadataContent}>
+            <Text style={[styles.title, { color: colors.textPrimary, fontSize: compact ? 16 : 18 }]} numberOfLines={compact ? 1 : 2}>{currentTrack.title}</Text>
+            <Pressable testID="landscape-artist-link" accessibilityRole={artistId ? 'button' : undefined} accessibilityLabel={currentTrack.artist ?? undefined} disabled={!artistId} onPress={() => { if (artistId) router.push(`/artist/${artistId}`); }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 14 }} numberOfLines={1}>{currentTrack.artist ?? t('unknownArtist')}</Text>
+            </Pressable>
+            <Pressable testID="landscape-album-link" accessibilityRole={albumId ? 'button' : undefined} accessibilityLabel={currentTrack.album ?? undefined} disabled={!albumId} onPress={() => { if (albumId) router.push(`/album/${albumId}`); }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
+                {currentTrack.year != null && currentTrack.year > 0 ? `(${currentTrack.year}) ${currentTrack.album ?? ''}` : currentTrack.album ?? ''}
+              </Text>
+              {showAlbumVersion && !!albumVersion && <Text testID="landscape-album-version" style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{albumVersion}</Text>}
+            </Pressable>
+            <PlayerProgressBar
+              position={position} duration={duration} bufferedPosition={bufferedPosition}
+              colors={colors} onSeek={handleSeek} isBuffering={isBuffering}
+              error={error} retrying={retrying} onRetry={retryPlayback}
             />
-            <View style={styles.source}><PlaybackSourceBadge /></View>
+          </ScrollView>
+          <View testID="landscape-transport" style={styles.controls}>
+            {!narrow && <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />}
+            <Pressable accessibilityRole="button" accessibilityLabel={t('previousTrack')} disabled={!canSkipPrevious} onPress={skipToPrevious} style={styles.button}>
+              <Ionicons name="play-back" size={28} color={canSkipPrevious ? colors.textPrimary : colors.textSecondary} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t(isPlaying ? 'pause' : 'play')} onPress={togglePlayPause} style={[styles.play, { backgroundColor: colors.textPrimary, width: compact ? 44 : 52, height: compact ? 44 : 52 }]}>
+              {isBuffering ? <ActivityIndicator color={colors.background} /> : <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={colors.background} />}
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('nextTrack')} disabled={!canSkipNext} onPress={skipToNext} style={styles.button}>
+              <Ionicons name="play-forward" size={28} color={canSkipNext ? colors.textPrimary : colors.textSecondary} />
+            </Pressable>
+            {!narrow && <RepeatButton size={24} />}
           </View>
-        )}
+          <ScrollView horizontal testID="landscape-secondary-scroll" style={styles.secondary} contentContainerStyle={styles.extras}>
+            <FavoriteButton trackId={currentTrack.id} />
+            <BookmarkButton />
+            {narrow && <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />}
+            {narrow && <RepeatButton size={24} />}
+            <PlaybackRateButton />
+            {showSkipInterval && <SkipIntervalButton direction="backward" size={28} />}
+            {showSkipInterval && <SkipIntervalButton direction="forward" size={28} />}
+            <SleepTimerCapsule />
+          </ScrollView>
+        </View>
       </View>
-      <ScrollView style={styles.details} contentContainerStyle={styles.detailsContent}>
-        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>{currentTrack.title}</Text>
-        <Text style={{ color: colors.textSecondary }} numberOfLines={1}>{currentTrack.artist ?? t('unknownArtist')}</Text>
-        <Text style={{ color: colors.textSecondary }} numberOfLines={1}>{currentTrack.album}</Text>
-        <PlayerProgressBar
-          position={position} duration={duration} bufferedPosition={bufferedPosition}
-          colors={colors} onSeek={handleSeek} isBuffering={isBuffering}
-          error={error} retrying={retrying} onRetry={retryPlayback}
-        />
-        <View style={styles.controls}>
-          <ShuffleButton onPress={handleShuffle} disabled={shuffling || queueLength < 2} size={24} />
-          <Pressable accessibilityRole="button" accessibilityLabel={t('previousTrack')} disabled={!canSkipPrevious} onPress={skipToPrevious} style={styles.button}>
-            <Ionicons name="play-back" size={28} color={canSkipPrevious ? colors.textPrimary : colors.textSecondary} />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t(isPlaying ? 'pause' : 'play')} onPress={togglePlayPause} style={[styles.play, { backgroundColor: colors.textPrimary }]}>
-            {isBuffering ? <ActivityIndicator color={colors.background} /> : <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={colors.background} />}
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t('nextTrack')} disabled={!canSkipNext} onPress={skipToNext} style={styles.button}>
-            <Ionicons name="play-forward" size={28} color={canSkipNext ? colors.textPrimary : colors.textSecondary} />
-          </Pressable>
-          <RepeatButton size={24} />
-        </View>
-        <View style={styles.extras}>
-          <FavoriteButton trackId={currentTrack.id} />
-          <BookmarkButton />
-          <PlaybackRateButton />
-          {showSleepTimer && <SleepTimerButton />}
-          {showSkipInterval && <SkipIntervalButton direction="backward" size={28} />}
-          {showSkipInterval && <SkipIntervalButton direction="forward" size={28} />}
-          <CastButton />
-          <SleepTimerCapsule />
-        </View>
-      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   loading: { flex: 1 },
-  container: { flex: 1, flexDirection: 'row', padding: 8, gap: 16 },
-  artColumn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, paddingHorizontal: 8, paddingVertical: 2 },
+  body: { flex: 1, flexDirection: 'row', gap: 12 },
+  artColumn: { alignItems: 'center', justifyContent: 'center' },
   artwork: { borderRadius: 12, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
   source: { position: 'absolute', right: 8, bottom: 8 },
-  details: { flex: 1.4 },
-  detailsContent: { flexGrow: 1, justifyContent: 'center', gap: 8, paddingBottom: 8 },
+  details: { flex: 1, gap: 2 },
+  metadata: { flex: 1 },
+  metadataContent: { flexGrow: 1, justifyContent: 'center', gap: 2, paddingVertical: 2 },
+  secondary: { flexGrow: 0, flexShrink: 0, height: 44 },
   title: { fontSize: 20, fontWeight: '600' },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, flexWrap: 'wrap' },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexShrink: 0 },
   button: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   play: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  extras: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16 },
+  extras: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 4 },
 });

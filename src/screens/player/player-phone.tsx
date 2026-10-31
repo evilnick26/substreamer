@@ -1,6 +1,7 @@
 import { Alert, Platform, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { usePhoneLandscapeStatusBar } from '@/hooks/usePhoneLandscapeStatusBar';
 import { usePhoneNpsOrientation } from '@/hooks/usePhoneNpsOrientation';
 import { useTheme } from '@/hooks/useTheme';
 import { PlayerPhonePortrait } from './player-phone-portrait';
@@ -8,6 +9,8 @@ import { PlayerPhonePortrait } from './player-phone-portrait';
 /** Keep the phone screen shell mounted while its player-tab presentation rotates. */
 export function PlayerPhone() {
   const { width, height } = useWindowDimensions();
+  const landscape = Platform.OS === 'android' && width > height;
+  usePhoneLandscapeStatusBar(landscape);
   const { mode, manualLandscape, toggleManualLandscape, retryOrientation, returnToPortrait, error } = usePhoneNpsOrientation();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -34,5 +37,5 @@ export function PlayerPhone() {
     </Pressable>
   ) : undefined;
 
-  return <PlayerPhonePortrait landscape={Platform.OS === 'android' && width > height} orientationControl={control} />;
+  return <PlayerPhonePortrait landscape={landscape} orientationControl={control} />;
 }
