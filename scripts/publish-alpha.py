@@ -187,11 +187,12 @@ def main():
     if not apk.is_file() or apk.is_symlink():
         parser.error(f"Missing or symlink APK: {apk}")
     checksum = digest(apk)
-    data = json.loads(args.manifest.read_text(encoding="utf-8"))
+    reviewed_manifest_bytes = args.manifest.read_bytes()
+    manifest_sha = hashlib.sha256(reviewed_manifest_bytes).hexdigest()
+    data = json.loads(reviewed_manifest_bytes.decode("utf-8"))
     manifest_check(data, code, checksum)
     print(f"Release: {code}; APK: {apk}; SHA-256: {checksum}", flush=True)
     print(f"Manifest: {args.manifest}; remote: {REMOTE}:{ROOT}/alpha.json", flush=True)
-    # Keep the exact reviewed bytes for later public verification.
     if args.dry_run:
         print("LOCAL DRY RUN ONLY: no SSH, transfer, sudo or publication attempted.")
         return
@@ -209,6 +210,7 @@ umask 022
 root=/opt/updates-site/client
 code=__CODE__
 sha=__SHA__
+manifest_sha=__MANIFEST_SHA__
 scratch=__SCRATCH__
 trap 'rm -rf -- "$scratch"' EXIT
 # Serialise cooperating publishers; external edits are not protected.
@@ -218,6 +220,7 @@ exec 9>"$lock"
 flock -n 9 || { echo "Another publication holds the lock" >&2; exit 1; }
 test -f "$scratch/apk" && test -f "$scratch/manifest.json"
 test "$(sha256sum "$scratch/apk" | cut -d' ' -f1)" = "$sha"
+test "$(sha256sum "$scratch/manifest.json" | cut -d' ' -f1)" = "$manifest_sha" || { echo "Staged manifest differs from reviewed candidate" >&2; exit 1; }
 python3 - "$scratch/manifest.json" "$code" "$sha" <<'PY'
 import json,sys
 p,c,h=sys.argv[1],int(sys.argv[2]),sys.argv[3]
@@ -269,7 +272,10 @@ echo "REMOTE_PROMOTED:$code:$sha"
     scratch = proc.stdout.strip()
     if not re.fullmatch(r"/tmp/sanctifi-publish\.[A-Za-z0-9]+", scratch):
         raise RuntimeError("Unexpected remote temporary directory")
-    script = remote_script.replace("__CODE__", str(code)).replace("__SHA__", checksum).replace("__SCRATCH__", scratch)
+    script = (remote_script.replace("__CODE__", str(code))
+             .replace("__SHA__", checksum)
+             .replace("__MANIFEST_SHA__", manifest_sha)
+             .replace("__SCRATCH__", scratch))
     try:
         run("scp", str(apk), f"{REMOTE}:{scratch}/apk")
         run("scp", str(args.manifest), f"{REMOTE}:{scratch}/manifest.json")
