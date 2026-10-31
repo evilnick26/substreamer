@@ -344,3 +344,17 @@ Changed files in this pass:
 
 No native APK build or final physical-device acceptance is claimed. No merge into
 sanctifi, change to original issue branches, release or issue closure is performed.
+
+## 31 October 2026 — Owner acceptance and integration into sanctifi
+
+### Final physical-device acceptance
+
+The owner built the final integration revision `82a58c2e6a200703f0638768179c33c1b1bcb8f6` on futwick using `./gradlew assembleRelease`: **BUILD SUCCESSFUL in 3m 27s** (1,684 actionable tasks; 88 executed, 1,596 up-to-date). The APK was installed and the owner provided a landscape NPS screenshot of The Delgados — “The Choices You've Made”. The owner explicitly accepted the appearance: “Okay, we're done with messing with the UI. This looks fine to me.”
+
+The accepted screenshot shows prominent left-side artwork; right-side track, artist and album/year metadata; seek and transport controls; Favourite then Bookmark aligned at the lower right; compact Playing header; bottom tabs; and no vertical scrollbar or inline lyrics. The owner additionally confirmed **pressing Back restores portrait orientation**, calling this ideal. Earlier physical testing confirmed the Android-native rotation suggestion with the NPS `USER` orientation policy. The owner identified green battery/GPS indicators as system overlays, not client UI.
+
+Grok's final implementation report confirmed that Sleep Timer and Playback Speed remain available through the landscape overflow menu, while their standalone landscape controls are absent. Automated validation reported TypeScript passing, 460 focused tests passing, and 11,454 full-suite tests across 660 passing suites (2 suites / 8 tests skipped), plus validators and Android bundle export. Those menu claims are implementation/test evidence rather than a separately reported physical tap-through.
+
+### Acceptance decision and handoff
+
+**Issue #052 accepted by the owner.** The final UI requires no further adjustment in this issue. The integration branch includes the previously accepted #056 Home work. The accepted revision is ready to fast-forward into `sanctifi`, with the GitHub issue to be closed as completed. This entry documents the owner's observed validation and decision, not additional device checks.
