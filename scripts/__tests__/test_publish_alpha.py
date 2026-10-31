@@ -156,7 +156,7 @@ class ManifestValidationTests(unittest.TestCase):
                         "--manifest", str(manifest), "--execute"]
                 ssh_results = ([subprocess.CalledProcessError(255, "ssh")]
                                if failure == "ssh" else
-                               [mock.Mock(stdout=scratch + "\\n"), mock.Mock(returncode=0)])
+                               [mock.Mock(stdout=scratch + "\n"), mock.Mock(returncode=0)])
                 transfers = ([subprocess.CalledProcessError(1, "scp")]
                              if failure == "apk" else
                              [mock.Mock(), subprocess.CalledProcessError(1, "scp")]
@@ -195,7 +195,7 @@ class ManifestValidationTests(unittest.TestCase):
                  mock.patch.object(publisher.sys, "argv", argv), \
                  mock.patch.object(publisher, "remote_preflight"), \
                  mock.patch.object(publisher.subprocess, "run",
-                                   return_value=mock.Mock(stdout="/tmp/unsafe;rm -rf /\\n")), \
+                                   return_value=mock.Mock(stdout="/tmp/unsafe;rm -rf /\n")), \
                  mock.patch.object(publisher, "run") as scp, \
                  mock.patch("builtins.input", return_value="PUBLISH"):
                 with self.assertRaisesRegex(RuntimeError, "Unexpected remote temporary directory"):
