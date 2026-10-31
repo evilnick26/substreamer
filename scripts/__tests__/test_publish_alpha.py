@@ -89,6 +89,28 @@ class ManifestValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publisher.prepare_manifest(CODE, "  ", pathlib.Path("/tmp/unused.json"))
 
+    def test_remote_preflight_read_only_command(self):
+        completed = mock.Mock(stdout="LIVE_VERSION: 80000189\\nAPK_TARGET: absent\\nPREFLIGHT_OK\\n")
+        with mock.patch.object(publisher.subprocess, "run", return_value=completed) as run:
+            publisher.remote_preflight(CODE, HASH)
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[:2], ["ssh", publisher.REMOTE])
+        self.assertNotIn("sudo", argv[2])
+        self.assertNotIn("install ", argv[2])
+        self.assertNotIn("mv ", argv[2])
+        self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_remote_preflight_requires_success_marker(self):
+        with mock.patch.object(publisher.subprocess, "run", return_value=mock.Mock(stdout="")):
+            with self.assertRaises(RuntimeError):
+                publisher.remote_preflight(CODE, HASH)
+
+    def test_remote_preflight_propagates_ssh_failure(self):
+        import subprocess
+        with mock.patch.object(publisher.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "ssh")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                publisher.remote_preflight(CODE, HASH)
+
     def test_digest(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temp:
