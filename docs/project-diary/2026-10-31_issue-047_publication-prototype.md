@@ -87,3 +87,7 @@ Owner confirmed `python3 -m py_compile` passed for publisher and tests, followed
 ## Transport and recovery tests added (awaiting Futwick validation)
 
 Added isolated tests for SSH scratch-creation failure, APK SCP failure, manifest SCP failure, deliberate promotion block, cleanup attempts after staging, and rejection of unsafe scratch paths. Added static assertions for privileged script's temporary-file cleanup, live-manifest comparison, atomic rename, success marker, and continued disabled promotion. These static checks do **not** simulate actual privileged failure/recovery, and cleanup SSH failure is currently ignored by the publisher. No production execution; test suite expected to increase from 14 to 17. Remaining: real sandboxed promotion fault injection, stronger cleanup reporting, privileged command transport, post-publication verification and rollback policy.
+
+## Transport test failure and fixture correction
+
+Owner reported 14/17 passing. Three `test_transport_failure_matrix_and_cleanup` subcases (`apk`, `manifest`, `blocked`) saw zero SCP calls. Root cause: mocked scratch-path SSH stdout contained a literal backslash-n rather than a newline, failing path validation before transfers. Corrected escape in the test fixture. Awaiting Futwick revalidation; publisher and production files unchanged.
