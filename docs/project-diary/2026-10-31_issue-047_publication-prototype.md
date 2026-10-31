@@ -95,3 +95,7 @@ Owner reported 14/17 passing. Three `test_transport_failure_matrix_and_cleanup` 
 ## Futwick transport suite validated — 17/17
 
 Owner reported `Ran 17 tests in 0.035s` / `OK` after fixing the mocked SSH stdout newline. The transport failure matrix, unsafe scratch path refusal, and static promotion/recovery invariants passed. This validates mocked SSH/SCP control flow and cleanup attempts only; no isolated privileged-script execution or fault-injected recovery has been performed. `--execute` remains deliberately blocked. Next: sandboxed privileged promotion/fault-injection tests and review cleanup failure reporting before any production authorization.
+
+## Cleanup failure reporting and tests — pending Futwick validation
+
+Added `cleanup_remote_scratch()` so a nonzero SSH cleanup exit or SSH-launch OSError emits an explicit warning identifying the scratch directory while preserving the original transport/promotion exception. The helper is called from the existing `finally` block; successful cleanup remains silent. Added two focused unit tests for cleanup exit failure and launch failure (expected suite: 19). No remote execution or publication. **Important outstanding limitation:** these tests do not exercise privileged promotion rollback or prove remote cleanup succeeded; remote promotion remains blocked. Validation on Futwick pending.
