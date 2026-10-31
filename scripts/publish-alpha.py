@@ -206,12 +206,12 @@ root=/opt/updates-site/client
 code=__CODE__
 sha=__SHA__
 scratch=__SCRATCH__
+trap 'rm -rf -- "$scratch"' EXIT
 # Serialise cooperating publishers; external edits are not protected.
 lock="$root/.alpha-publish.lock"
 if test -L "$lock"; then echo "Refusing symlink publication lock" >&2; exit 1; fi
 exec 9>"$lock"
 flock -n 9 || { echo "Another publication holds the lock" >&2; exit 1; }
-trap 'rm -rf -- "$scratch"' EXIT
 test -f "$scratch/apk" && test -f "$scratch/manifest.json"
 test "$(sha256sum "$scratch/apk" | cut -d' ' -f1)" = "$sha"
 python3 - "$scratch/manifest.json" "$code" "$sha" <<'PY'
