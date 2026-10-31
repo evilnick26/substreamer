@@ -151,3 +151,7 @@ Owner previously confirmed 20/20 tests in 1.154s after fixing symlink guards; al
 ## Futwick validation — 21/21 passing
 
 Owner confirmed `Ran 21 tests in 1.041s` / `OK` after adding the privileged SSH command-construction test. This verifies the expected forced-TTY argument and shell quoting in isolation; no privileged SSH command was executed and no live authentication was tested. Twelve local sandbox promotion scenarios remain passing. Next: carefully scoped read-only SSH/sudo authentication rehearsal, then concurrency and publication-readiness review. `--execute` remains disabled; release 80000190 unpublished.
+
+## Obscurity interactive authentication rehearsal — passed
+
+Owner ran from Futwick: `ssh -tt evilnick@obscurity 'sudo -v && sudo -n id -u'`. SSH requested the evilnick password, sudo separately requested the evilnick sudo password, command returned UID `0`, and the connection closed normally. This confirms an interactive remote TTY and sudo authentication work in the owner's environment, without release-file writes or APK transfer. Owner explicitly prefers both prompts. The full publisher transport has not yet been executed; `--execute` remains disabled and release 80000190 remains unpublished. Remaining: final check/rename race, full attended rehearsal and explicit publication approval.
