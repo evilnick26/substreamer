@@ -183,3 +183,7 @@ Owner confirmed that, at present, they are the only person who updates the live 
 ## Clarification — sole entity updating alpha.json
 
 Owner clarified explicitly that they are not merely the only person but the only entity updating live `alpha.json`: no other automated writer exists. The attended publisher will become the controlled publication path; concurrent invocations remain guarded by `flock`. Residual compare-to-rename race with an external writer is accepted under this operating model, which should be revisited if ownership changes. Final nonpublishing rehearsal remains pending; `--execute` remains disabled and release 80000190 unpublished.
+
+## Nonpublishing rehearsal mode — awaiting Futwick validation
+
+Added `--rehearse` mode to the existing publisher: validates the local APK and reviewed manifest, runs the existing read-only remote preflight, and prints `REHEARSAL_OK`. It performs no staging, transfer, sudo, or publication and does not exercise privileged promotion. Owner can run against candidate 80000190 with `/tmp/sanctifi-alpha-80000190.json`. `--execute` still intentionally blocked. This is a safe pre-publication gate, not a complete dry-run of privileged promotion. Final live publication remains subject to explicit approval.
