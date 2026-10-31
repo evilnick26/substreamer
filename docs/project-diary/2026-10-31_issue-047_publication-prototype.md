@@ -27,3 +27,7 @@ Owner confirmed that release notes are the only routinely human-authored manifes
 ## Futwick test feedback and correction
 
 Owner ran `python3 -m unittest discover -s scripts/__tests__ -p 'test_publish_alpha.py' -v` on the branch. Nine tests passed; the manifest-save test failed with `JSONDecodeError: Extra data`. Investigation identified double-escaped Python newline literals in the generated JSON suffix, preview and multiline notes join. Corrected these to actual newline escape sequences in commit `4ee46532`. **Retest pending**; no production manifest or publication was performed.
+
+## Futwick validation — manifest generator
+
+Owner reported successful rerun after regression assertion fixes: `Ran 10 tests in 0.006s` / `OK`. This validates the local Python unit test suite, not the remote publication workflow. Next step is attended creation and review of candidate manifest for release `80000190`; `--execute` remains disabled and must not be used.
