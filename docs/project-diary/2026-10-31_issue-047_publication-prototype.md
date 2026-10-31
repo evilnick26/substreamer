@@ -143,3 +143,7 @@ Added two sandbox subcases to assert the privileged promotion script refuses sym
 ## Symlink tests revealed actual fail-open bug — fix pending validation
 
 Owner reported 20 test methods with two failing sandbox subcases: dangling symlink APK target unexpectedly allowed publication; dangling symlink backup target allowed APK creation. Root cause in production embedded Bash: `test ! -L "$target" && test ! -L "$backup" && test ! -L "$root/alpha.json"` is an AND list; with Bash `set -e`, a failing nonfinal command in an AND list does not necessarily abort the script, and the final successful check permits continuation. Replaced with explicit `if test -L ... || ...; then echo error; exit 1; fi`. This is a genuine publisher safety correction, not a test expectation change. Owner revalidation pending. `--execute` remains blocked; no production writes.
+
+## Transport command construction — awaiting validation
+
+Owner previously confirmed 20/20 tests in 1.154s after fixing symlink guards; all twelve sandbox scenarios passed. Added a pure `privileged_ssh_argv(script)` helper returning `ssh -tt evilnick@obscurity` with a shell-quoted `sudo bash -c` argument, plus a unit test for forced TTY and exact argument preservation. The `--execute` branch only constructs the command and still raises before executing it. This is a structural unit test, NOT a live SSH/sudo authentication test. Expected 21 tests. Need review whether sudo's TTY requirements and prompt work on Obscurity, plus the final compare/rename race. Release 80000190 remains unpublished.
