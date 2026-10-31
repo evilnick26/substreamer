@@ -215,3 +215,7 @@ Owner executed the attended publisher on Futwick with `--code 80000190 --manifes
 ## Post-publication tester acceptance
 
 Owner confirmed release 80000190 was tested after publication and approved by the tester, whose verbatim feedback on Release Type grouping was: “Oh, that seems sensible”. This confirms positive user-facing acceptance of the feature in the published Alpha. No defects were reported in this feedback. Publication infrastructure remains separately validated by the earlier public HTTPS manifest/APK verification. No further deployment action required from this report.
+
+## Final UI polish — update action label
+
+After successful live Alpha 80000190 publication and tester acceptance, owner requested changing the update notification action from `Download APK` to `Download`. Located the canonical English string in `src/i18n/locales/en.json`; updated it and corresponding expectations in `ClientUpdateController.test.tsx` and `VersionControls.test.tsx` on `issue-047-publication-automation`. Historical diary mentions remain unchanged. No download behavior or release publication changed. Futwick targeted tests pending; 80000190 already published retains original wording until a future APK build. Branch integration remains subject to owner approval.
