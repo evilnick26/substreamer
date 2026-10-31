@@ -91,12 +91,18 @@ def main():
     parser.add_argument("--code", type=int, required=True)
     parser.add_argument("--manifest", type=Path, help="Reviewed candidate JSON on Futwick")
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--prepare-manifest", action="store_true", help="Interactively create a local candidate only")\n    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--prepare-manifest", action="store_true", help="Interactively create a local candidate only")
+    mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     code = args.code
     if code < 1 or code > 2100000000:
         parser.error("Invalid versionCode")
+    if args.manifest is None:
+        parser.error("--manifest FILE is required")
+    if args.prepare_manifest:
+        prepare_manifest(code, prompt_release_notes(), args.manifest)
+        return
     apk = ARCHIVE / f"sanctifi-{code}.apk"
     if not apk.is_file() or apk.is_symlink():
         parser.error(f"Missing or symlink APK: {apk}")
