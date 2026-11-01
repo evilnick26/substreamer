@@ -120,3 +120,9 @@ Never record private keys, passwords, recovery archives or access credentials he
 | versionCode | Actual versionName | Exact source revision | APK SHA-256 | Certificate SHA-256 | Status |
 | --- | --- | --- | --- | --- | --- |
 | `80000190` | `8.1.8` | Unknown - not built | Not built | Not inspected | Reserved 2026-10-30T20:19:29.530Z; automatic reservation bd22ba90-f700-465c-be9b-bf231f04492b |
+
+### Automatic reservation 80000191
+
+| versionCode | Actual versionName | Exact source revision | APK SHA-256 | Certificate SHA-256 | Status |
+| --- | --- | --- | --- | --- | --- |
+| `80000191` | `8.1.8` | Unknown - not built | Not built | Not inspected | Reserved 2026-11-01T11:22:16.651Z; automatic reservation 935ca7d4-38b8-499b-a2a2-cd701313bb16 |
