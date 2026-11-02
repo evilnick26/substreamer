@@ -32,7 +32,7 @@ test('reports reconciliation without allocating or writing history', async () =>
     baseline: baselineFile, directory, archives: [directory], buildTools: '/sdk',
     ledgerFile: '/ledger',
   }, {
-    probe: () => ({ status: 'observed-not-authoritative', observedAt: '2026-11-02T18:39:44Z' }),
+    probe: () => ({ status: 'observed-not-authoritative', observedAt: new Date().toISOString() }),
     reconcile: async () => ({ publishedCount: 6, highestPublishedCode: 80000191,
       verifiedLocalCount: 6, localArchiveInspectedFiles: 6,
       localState: { highestKnownCode: 80000191 } }),
@@ -40,4 +40,17 @@ test('reports reconciliation without allocating or writing history', async () =>
   expect(result.status).toBe('read-only-reconciled-not-attested');
   expect(result.highestPublishedCode).toBe(80000191);
   expect(fs.readdirSync(directory)).toEqual(['baseline.json']);
+});
+
+test('rejects stale or unparseable remote observations before reconciliation', async () => {
+  const options = { baseline: baselineFile, directory, archives: [directory],
+    buildTools: '/sdk', ledgerFile: '/ledger' };
+  const reconcile = jest.fn();
+  for (const observedAt of ['2026-01-01T00:00:00Z', 'invalid']) {
+    await expect(report(options, {
+      probe: () => ({ status: 'observed-not-authoritative', observedAt }),
+      reconcile,
+    })).rejects.toThrow('recent, timestamped');
+  }
+  expect(reconcile).not.toHaveBeenCalled();
 });
