@@ -37,7 +37,7 @@ function reserve() {
   const previous = readCounter();
   requireTrue(previous < MAX, 'Android versionCode limit reached');
   const next = previous + 1;
-  requireTrue(!fs.existsSync(path.join(ARCHIVE, 'sanctifi-' + next + '.apk')), 'Archive collision; reconcile before proceeding');
+  requireTrue(!fs.existsSync(path.join(ARCHIVE, 'sanctifi-' + next + '.apk')) && !fs.existsSync(path.join(ARCHIVE, 'sanctifi-' + next + '.apk.json')), 'Archive collision; reconcile before proceeding');
   writeAtomic(path.join(STATE, 'last-code'), next + '\n');
   return next;
 }
@@ -71,12 +71,12 @@ function build() {
     updateVersions(code);
     console.log('Reserved versionCode ' + code);
     const revision = execFileSync('git', ['-C', ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    const result = spawnSync('./gradlew', ['assembleRelease', '--no-daemon'], { cwd: path.join(ROOT, 'android'), stdio: 'inherit' });
+    const output = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');\n    if (fs.existsSync(output)) fs.unlinkSync(output); // Never accept a stale Gradle output.\n    const result = spawnSync('./gradlew', ['assembleRelease', '--no-daemon'], { cwd: path.join(ROOT, 'android'), stdio: 'inherit' });
     requireTrue(result.status === 0, 'Gradle build failed; code ' + code + ' remains consumed');
     const apk = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');
     verify(apk, code);
     const dest = path.join(ARCHIVE, 'sanctifi-' + code + '.apk');
-    fs.copyFileSync(apk, dest, fs.constants.COPYFILE_EXCL);
+    fs.copyFileSync(apk, dest, fs.constants.COPYFILE_EXCL);\n    const archived = fs.openSync(dest, 'r');\n    try { fs.fsyncSync(archived); } finally { fs.closeSync(archived); }\n    syncDir(ARCHIVE);
     const sha = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
     const record = { versionCode: code, sha256: sha, sourceRevision: revision, builtAt: new Date().toISOString(), deviceTested: false, published: false };
     fs.writeFileSync(dest + '.json', JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
@@ -102,4 +102,4 @@ if (require.main === module) {
     else throw new Error('Usage: node scripts/android-local-build.js init LAST_USED_CODE | build');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { readCounter, writeAtomic };
+module.exports = { readCounter, writeAtomic, updateVersions, reserve };
