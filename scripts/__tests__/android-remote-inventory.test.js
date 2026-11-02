@@ -51,7 +51,7 @@ describe('remote inventory observation (issue #067)', () => {
   });
 
   test('rejects manifest changed during observation', () => {
-    const changed = sample().replace('---ALPHA-AGAIN---\n', '---ALPHA-AGAIN---\n ');
+    const changed = sample().replace(/(---ALPHA-AGAIN---\n[\s\S]*?)80000191/, (_, prefix) => prefix + '80000190');
     expect(() => inspect(changed)).toThrow('Remote inventory changed');
   });
 
