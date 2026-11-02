@@ -21,8 +21,8 @@ function writeAtomic(file, data) {
   try { fs.renameSync(temp, file); syncDir(path.dirname(file)); }
   finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
 }
-function readCounter() {
-  const value = fs.readFileSync(path.join(STATE, 'last-code'), 'utf8').trim();
+function readCounter(stateDir = STATE) {
+  const value = fs.readFileSync(path.join(stateDir, 'last-code'), 'utf8').trim();
   requireTrue(/^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)), 'Invalid local versionCode counter');
   return Number(value);
 }
@@ -33,12 +33,12 @@ function ensureArchive() {
   requireTrue(mounts.split('\n').some(line => line.split(' ')[4] === '/media/data'), '/media/data is not mounted');
   requireTrue(fs.statSync(ARCHIVE).isDirectory(), 'Release archive is not a directory');
 }
-function reserve() {
-  const previous = readCounter();
+function reserve(stateDir = STATE, archiveDir = ARCHIVE) {
+  const previous = readCounter(stateDir);
   requireTrue(previous < MAX, 'Android versionCode limit reached');
   const next = previous + 1;
-  requireTrue(!fs.existsSync(path.join(ARCHIVE, 'sanctifi-' + next + '.apk')) && !fs.existsSync(path.join(ARCHIVE, 'sanctifi-' + next + '.apk.json')), 'Archive collision; reconcile before proceeding');
-  writeAtomic(path.join(STATE, 'last-code'), next + '\n');
+  requireTrue(!fs.existsSync(path.join(archiveDir, 'sanctifi-' + next + '.apk')) && !fs.existsSync(path.join(archiveDir, 'sanctifi-' + next + '.apk.json')), 'Archive collision; reconcile before proceeding');
+  writeAtomic(path.join(stateDir, 'last-code'), next + '\n');
   return next;
 }
 function updateVersions(code) {
