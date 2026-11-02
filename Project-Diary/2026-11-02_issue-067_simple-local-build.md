@@ -74,3 +74,9 @@
 - Archive tests confirmed complete staging and successful cleanup, plus refusal to overwrite an existing APK.
 - These tests do not simulate process termination mid-copy or execute Gradle.
 - No live versionCode allocation, APK build, or publication.
+
+## Integration preparation
+- Updated operating guide to distinguish review worktree from established Futwick build checkout, preserve generated native Android signing configuration, and avoid blind branch merging.
+- Explicitly documented that live builds modify tracked `app.json` and ignored native `android/app/build.gradle`.
+- Awaiting read-only branch/upstream/status inspection of the established checkout before choosing integration commands.
+- No live allocation, build, or publication.
