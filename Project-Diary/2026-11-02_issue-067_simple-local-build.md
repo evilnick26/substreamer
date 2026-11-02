@@ -46,3 +46,10 @@
 - Signature verification succeeded; SHA-256 certificate digest exactly matched the script's pinned digest `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c`.
 - APK metadata confirmed `fi.sancti.client`, versionCode `80000191`, versionName `8.1.8`.
 - Read-only verification only; no new allocation, build or publication.
+
+## Archival failure review
+- Identified that copying directly to final `.apk` path could leave an incomplete archive after interruption.
+- Changed builder to copy to a `.partial-PID` path, fsync staged bytes, then rename to the final archive path and sync its directory.
+- A failed archive may leave a partial staging file; its versionCode remains consumed and no publication occurs. Manual investigation/cleanup only.
+- Change committed but **not yet executed on Futwick**.
+- Important integration constraint: the separate issue worktree does not contain the generated `android/` project. The first real build must run from the established Futwick build checkout after integration, not from the disposable review worktree.
