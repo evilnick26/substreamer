@@ -68,3 +68,31 @@ test('does not expose a candidate preview when reconciliation reports failure', 
     }),
   })).rejects.toThrow('Reconciliation did not succeed');
 });
+
+test('writes a nonauthoritative draft through the CLI report integration', async () => {
+  const baseline = JSON.parse(fs.readFileSync(baselineFile, 'utf8'));
+  baseline.archivePaths = [directory];
+  fs.writeFileSync(baselineFile, JSON.stringify(baseline));
+  const destination = path.join(directory, 'candidate.json');
+  const options = { baseline: baselineFile, directory, archives: [directory],
+    buildTools: '/sdk', ledgerFile: '/ledger', draftOutput: destination };
+  const dependencies = {
+    probe: () => ({ status: 'observed-not-authoritative',
+      observedAt: new Date(Date.now() - 1000).toISOString(),
+      apks: [{ versionCode: 80000191, sha256: 'a'.repeat(64) }] }),
+    reconcile: async () => ({
+      status: 'remote-baseline-consistent', highestPublishedCode: 80000191,
+      localArchiveInspectedFiles: 1,
+      inspectedArtifacts: [{ versionCode: 80000191, sha256: 'a'.repeat(64), state: 'occupied' }],
+      ledgerArtifacts: [], attemptedCodes: [],
+      localState: { highestKnownCode: 80000191 },
+    }),
+  };
+  const result = await report(options, dependencies);
+  expect(result.draftFile).toBe(destination);
+  const draft = JSON.parse(fs.readFileSync(destination, 'utf8'));
+  expect(draft.status).toBe('draft-not-authoritative');
+  expect(draft).not.toHaveProperty('complete');
+  expect(draft).not.toHaveProperty('checkedAt');
+  await expect(report(options, dependencies)).rejects.toThrow();
+});
