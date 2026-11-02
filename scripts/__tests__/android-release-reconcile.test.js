@@ -54,3 +54,17 @@ test('rejects stale or unparseable remote observations before reconciliation', a
   }
   expect(reconcile).not.toHaveBeenCalled();
 });
+
+test('does not expose a candidate preview when reconciliation reports failure', async () => {
+  const options = { baseline: baselineFile, directory, archives: [directory],
+    buildTools: '/sdk', ledgerFile: '/ledger' };
+  await expect(report(options, {
+    probe: () => ({ status: 'observed-not-authoritative',
+      observedAt: new Date().toISOString(),
+      apks: [{ versionCode: 80000191, sha256: 'a'.repeat(64) }] }),
+    reconcile: async () => ({
+      status: 'failed', inspectedArtifacts: [], ledgerArtifacts: [],
+      attemptedCodes: [], localState: { highestKnownCode: 80000191 },
+    }),
+  })).rejects.toThrow('Reconciliation did not succeed');
+});
