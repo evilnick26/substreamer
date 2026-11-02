@@ -10,6 +10,7 @@ const { spawnSync } = require('node:child_process');
 const { reconcileLocalPublished } = require('./android-local-reconcile');
 const { releaseDirectory } = require('./android-release');
 const { previewEvidence } = require('./android-evidence-preview');
+const { makeEvidenceDraft, writeEvidenceDraft } = require('./android-evidence-draft');
 
 function optionsFromArgs(args) {
   const values = {};
@@ -17,6 +18,7 @@ function optionsFromArgs(args) {
     ['--baseline', 'baseline'], ['--directory', 'directory'],
     ['--archive', 'archives'], ['--build-tools', 'buildTools'],
     ['--ledger', 'ledgerFile'], ['--output-apk', 'outputApk'],
+    ['--draft-output', 'draftOutput'],
   ]);
   for (let i = 0; i < args.length; i += 1) {
     const key = names.get(args[i]);
@@ -76,9 +78,17 @@ async function report(options, dependencies = {}) {
   });
   const preview = local.inspectedArtifacts && local.ledgerArtifacts && local.attemptedCodes
     ? previewEvidence({ baseline, remote, local }) : null;
+  let draftFile = null;
+  if (options.draftOutput) {
+    if (!preview) throw new Error('Full reconciled evidence required for a draft');
+    const draft = makeEvidenceDraft({ baseline, remote, local,
+      archivePaths: options.archives, allocationDirectory: archive });
+    draftFile = writeEvidenceDraft(options.draftOutput, draft);
+  }
   return {
     status: 'read-only-reconciled-not-attested',
     evidencePreview: preview,
+    draftFile,
     remoteObservedAt: remote.observedAt,
     remotePublishedCount: local.publishedCount,
     highestPublishedCode: local.highestPublishedCode,
