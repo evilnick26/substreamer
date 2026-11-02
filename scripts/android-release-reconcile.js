@@ -11,6 +11,7 @@ const { reconcileLocalPublished } = require('./android-local-reconcile');
 const { releaseDirectory } = require('./android-release');
 const { previewEvidence } = require('./android-evidence-preview');
 const { makeEvidenceDraft, writeEvidenceDraft } = require('./android-evidence-draft');
+const { verifyArchiveScope } = require('./android-archive-scope');
 
 function optionsFromArgs(args) {
   const values = {};
@@ -18,7 +19,7 @@ function optionsFromArgs(args) {
     ['--baseline', 'baseline'], ['--directory', 'directory'],
     ['--archive', 'archives'], ['--build-tools', 'buildTools'],
     ['--ledger', 'ledgerFile'], ['--output-apk', 'outputApk'],
-    ['--draft-output', 'draftOutput'],
+    ['--draft-output', 'draftOutput'], ['--scope', 'scopeFile'],
   ]);
   for (let i = 0; i < args.length; i += 1) {
     const key = names.get(args[i]);
@@ -83,9 +84,13 @@ async function report(options, dependencies = {}) {
   }
   let draftFile = null;
   if (options.draftOutput) {
+    if (!options.scopeFile) throw new Error('--draft-output requires --scope FILE');
+    const scope = verifyArchiveScope({ file: options.scopeFile, directory: archive,
+      archives: options.archives, baseline });
     if (!preview) throw new Error('Full reconciled evidence required for a draft');
     const draft = makeEvidenceDraft({ baseline, remote, local,
       archivePaths: options.archives, allocationDirectory: archive });
+    draft.scopeReview = scope;
     draftFile = writeEvidenceDraft(options.draftOutput, draft);
   }
   return {
