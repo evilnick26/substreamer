@@ -59,3 +59,10 @@
 - `node --check scripts/android-local-build.js` succeeded; `node --test scripts/__tests__/android-local-build.test.js` passed **4/4**.
 - These tests do not yet exercise archive staging or actual Gradle execution.
 - No live counter initialisation, APK build, or publication.
+
+## Archive helper and new tests
+- Replaced the archive rename with an exclusive hard-link operation after staged copy and fsync, preventing an existing final APK from being overwritten.
+- Extracted `archiveApk()` for isolated tests. Added two tests for successful staging/cleanup and existing-destination refusal with preservation of original bytes.
+- On archive failure a `.partial-PID` file may remain for manual inspection; the final destination is not overwritten.
+- Six tests now exist; the two new tests are **not yet executed** on Futwick.
+- No live allocation, build, or publication.
