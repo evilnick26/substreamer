@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { AlbumInfoContent } from '@/components/AlbumInfoContent';
 import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
 import { LyricsContent } from '@/components/LyricsContent';
-import { BookmarkButton } from '@/components/BookmarkButton';
+import { PlayMoreLikeThisButton } from '@/components/PlayMoreLikeThisButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
@@ -736,7 +736,7 @@ const PlayerContent = memo(function PlayerContent({
           </View>
           <View style={styles.trackActionColumn}>
             <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
-            <BookmarkButton style={styles.favoriteButton} />
+            <PlayMoreLikeThisButton style={styles.favoriteButton} />
           </View>
         </View>
       </View>

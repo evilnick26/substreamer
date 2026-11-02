@@ -23,6 +23,7 @@ import { StarRatingDisplay } from './StarRating';
 import { useDownloadStatus, type DownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useRating } from '../hooks/useRating';
+import { useBookmarkAction } from '../hooks/useBookmarkAction';
 import { useTheme } from '../hooks/useTheme';
 import { tabletLayoutStore } from '../store/tabletLayoutStore';
 import {
@@ -253,6 +254,8 @@ export function MoreOptionsSheet() {
   // Match the prefix, NOT `!== 'default'`: other non-player sources exist, and treating
   // them as player sources swaps Add to Queue / Play Next for the queue actions.
   const isPlayerSource = source.startsWith('player-');
+  const queueLength = playerStore((s) => s.queue.length);
+  const handleBookmark = useBookmarkAction(moreOptionsStore.getState().hideAndAwait);
 
   const starType: 'song' | 'album' | 'artist' =
     entity?.type === 'album' || entity?.type === 'artist' ? entity.type : 'song';
@@ -728,6 +731,15 @@ export function MoreOptionsSheet() {
               />
               <View style={styles.sectionDivider} />
             </>
+          )}
+
+          {isPlayerSource && (
+            <MoreOptionsRow
+              icon={<Ionicons name="bookmark-outline" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
+              label={t('addBookmark')}
+              onPress={handleBookmark}
+              disabled={queueLength === 0}
+            />
           )}
 
           <>

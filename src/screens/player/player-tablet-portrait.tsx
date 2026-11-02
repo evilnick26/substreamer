@@ -17,7 +17,7 @@ import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BookmarkButton } from '@/components/BookmarkButton';
+import { PlayMoreLikeThisButton } from '@/components/PlayMoreLikeThisButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
@@ -492,7 +492,7 @@ const PlaybackControls = memo(function PlaybackControls({
           {showSkipInterval && <SkipIntervalButton direction="forward" size={32} />}
         </View>
         <View style={styles.controlSideRight}>
-          <BookmarkButton style={styles.favoriteButton} />
+          <PlayMoreLikeThisButton style={styles.favoriteButton} />
         </View>
       </View>
     </>

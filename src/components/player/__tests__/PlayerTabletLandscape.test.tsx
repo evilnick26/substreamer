@@ -107,10 +107,7 @@ jest.mock('@/components/MarqueeText', () => {
   return { MarqueeText: ({ children }: { children: React.ReactNode }) => <Text>{children}</Text> };
 });
 
-jest.mock('@/components/BookmarkButton', () => {
-  const { View } = require('react-native');
-  return { BookmarkButton: () => <View testID="bookmark-button" /> };
-});
+jest.mock('@/services/moreOptionsService', () => ({ playMoreLikeThis: jest.fn() }));
 
 jest.mock('@/components/FavoriteButton', () => {
   const { View } = require('react-native');
@@ -230,7 +227,7 @@ jest.mock('@shopify/flash-list', () => {
 
 import React from 'react';
 import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { type SharedValue } from 'react-native-reanimated';
 
 import { appStateStore } from '@/store/appStateStore';
@@ -334,4 +331,16 @@ test('whole progress component is replaced for genuine cached lyrics and restore
   act(() => layoutPreferencesStore.getState().setDisplaySyncedLyricsInNps(false));
   expect(view.getByTestId('progress-bar')).toBeTruthy();
   expect(view.queryByTestId('inline-lyrics')).toBeNull();
+});
+
+
+it('offers one recommendation button in expanded tablet landscape', () => {
+  const { playMoreLikeThis } = require('@/services/moreOptionsService');
+  require('@/store/offlineModeStore').offlineModeStore.setState({ offlineMode: false });
+  tabletLayoutStore.setState({ playerExpanded: true });
+  const view = render(<PlayerTabletLandscape expandProgress={{ value: 1 } as SharedValue<number>} />);
+  expect(view.getAllByLabelText('Play More Like This')).toHaveLength(1);
+  expect(view.queryByLabelText('Add bookmark')).toBeNull();
+  fireEvent.press(view.getByLabelText('Play More Like This'));
+  expect(playMoreLikeThis).toHaveBeenLastCalledWith(MOCK_TRACK);
 });
