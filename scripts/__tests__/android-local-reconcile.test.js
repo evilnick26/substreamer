@@ -59,3 +59,21 @@ test('rejects mismatched private registry identity', async () => {
     inspect: async () => ({ versionCode: 80000192, sha256: sha('b') }),
   })).rejects.toThrow('registry identity mismatch');
 });
+
+test('fails closed when a published ledger APK disappears from Obscurity', async () => {
+  const observation = remote();
+  observation.apks = observation.apks.filter((item) => item.versionCode !== 80000191);
+  await expect(reconcileLocalPublished({
+    directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk',
+    baseline: baseline(), remote: observation,
+    inspect: async () => ({ versionCode: 80000192, sha256: sha('b') }),
+  })).rejects.toThrow('Published ledger APK missing from remote archive: 80000191');
+});
+test('fails closed when a published ledger checksum differs from Obscurity', async () => {
+  fs.writeFileSync(ledgerFile, '| `80000191` | 8.1.8 | Unknown | ' + sha('c') + ' | Unknown | Published |\n');
+  await expect(reconcileLocalPublished({
+    directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk',
+    baseline: baseline(), remote: remote(),
+    inspect: async () => ({ versionCode: 80000192, sha256: sha('b') }),
+  })).rejects.toThrow('Published ledger checksum conflicts with remote APK: 80000191');
+});
