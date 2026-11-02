@@ -1308,76 +1308,21 @@ describe('MoreOptionsSheet — phone Now Playing audio output', () => {
 });
 
 
-describe('NPS Bookmark overflow', () => {
+describe('NPS overflow cleanup', () => {
   const playerSources = ['player-phone-portrait', 'player-tablet-portrait', 'player-tablet-landscape', 'player-tablet-splitview'] as const;
-
-  it.each(playerSources)('shows Bookmark once, including offline, for %s', (source) => {
-    mockQueue = [song];
-    mockOfflineMode = true;
-    open(songEntity, source);
-    expect(screen.getAllByText('Add bookmark')).toHaveLength(1);
-  });
-
-  it.each(['default', 'playlist-detail'] as const)('does not add Bookmark to %s menus', (source) => {
-    open(songEntity, source);
+  it.each(playerSources)('hides redundant actions for %s online and offline', (source) => {
+    const view = open(songEntity, source);
     expect(screen.queryByText('Add bookmark')).toBeNull();
+    expect(screen.queryByText('Play More Like This')).toBeNull();
+    mockOfflineMode = true;
+    view.rerender(<MoreOptionsSheet />);
+    expect(screen.queryByText('Add bookmark')).toBeNull();
+    expect(screen.queryByText('Play More Like This')).toBeNull();
   });
-
-  it('disables Bookmark when the live queue is empty', () => {
-    open(songEntity, 'player-phone-portrait');
-    fireEvent.press(screen.getByText('Add bookmark'));
-    expect(require('../../services/bookmarkService').capturePlayerSnapshot).not.toHaveBeenCalled();
-  });
-
-  it('does nothing if the queue disappears before capture', async () => {
-    const { capturePlayerSnapshot, commitBookmark } = require('../../services/bookmarkService');
-    mockQueue = [song];
-    capturePlayerSnapshot.mockReturnValue(null);
-    open(songEntity, 'player-phone-portrait');
-    fireEvent.press(screen.getByText('Add bookmark'));
-    expect(capturePlayerSnapshot).toHaveBeenCalledTimes(1);
-    expect(commitBookmark).not.toHaveBeenCalled();
-  });
-
-  it.each([true, false])('captures before closing and preserves the autoName=%s flow', async (autoName) => {
-    const { bookmarksStore } = require('../../store/bookmarksStore');
-    const { bookmarkSheetStore } = require('../../store/bookmarkSheetStore');
-    const { capturePlayerSnapshot, commitBookmark, buildAutoName } = require('../../services/bookmarkService');
-    const { playbackToastStore } = require('../../store/playbackToastStore');
-    const snapshot = { queue: [song], currentIndex: 0, positionSec: 42 };
-    mockQueue = [song];
-    bookmarksStore.setState({ autoName, bookmarks: { existing: { name: 'Saved queue' } } });
-    bookmarkSheetStore.getState().hide();
-    capturePlayerSnapshot.mockReturnValue(snapshot);
-    const closed = deferred<void>();
-    const originalHideAndAwait = moreOptionsStore.getState().hideAndAwait;
-    moreOptionsStore.setState({ hideAndAwait: jest.fn(() => {
-      moreOptionsStore.getState().hide();
-      return closed.promise;
-    }) });
-    try {
-      open(songEntity, 'player-phone-portrait');
-      fireEvent.press(screen.getByText('Add bookmark'));
-      expect(capturePlayerSnapshot).toHaveBeenCalledTimes(1);
-      sheetClosed();
-      expect(bookmarkSheetStore.getState().visible).toBe(false);
-      expect(commitBookmark).not.toHaveBeenCalled();
-      // Playback can advance while the overflow modal is closing.
-      mockQueue = [{ ...song, id: 'different' }];
-      capturePlayerSnapshot.mockReturnValue(null);
-      await act(async () => closed.resolve());
-      expect(buildAutoName).toHaveBeenCalledWith(expect.any(Function), expect.any(String), ['Saved queue']);
-      if (autoName) {
-        expect(commitBookmark).toHaveBeenCalledWith(snapshot, 'Saved queue');
-        expect(playbackToastStore.getState().successLabel).toBe('Bookmark saved');
-      } else {
-        expect(commitBookmark).not.toHaveBeenCalled();
-        expect(bookmarkSheetStore.getState()).toEqual(expect.objectContaining({ visible: true, snapshot, initialName: 'Saved queue' }));
-      }
-    } finally {
-      moreOptionsStore.setState({ hideAndAwait: originalHideAndAwait });
-      bookmarkSheetStore.getState().hide();
-      bookmarksStore.setState({ bookmarks: {} });
-    }
+  it.each(['default', 'playlist-detail'] as const)('retains recommendations in %s', (source) => {
+    open(songEntity, source);
+    fireEvent.press(screen.getByText('Play More Like This'));
+    expect(playMoreLikeThis).toHaveBeenCalledWith(song);
+    expect(screen.queryByText('Add bookmark')).toBeNull();
   });
 });
