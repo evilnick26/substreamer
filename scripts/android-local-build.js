@@ -47,11 +47,11 @@ function updateVersions(code) {
   const app = JSON.parse(fs.readFileSync(appFile, 'utf8'));
   const gradle = fs.readFileSync(gradleFile, 'utf8');
   requireTrue(app.expo.android.package === 'fi.sancti.client', 'Unexpected application ID');
-  const matches = [...gradle.matchAll(/^\s*versionCode\s+\d+\s*$/gm)];
+  const matches = [...gradle.matchAll(/^[ \t]*versionCode[ \t]+\d+[ \t]*$/gm)];
   requireTrue(matches.length === 1, 'Expected one Gradle versionCode');
   app.expo.android.versionCode = code;
   writeAtomic(appFile, JSON.stringify(app, null, 2) + '\n');
-  writeAtomic(gradleFile, gradle.replace(/^([ \t]*versionCode[ \t]+)\d+([ \t]*)$/m, '$1' + code + '$2'));
+  writeAtomic(gradleFile, gradle.replace(/^([ \t]*versionCode[ \t]+)\d+([ \t]*)$/m, (_, prefix, suffix) => prefix + code + suffix));
 }
 function verify(apk, code) {
   const tools = path.join(process.env.ANDROID_HOME || '', 'build-tools/36.0.0');
