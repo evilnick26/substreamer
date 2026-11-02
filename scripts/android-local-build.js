@@ -81,9 +81,13 @@ function build() {
     requireTrue(fs.existsSync(apk), 'Gradle produced no APK; code remains consumed');
     verify(apk, code);
     const dest = path.join(ARCHIVE, 'sanctifi-' + code + '.apk');
-    fs.copyFileSync(apk, dest, fs.constants.COPYFILE_EXCL);
-    const archived = fs.openSync(dest, 'r');
+    // Stage under a temporary name so an interrupted copy never looks like a completed APK.
+    const staged = dest + '.partial-' + process.pid;
+    fs.copyFileSync(apk, staged, fs.constants.COPYFILE_EXCL);
+    const archived = fs.openSync(staged, 'r');
     try { fs.fsyncSync(archived); } finally { fs.closeSync(archived); }
+    requireTrue(!fs.existsSync(dest), 'Archive destination appeared during staging');
+    fs.renameSync(staged, dest);
     syncDir(ARCHIVE);
     const sha = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
     const record = { versionCode: code, sha256: sha, sourceRevision: revision, builtAt: new Date().toISOString(), deviceTested: false, published: false };
