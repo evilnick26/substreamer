@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 
-import { BookmarkButton } from '@/components/BookmarkButton';
+import { PlayMoreLikeThisButton } from '@/components/PlayMoreLikeThisButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { PlaybackSourceBadge } from '@/components/PlaybackSourceBadge';
@@ -121,7 +121,7 @@ export function PlayerPhoneLandscape({
           </View>
           <View testID="landscape-secondary-row" style={styles.secondary}>
             <FavoriteButton trackId={currentTrack.id} style={styles.secondaryButton} />
-            <BookmarkButton style={styles.secondaryButton} />
+            <PlayMoreLikeThisButton style={styles.secondaryButton} />
           </View>
         </View>
       </View>

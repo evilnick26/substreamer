@@ -221,6 +221,7 @@ jest.mock('@/services/bookmarkService', () => ({
 
 jest.mock('@/services/moreOptionsService', () => ({
   toggleStar: jest.fn(),
+  playMoreLikeThis: jest.fn(),
 }));
 
 jest.mock('@/utils/formatters', () => ({
@@ -294,6 +295,8 @@ const MOCK_QUEUE: Child[] = [
 ];
 
 beforeEach(() => {
+  require('@/store/offlineModeStore').offlineModeStore.setState({ offlineMode: false });
+  require('@/services/moreOptionsService').playMoreLikeThis.mockClear();
   require('@/store/favoritesStore').favoritesStore.setState({ overrides: {}, songIds: new Set() });
   layoutPreferencesStore.getState().setShowAlbumVersion(true);
   fetchLyrics.mockClear();
@@ -870,7 +873,7 @@ describe('refined landscape parity', () => {
     const row = screen.getByTestId('landscape-secondary-row');
     const controls = row.findAll(node => node.props.accessibilityRole === 'button');
     const labels = [...new Set(controls.map(node => node.props.accessibilityLabel))];
-    expect(labels).toEqual(['Add to Favorites', 'Add bookmark']);
+    expect(labels).toEqual(['Add to Favorites', 'Play More Like This']);
     const { StyleSheet } = require('react-native');
     expect(StyleSheet.flatten(row.props.style).justifyContent).toBe('flex-end');
     expect(screen.queryByTestId('rate-button')).toBeNull();
@@ -880,31 +883,22 @@ describe('refined landscape parity', () => {
     act(() => playbackSettingsStore.setState({ showSleepTimerButton: false, showSkipIntervalButtons: false }));
   });
 
-  it('keeps favorite state/offline behavior and both bookmark paths', () => {
+  it('keeps favorite state and disables recommendations offline', () => {
     const { favoritesStore } = require('@/store/favoritesStore');
-    const { toggleStar } = require('@/services/moreOptionsService');
+    const { toggleStar, playMoreLikeThis } = require('@/services/moreOptionsService');
     const { offlineModeStore } = require('@/store/offlineModeStore');
-    const { bookmarksStore } = require('@/store/bookmarksStore');
-    const { bookmarkSheetStore } = require('@/store/bookmarkSheetStore');
-    const { capturePlayerSnapshot, commitBookmark } = require('@/services/bookmarkService');
-    const snapshot = { queue: MOCK_QUEUE, currentIndex: 0, positionSec: 30 };
-    capturePlayerSnapshot.mockReturnValue(snapshot);
-    act(() => { offlineModeStore.setState({ offlineMode: false }); bookmarksStore.setState({ autoName: true }); });
     const screen = render(<PlayerPhonePortrait landscape />);
     fireEvent.press(screen.getByLabelText('Add to Favorites'));
     expect(toggleStar).toHaveBeenLastCalledWith('song', 'track-1');
     act(() => favoritesStore.getState().setOverride('track-1', true));
-    expect(screen.getByLabelText('Remove from Favorites')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Play More Like This'));
+    expect(playMoreLikeThis).toHaveBeenLastCalledWith(MOCK_TRACK);
+    playMoreLikeThis.mockClear();
     act(() => offlineModeStore.setState({ offlineMode: true }));
     expect(screen.getByLabelText('Remove from Favorites').props.accessibilityState.disabled).toBe(true);
-    fireEvent.press(screen.getByLabelText('Add bookmark'));
-    expect(commitBookmark).toHaveBeenLastCalledWith(snapshot, 'Saved queue');
-    act(() => bookmarksStore.setState({ autoName: false }));
-    fireEvent.press(screen.getByLabelText('Add bookmark'));
-    expect(bookmarkSheetStore.getState()).toEqual(expect.objectContaining({ visible: true, snapshot, initialName: 'Saved queue' }));
-    act(() => { offlineModeStore.setState({ offlineMode: false }); playerStore.setState({ queue: [] }); });
-    expect(screen.getByLabelText('Add bookmark').props.accessibilityState.disabled).toBe(true);
-    bookmarkSheetStore.getState().hide();
+    expect(screen.getByLabelText('Play More Like This').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('Play More Like This'));
+    expect(playMoreLikeThis).not.toHaveBeenCalled();
   });
 
   it.each([[800, 310, 310], [480, 220, 220], [420, 260, 188]])('uses the largest square for a measured %s by %s content area', (width, height, expected) => {
@@ -957,4 +951,79 @@ test('the compact custom header restores the native portrait header and uses cur
     Object.defineProperty(Platform, 'OS', { configurable: true, value: original });
     jest.restoreAllMocks();
   }
+});
+
+
+describe('NPS recommendations', () => {
+  it.each([
+    ['phone portrait', () => <PlayerPhonePortrait />],
+    ['phone landscape', () => <PlayerPhonePortrait landscape />],
+    ['tablet portrait', () => <PlayerTabletPortrait />],
+  ])('uses the current track from %s', (_name, element) => {
+    const { playMoreLikeThis } = require('@/services/moreOptionsService');
+    const view = render(element());
+    expect(view.getAllByLabelText('Play More Like This')).toHaveLength(1);
+    expect(view.queryByLabelText('Add bookmark')).toBeNull();
+    fireEvent.press(view.getByLabelText('Play More Like This'));
+    expect(playMoreLikeThis).toHaveBeenLastCalledWith(MOCK_TRACK);
+  });
+
+  it.each([true, false])('retains the shared bookmark handler without an enclosing menu, autoName=%s', (autoName) => {
+    const { BookmarkButton } = require('@/components/BookmarkButton');
+    const { bookmarksStore } = require('@/store/bookmarksStore');
+    const { bookmarkSheetStore } = require('@/store/bookmarkSheetStore');
+    const { capturePlayerSnapshot, commitBookmark } = require('@/services/bookmarkService');
+    const snapshot = { queue: MOCK_QUEUE, currentIndex: 0, positionSec: 30 };
+    capturePlayerSnapshot.mockReturnValue(snapshot);
+    commitBookmark.mockClear();
+    bookmarksStore.setState({ autoName });
+    const view = render(<BookmarkButton />);
+    fireEvent.press(view.getByLabelText('Add bookmark'));
+    if (autoName) expect(commitBookmark).toHaveBeenCalledWith(snapshot, 'Saved queue');
+    else expect(bookmarkSheetStore.getState().snapshot).toBe(snapshot);
+    bookmarkSheetStore.getState().hide();
+  });
+
+  it('disables the shared button without a current track', () => {
+    const { PlayMoreLikeThisButton } = require('@/components/PlayMoreLikeThisButton');
+    const { playMoreLikeThis } = require('@/services/moreOptionsService');
+    playerStore.setState({ currentTrack: null });
+    const view = render(<PlayMoreLikeThisButton />);
+    const button = view.getByRole('button', { name: 'Play More Like This' });
+    expect(button.props.accessibilityState.disabled).toBe(true);
+    expect(button.props.hitSlop).toBe(8);
+    fireEvent.press(button);
+    expect(playMoreLikeThis).not.toHaveBeenCalled();
+  });
+
+  it('preserves caller sizing and pressed/disabled feedback on the shared button', () => {
+    const { StyleSheet } = require('react-native');
+    const { PlayMoreLikeThisButton } = require('@/components/PlayMoreLikeThisButton');
+    const { offlineModeStore } = require('@/store/offlineModeStore');
+    const { playMoreLikeThis } = require('@/services/moreOptionsService');
+    const sizing = { minWidth: 44, minHeight: 44 };
+    const view = render(<PlayMoreLikeThisButton style={sizing} />);
+    const pressable = () => view.UNSAFE_root.find(node =>
+      node.props.accessibilityLabel === 'Play More Like This' && typeof node.props.style === 'function');
+    const stylesForPress = () => pressable().props.style({ pressed: true });
+    expect(StyleSheet.flatten(stylesForPress())).toEqual(expect.objectContaining({ ...sizing, opacity: 0.6 }));
+    act(() => offlineModeStore.setState({ offlineMode: true }));
+    expect(StyleSheet.flatten(stylesForPress()).opacity).toBe(0.4);
+    // The callback also guards a native press delivered as connectivity changes.
+    pressable().props.onPress();
+    expect(playMoreLikeThis).not.toHaveBeenCalled();
+  });
+
+  it('preserves playback state across phone orientation changes and uses the new track', () => {
+    const { playMoreLikeThis } = require('@/services/moreOptionsService');
+    const view = render(<PlayerPhonePortrait />);
+    view.rerender(<PlayerPhonePortrait landscape />);
+    view.rerender(<PlayerPhonePortrait />);
+    expect(playerStore.getState()).toEqual(expect.objectContaining({ queue: MOCK_QUEUE, currentTrack: MOCK_TRACK, position: 30 }));
+    expect(playMoreLikeThis).not.toHaveBeenCalled();
+    expect(view.getAllByLabelText('Play More Like This')).toHaveLength(1);
+    act(() => playerStore.setState({ currentTrack: MOCK_QUEUE[1], currentTrackIndex: 1 }));
+    fireEvent.press(view.getByLabelText('Play More Like This'));
+    expect(playMoreLikeThis).toHaveBeenLastCalledWith(MOCK_QUEUE[1]);
+  });
 });

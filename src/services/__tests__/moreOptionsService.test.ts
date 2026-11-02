@@ -385,6 +385,16 @@ describe('playMoreLikeThis', () => {
     expect(mockGetTopSongs).not.toHaveBeenCalled();
   });
 
+  it('requests fresh recommendations for the same seed and never starts with the seed', async () => {
+    mockGetSimilarSongs.mockResolvedValueOnce([{ id: 's1' }, { id: 'new-1' }])
+      .mockResolvedValueOnce([{ id: 's1' }, { id: 'new-2' }]);
+    await playMoreLikeThis({ id: 's1' } as any);
+    await playMoreLikeThis({ id: 's1' } as any);
+    expect(mockGetSimilarSongs).toHaveBeenCalledTimes(2);
+    expect(mockPlayTrack).toHaveBeenNthCalledWith(1, { id: 'new-1' }, [{ id: 'new-1' }]);
+    expect(mockPlayTrack).toHaveBeenNthCalledWith(2, { id: 'new-2' }, [{ id: 'new-2' }]);
+  });
+
   it('shows error when no similar songs found via any path', async () => {
     mockGetSimilarSongs.mockResolvedValue([]);
     mockGetSimilarSongs2.mockResolvedValue([]);

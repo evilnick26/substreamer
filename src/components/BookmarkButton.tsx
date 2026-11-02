@@ -1,13 +1,10 @@
 import Ionicons from "@react-native-vector-icons/ionicons/static";
-import { memo, useCallback } from 'react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useBookmarkAction } from '../hooks/useBookmarkAction';
 import { useTheme } from '../hooks/useTheme';
-import { buildAutoName, capturePlayerSnapshot, commitBookmark } from '../services/bookmarkService';
-import { bookmarkSheetStore } from '../store/bookmarkSheetStore';
-import { bookmarksStore } from '../store/bookmarksStore';
-import { playbackToastStore } from '../store/playbackToastStore';
 import { playerStore } from '../store/playerStore';
 
 export interface BookmarkButtonProps {
@@ -25,26 +22,12 @@ export const BookmarkButton = memo(function BookmarkButton({
   size = 24,
   style,
 }: BookmarkButtonProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { colors } = useTheme();
-  const autoName = bookmarksStore((s) => s.autoName);
   const queueLength = playerStore((s) => s.queue.length);
   const disabled = queueLength === 0;
 
-  const handlePress = useCallback(() => {
-    // Capture the queue/position NOW, at tap time, regardless of which path we
-    // take — the manual-name sheet commits this same snapshot on Save.
-    const snapshot = capturePlayerSnapshot();
-    if (!snapshot) return;
-    const existingNames = Object.values(bookmarksStore.getState().bookmarks).map((b) => b.name);
-    const suggested = buildAutoName(t, i18n.language, existingNames);
-    if (autoName) {
-      commitBookmark(snapshot, suggested);
-      playbackToastStore.getState().flashSuccess(t('bookmarkSaved'));
-    } else {
-      bookmarkSheetStore.getState().showCreate(suggested, snapshot);
-    }
-  }, [autoName, t, i18n.language]);
+  const handlePress = useBookmarkAction();
 
   return (
     <Pressable

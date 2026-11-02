@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlbumInfoContent } from '@/components/AlbumInfoContent';
 import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
 import { LyricsContent } from '@/components/LyricsContent';
-import { BookmarkButton } from '@/components/BookmarkButton';
+import { PlayMoreLikeThisButton } from '@/components/PlayMoreLikeThisButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { MarqueeText } from '@/components/MarqueeText';
@@ -444,7 +444,7 @@ export function PlayerTabletLandscape({
                   )}
                 </View>
                 <View style={styles.controlSideRight}>
-                  <BookmarkButton style={styles.bookmarkButton} />
+                  <PlayMoreLikeThisButton style={styles.bookmarkButton} />
                 </View>
               </View>
 

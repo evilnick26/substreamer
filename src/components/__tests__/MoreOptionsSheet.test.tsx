@@ -1,5 +1,9 @@
 jest.mock('../../store/persistence/kvStorage', () => require('../../store/persistence/__mocks__/kvStorage'));
 
+jest.mock('../../services/bookmarkService', () => ({
+  capturePlayerSnapshot: jest.fn(), buildAutoName: jest.fn(() => 'Saved queue'), commitBookmark: jest.fn(),
+}));
+
 import React from 'react';
 import { render } from '@testing-library/react-native';
 
@@ -148,7 +152,7 @@ jest.mock('../../store/mbidSearchStore', () => ({
   mbidSearchStore: { getState: () => ({ showArtist: jest.fn(), showAlbum: jest.fn() }) },
 }));
 jest.mock('../../store/playerStore', () => ({
-  playerStore: { getState: () => ({ queue: [] }) },
+  playerStore: Object.assign((selector: (s: any) => unknown) => selector({ queue: [] }), { getState: () => ({ queue: [] }) }),
 }));
 jest.mock('../../store/syncStatusStore', () => ({
   syncStatusStore: { getState: () => ({ bumpLibraryUpdated: jest.fn() }) },
