@@ -113,3 +113,6 @@ Read-only `find` inventory of three known Futwick locations: Releases **7 APKs**
 
 ## Futwick verified APK audit
 Owner verified 10/10 local APK files using inspectApk. Six distinct code/hash identities across five codes: 80000186 and 80000187 each match published; 80000189 matches historical rejected SHA c728b111; 80000190 has published SHA 2dd94baa and a second signed SHA bdcff63b (two quarantined filenames, one misleadingly labelled 80000191); 80000191 has three matching published copies SHA 230e15df. All are correctly signed. Quarantined alternate 80000190 must be explicitly reviewed and recorded as rejected before full-scope reconciliation: the current collector treats unknown hashes as occupied and will otherwise correctly reject conflicting identities. No files modified, no archive completeness approval, allocation, build or publication.
+
+## Regression coverage for alternate quarantined identity
+Added three tests to `scripts/__tests__/android-local-archives.test.js` (commit `cd6a431`): explicitly approved rejected 80000190 alongside occupied published 80000190, with duplicate and misleadingly named quarantined APKs; unknown alternative must remain fail-closed; contradictory state for identical code/hash must fail. No classification was approved or added to actual baseline. Tests awaiting Futwick execution; no allocation, build or publication.
