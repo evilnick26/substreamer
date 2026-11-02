@@ -6,10 +6,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { inspectApk, releaseDirectory } = require('./android-release');
 const { reconcileRemote } = require('./android-remote-reconcile');
+const { auditReleaseState } = require('./android-local-state-audit');
 
-async function reconcileLocalPublished({ directory, buildTools, baseline, remote, inspect = inspectApk }) {
-  if (!buildTools || !directory) throw new Error('Local reconciliation requires archive and Android build-tools');
+async function reconcileLocalPublished({ directory, buildTools, ledgerFile, baseline, remote, inspect = inspectApk }) {
+  if (!buildTools || !directory || !ledgerFile) throw new Error('Local reconciliation requires archive, ledger and Android build-tools');
   const archive = releaseDirectory(directory);
+  const localState = auditReleaseState({ directory: archive, ledgerFile });
   const registry = path.join(archive, '.allocations');
   const identityPath = path.join(registry, 'registry.json');
   if (!fs.lstatSync(registry).isDirectory() || !fs.lstatSync(identityPath).isFile()) {
@@ -38,9 +40,18 @@ async function reconcileLocalPublished({ directory, buildTools, baseline, remote
     verifiedLocal.push({ versionCode: code, sha256: apk.sha256, verified: true });
   }
   const result = reconcileRemote(baseline, remote, verifiedLocal);
+  for (const row of localState.ledger) {
+    if (!row.sha256 || !row.status.startsWith('Published')) continue;
+    const published = remote.apks.find((item) => item.versionCode === row.versionCode);
+    if (published && published.sha256 !== row.sha256) {
+      throw new Error('Published ledger checksum conflicts with remote APK: ' + row.versionCode);
+    }
+  }
   return {
     ...result,
     verifiedLocalCount: verifiedLocal.length,
+    localState: { ledgerCount: localState.ledgerCount, reservationCount: localState.reservationCount,
+      attemptedCodes: localState.attemptedCodes, highestKnownCode: localState.highestKnownCode },
     limitations: 'Read-only archive/remote comparison only. Local reservations, attempt markers, ledger, complete archive scope and refreshed history still require allocationEvidence validation.',
   };
 }
