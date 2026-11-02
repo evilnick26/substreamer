@@ -33,20 +33,21 @@ const remote = () => ({
 
 test('uses inspectApk verification to recognise newer published bytes', async () => {
   const inspect = jest.fn(async () => ({ versionCode: 80000192, sha256: sha('b') }));
-  const result = await reconcileLocalPublished({ directory, ledgerFile, buildTools: '/mock/sdk', baseline: baseline(), remote: remote(), inspect });
+  const result = await reconcileLocalPublished({ directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk', baseline: baseline(), remote: remote(), inspect });
   expect(result.verifiedLocalCount).toBe(1);
+  expect(result.localArchiveInspectedFiles).toBe(1);
   expect(inspect).toHaveBeenCalledTimes(1);
 });
 test('rejects conflicting local APK bytes', async () => {
   await expect(reconcileLocalPublished({
-    directory, ledgerFile, buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
+    directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
     inspect: async () => ({ versionCode: 80000192, sha256: sha('c') }),
   })).rejects.toThrow('identities conflict');
 });
 test('does not trust unknown server APK if local file missing', async () => {
   fs.unlinkSync(path.join(directory, 'sanctifi-80000192.apk'));
   await expect(reconcileLocalPublished({
-    directory, ledgerFile, buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
+    directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
     inspect: async () => { throw new Error('should not inspect'); },
   })).rejects.toThrow('unrecognised published APK');
 });
@@ -54,7 +55,7 @@ test('rejects mismatched private registry identity', async () => {
   fs.writeFileSync(path.join(directory, '.allocations/registry.json'),
     JSON.stringify({ schemaVersion: 1, directory: '/other' }));
   await expect(reconcileLocalPublished({
-    directory, ledgerFile, buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
+    directory, ledgerFile, archivePaths: [directory], buildTools: '/mock/sdk', baseline: baseline(), remote: remote(),
     inspect: async () => ({ versionCode: 80000192, sha256: sha('b') }),
   })).rejects.toThrow('registry identity mismatch');
 });
