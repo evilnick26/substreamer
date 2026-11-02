@@ -27,3 +27,6 @@ Read-only GitHub inspection of the source and documentation. No local Futwick ru
 - Implement and test the collector against mocked/local fixtures, including stale, partial, conflicting, offline and concurrent states.
 - Expose concise allocation preview/approval and synchronisation without manual history editing.
 - Validate on Futwick before any live allocation; keep Issue #065 device acceptance pending.
+
+## Server read-only access observation
+Owner ran `ssh evilnick@sancti.fi` from Futwick and successfully listed `/opt/updates-site/client/apks/` and `/opt/updates-site/client/*.json` without sudo. Six APK filenames were present (`80000186`–`80000191`); `alpha.json` and four historical Alpha backup manifests were listed. File listing alone does not verify checksums, manifest contents, remote reservations, or exclusivity. Next investigation: inspect SHA-256 of server APKs and current manifest read-only, then determine whether any server-side independent allocation process exists.
