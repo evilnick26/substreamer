@@ -73,9 +73,15 @@ test('writes a nonauthoritative draft through the CLI report integration', async
   const baseline = JSON.parse(fs.readFileSync(baselineFile, 'utf8'));
   baseline.archivePaths = [directory];
   fs.writeFileSync(baselineFile, JSON.stringify(baseline));
+  const scopeFile = path.join(directory, 'approved-scope.json');
+  fs.writeFileSync(scopeFile, JSON.stringify({
+    schemaVersion: 1, approved: true, approvedBy: 'test fixture',
+    reason: 'fixture archive scope', allocationDirectory: directory,
+    archivePaths: [directory],
+  }));
   const destination = path.join(directory, 'candidate.json');
   const options = { baseline: baselineFile, directory, archives: [directory],
-    buildTools: '/sdk', ledgerFile: '/ledger', draftOutput: destination };
+    buildTools: '/sdk', ledgerFile: '/ledger', draftOutput: destination, scopeFile };
   const dependencies = {
     probe: () => ({ status: 'observed-not-authoritative',
       observedAt: new Date(Date.now() - 1000).toISOString(),
