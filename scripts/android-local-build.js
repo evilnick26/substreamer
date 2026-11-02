@@ -41,6 +41,18 @@ function reserve(stateDir = STATE, archiveDir = ARCHIVE) {
   writeAtomic(path.join(stateDir, 'last-code'), next + '\n');
   return next;
 }
+function archiveApk(apk, dest) {
+  // A failed copy leaves only a .partial file, never a final APK.
+  const staged = dest + '.partial-' + process.pid;
+  fs.copyFileSync(apk, staged, fs.constants.COPYFILE_EXCL);
+  const fd = fs.openSync(staged, 'r');
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  // Exclusive hard link: unlike rename, this cannot overwrite an existing APK.
+  fs.linkSync(staged, dest);
+  syncDir(path.dirname(dest));
+  fs.unlinkSync(staged);
+  syncDir(path.dirname(dest));
+}
 function updateVersions(code) {
   const appFile = path.join(ROOT, 'app.json');
   const gradleFile = path.join(ROOT, 'android/app/build.gradle');
@@ -81,14 +93,7 @@ function build() {
     requireTrue(fs.existsSync(apk), 'Gradle produced no APK; code remains consumed');
     verify(apk, code);
     const dest = path.join(ARCHIVE, 'sanctifi-' + code + '.apk');
-    // Stage under a temporary name so an interrupted copy never looks like a completed APK.
-    const staged = dest + '.partial-' + process.pid;
-    fs.copyFileSync(apk, staged, fs.constants.COPYFILE_EXCL);
-    const archived = fs.openSync(staged, 'r');
-    try { fs.fsyncSync(archived); } finally { fs.closeSync(archived); }
-    requireTrue(!fs.existsSync(dest), 'Archive destination appeared during staging');
-    fs.renameSync(staged, dest);
-    syncDir(ARCHIVE);
+    archiveApk(apk, dest);
     const sha = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
     const record = { versionCode: code, sha256: sha, sourceRevision: revision, builtAt: new Date().toISOString(), deviceTested: false, published: false };
     const recordFd = fs.openSync(dest + '.json', 'wx', 0o600);
@@ -116,4 +121,4 @@ if (require.main === module) {
     else throw new Error('Usage: node scripts/android-local-build.js init LAST_USED_CODE | build');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { readCounter, writeAtomic, updateVersions, reserve };
+module.exports = { readCounter, writeAtomic, updateVersions, reserve, archiveApk };
