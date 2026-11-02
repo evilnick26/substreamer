@@ -63,3 +63,8 @@ After user confirmed all five focused suites passed on Futwick (27/27 tests, 2.0
 
 ## Futwick snapshot test failure and correction
 User ran remote inventory Jest suite on Futwick: five tests passed, one failed. The failing mutation fixture only prepended whitespace to the second Alpha manifest; parser trims manifest text, so no actual difference remained. Corrected fixture to change the second manifest versionCode (`fc53cae9`). This is a test fixture defect, not yet evidence of a production parser failure. Corrected test awaits Futwick rerun.
+
+## Live Obscurity evidence and reconciliation entry point
+User configured existing Futwick SSH public key for Obscurity and successfully ran `node scripts/android-remote-inventory.js` at 2026-11-02T18:39:44.887Z. Remote observed APKs 80000186–80000191; active Alpha 80000191 SHA-256 `230e15dfbfe940836bbffb1d98a8e2120c9fb748a436168a269e18640c149434`. Both reads agreed. This is not historical attestation and does not justify allocating 80000192 by itself.
+
+Added read-only `scripts/android-release-reconcile.js` CLI (`5a78a61f`) requiring approved baseline, explicit archive declarations, build-tools and ledger. It invokes the live probe and local reconciler and reports counts/high-water observations without writing history or allocating. Added CLI tests (`08749e15`). New CLI tests have **not yet run on Futwick**. Next: validate against real local paths, verify scope of archives and historical baseline, then implement guarded history generation. No allocation or publication.
