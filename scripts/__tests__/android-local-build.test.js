@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { writeAtomic, reserve, readCounter } = require('../android-local-build');
+const { writeAtomic, reserve, readCounter, archiveApk } = require('../android-local-build');
 
 test('counter replacement is complete and leaves no temporary file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctifi-counter-'));
@@ -50,5 +50,30 @@ test('archive collision blocks reservation without consuming a code', () => {
     fs.writeFileSync(path.join(dir, 'sanctifi-80000192.apk'), 'existing');
     assert.throws(() => reserve(state, dir), /Archive collision/);
     assert.equal(readCounter(state), 80000191);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('archive staging creates complete final APK and removes temporary file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctifi-archive-'));
+  try {
+    const source = path.join(dir, 'source.apk');
+    const dest = path.join(dir, 'sanctifi-80000192.apk');
+    fs.writeFileSync(source, 'complete-test-apk');
+    archiveApk(source, dest);
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'complete-test-apk');
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['sanctifi-80000192.apk', 'source.apk']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('archive staging never overwrites an existing final APK', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctifi-archive-'));
+  try {
+    const source = path.join(dir, 'source.apk');
+    const dest = path.join(dir, 'sanctifi-80000192.apk');
+    fs.writeFileSync(source, 'replacement');
+    fs.writeFileSync(dest, 'original');
+    assert.throws(() => archiveApk(source, dest), /EEXIST/);
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'original');
+    assert.equal(fs.readFileSync(dest + '.partial-' + process.pid, 'utf8'), 'replacement');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
