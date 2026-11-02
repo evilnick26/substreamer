@@ -71,15 +71,23 @@ function build() {
     updateVersions(code);
     console.log('Reserved versionCode ' + code);
     const revision = execFileSync('git', ['-C', ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    const output = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');\n    if (fs.existsSync(output)) fs.unlinkSync(output); // Never accept a stale Gradle output.\n    const result = spawnSync('./gradlew', ['assembleRelease', '--no-daemon'], { cwd: path.join(ROOT, 'android'), stdio: 'inherit' });
+    const output = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');
+    if (fs.existsSync(output)) fs.unlinkSync(output); // Never accept a stale Gradle output.
+    const result = spawnSync('./gradlew', ['assembleRelease', '--no-daemon'], { cwd: path.join(ROOT, 'android'), stdio: 'inherit' });
     requireTrue(result.status === 0, 'Gradle build failed; code ' + code + ' remains consumed');
-    const apk = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');
+    const apk = output;
+    requireTrue(fs.existsSync(apk), 'Gradle produced no APK; code remains consumed');
     verify(apk, code);
     const dest = path.join(ARCHIVE, 'sanctifi-' + code + '.apk');
-    fs.copyFileSync(apk, dest, fs.constants.COPYFILE_EXCL);\n    const archived = fs.openSync(dest, 'r');\n    try { fs.fsyncSync(archived); } finally { fs.closeSync(archived); }\n    syncDir(ARCHIVE);
+    fs.copyFileSync(apk, dest, fs.constants.COPYFILE_EXCL);
+    const archived = fs.openSync(dest, 'r');
+    try { fs.fsyncSync(archived); } finally { fs.closeSync(archived); }
+    syncDir(ARCHIVE);
     const sha = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
     const record = { versionCode: code, sha256: sha, sourceRevision: revision, builtAt: new Date().toISOString(), deviceTested: false, published: false };
-    fs.writeFileSync(dest + '.json', JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    const recordFd = fs.openSync(dest + '.json', 'wx', 0o600);
+    try { fs.writeFileSync(recordFd, JSON.stringify(record, null, 2) + '\n'); fs.fsyncSync(recordFd); } finally { fs.closeSync(recordFd); }
+    syncDir(ARCHIVE);
     console.log('Archived ' + dest + '\nSHA-256 ' + sha + '\nNOT published; device acceptance outstanding.');
   } finally { fs.rmdirSync(lock); }
 }
