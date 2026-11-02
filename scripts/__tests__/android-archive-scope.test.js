@@ -38,3 +38,16 @@ test('rejects missing owner approval and unavailable directories', () => {
   fs.rmdirSync(b);
   expect(() => check()).toThrow('real directory');
 });
+
+test('rejects archive paths resolving through a symlinked parent', () => {
+  const alias = path.join(dir, 'alias');
+  fs.symlinkSync(b, alias, 'dir');
+  scope.archivePaths = [a, alias];
+  fs.writeFileSync(file, JSON.stringify(scope));
+  expect(() => check([a, alias], { archivePaths: [a] })).toThrow('canonical real directory');
+});
+test('rejects unknown approval declaration fields', () => {
+  scope.unreviewedOverride = true;
+  fs.writeFileSync(file, JSON.stringify(scope));
+  expect(() => check()).toThrow('Unrecognised archive scope');
+});
