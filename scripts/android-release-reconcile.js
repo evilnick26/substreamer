@@ -59,7 +59,15 @@ function remoteProbe() {
 async function report(options, dependencies = {}) {
   const archive = releaseDirectory(options.directory);
   const baseline = readBaseline(options.baseline, archive);
+  // An observation without a recent, parseable timestamp cannot underpin a fresh history.
+  // This remains a read-only report, not an allocation attestation.
   const remote = (dependencies.probe || remoteProbe)();
+  const observedAt = Date.parse(remote?.observedAt);
+  const age = Date.now() - observedAt;
+  if (remote?.status !== 'observed-not-authoritative' ||
+      !Number.isFinite(observedAt) || age < 0 || age > 5 * 60 * 1000) {
+    throw new Error('Remote inventory must be a recent, timestamped observation');
+  }
   const reconcile = dependencies.reconcile || reconcileLocalPublished;
   const local = await reconcile({
     directory: archive, buildTools: options.buildTools, ledgerFile: options.ledgerFile,
