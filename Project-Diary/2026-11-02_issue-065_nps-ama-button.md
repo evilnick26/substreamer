@@ -66,3 +66,19 @@ Run `npx tsc --noEmit` and `npx jest --no-coverage`. For release preparation, co
 ## Handover status
 
 All 14 intended files reviewed; recommendation/Subsonic/playback service implementations remain byte-for-byte unchanged from the branch base. Issue branch is issue-065-nps-ama-button; PR targets sanctifi. The resulting commit/PR identifiers are supplied in the development handover. No merge or issue closure is authorised or performed. Device/native build, visual screenshots, live AMA/network acceptance and physical orientation testing remain outstanding as described above.
+
+## Approved overflow cleanup follow-up (2026-11-02)
+
+The owner reports that build 80000192 successfully displayed the dedicated recommendation button in portrait and landscape, and requested removal of both Add bookmark and the redundant recommendation entry from player overflow. This is a product decision to keep playback bookmarks unexposed, not a request to remove their infrastructure.
+
+Futwick was not mounted in the cloud environment. Implementation waited until the owner transferred issue-065-nps-overflow-cleanup to GitHub. Fetched that branch, verified its HEAD exactly matched b5577d83789f248ea7b452664dc9c1a4a0b9d71c (including the integrated issue 67 builder), and worked only on that branch. No older cloud baseline was substituted.
+
+MoreOptionsSheet.tsx removes the Bookmark row and its unused hook import/call and queue-length subscription. The existing recommendation visibility predicate now excludes player sources; default and playlist-detail song menus retain their existing service action. No other row, handler or ordering changed. Player-source queue-row menus share this predicate. Dedicated recommendation button and all four phone/tablet orientation layout files remain byte-for-byte unchanged. Bookmark hooks, components, services, stores, tables and data remain intact.
+
+Updated MoreOptionsSheet.actions.test.tsx to replace obsolete exposed-Bookmark menu cases with player-source absence checks online/offline and non-player recommendation invocation checks. Existing standalone Bookmark handler and service coverage remains. Changed files are this diary, that test file and MoreOptionsSheet.tsx only.
+
+Validation: npx tsc --noEmit passed. Focused Jest passed on Android and iOS: 10 suites, 460 tests (50.184 seconds), covering both menu suites, phone portrait/landscape/tablet portrait, tablet landscape and bookmarkService. git diff --check passed. Full regression and broader validators were not rerun for this small follow-up. No cloud device, screenshot, native APK or live AMA checks performed; physical overflow acceptance remains outstanding.
+
+No versionCode, app.json, signing or builder changes; no APK build/publication, force push, rebase or merge. Futwick's established build checkout, generated Android directory, uncommitted 80000192 versionCode and archived APK were not accessed or changed.
+
+Integration after explicit approval: fetch origin in the verified clean Futwick follow-up worktree and fast-forward that branch with git merge --ff-only origin/issue-065-nps-overflow-cleanup. Review the three-file diff against b5577d83. Do not integrate into the established sanctifi build checkout until authorised. After approval, inspect its status and staged/unstaged app.json diffs, fetch origin, and cherry-pick the reviewed cleanup commit only; stop on any conflict without discarding local work. Recheck that app.json, generated Android files and release tooling are unchanged. Do not rebuild or overwrite archived 80000192. Later authorised device acceptance should check both overflow menus omit both rows while the dedicated buttons still work, and the remaining menu actions retain their order and behaviour.
