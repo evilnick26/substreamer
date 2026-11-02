@@ -64,6 +64,12 @@ function writeEvidenceDraft(file, draft) {
   const parent = path.dirname(path.resolve(file));
   const stat = fs.lstatSync(parent);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Draft parent must be a real directory');
+  for (let cursor = fs.realpathSync(parent); ; cursor = path.dirname(cursor)) {
+    if (fs.existsSync(path.join(cursor, '.git'))) {
+      throw new Error('Evidence drafts must be stored outside Git checkouts');
+    }
+    if (path.dirname(cursor) === cursor) break;
+  }
   const fd = fs.openSync(file, 'wx', 0o600);
   try {
     fs.writeFileSync(fd, JSON.stringify(draft, null, 2) + '\n');
