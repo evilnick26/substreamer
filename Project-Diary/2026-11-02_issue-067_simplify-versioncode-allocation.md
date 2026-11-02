@@ -104,3 +104,6 @@ Reviewed the scope gate and tightened canonical-path requirements: an approved a
 
 ## Futwick test feedback: 50/51 and missing-directory diagnostic fix
 Owner pulled through `28d9cc12` and ran the nine Android script Jest suites on Futwick: **8 suites passed, 1 failed; 50 tests passed, 1 failed; 2.649 seconds**. The sole failure was `android-archive-scope.test.js` expecting the explicit `real directory` diagnostic for an absent approved archive; `fs.lstatSync` instead threw raw `ENOENT`. The validator was already failing closed. Updated `scripts/android-archive-scope.js` to convert `ENOENT` and `ENOTDIR` into the expected canonical-real-directory error while propagating other filesystem failures (commit `9cb74aea`). **The fix has not yet been retested on Futwick.** No versionCode allocation, build or publication.
+
+## Futwick regression confirmation: 51/51
+Owner pulled commit `2903a6a7` and reran all Android script Jest suites on Futwick. Result: **9/9 suites passed, 51/51 tests passed, 0 failures, 2.348 seconds**. This confirms the missing-directory diagnostic fix and the current evidence-draft/scope unit and integration tests. This is not a live archive coverage attestation. Next step: inventory the actual release, quarantine and build-output locations before approving a complete scope. No versionCode allocated, APK built or release published.
