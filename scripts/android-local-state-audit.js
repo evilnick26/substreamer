@@ -5,7 +5,7 @@
 // reconciliation remain separate requirements.
 const fs = require('node:fs');
 const path = require('node:path');
-const { releaseDirectory } = require('./android-release');
+const { releaseDirectory, readReservation, ledgerRows } = require('./android-release');
 
 function auditReleaseState({ directory, ledgerFile }) {
   if (!directory || !ledgerFile) throw new Error('Release state audit requires directory and ledgerFile');
@@ -25,32 +25,15 @@ function auditReleaseState({ directory, ledgerFile }) {
     if (!/^\d+\.json$/.test(name)) throw new Error('Unknown allocation registry entry: ' + name);
     const file = path.join(registry, name);
     if (!fs.lstatSync(file).isFile()) throw new Error('Invalid reservation file: ' + name);
-    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
     const code = Number(name.slice(0, -5));
-    if (!Number.isSafeInteger(code) || record.schemaVersion !== 2 ||
-        record.reconciled !== true || record.directory !== archive ||
-        record.versionCode !== code || record.highWaterMark + 1 !== code ||
-        !/^[a-f0-9-]{36}$/.test(record.id || '')) {
-      throw new Error('Invalid allocation reservation: ' + name);
-    }
+    const record = readReservation(file, archive);
     reservations.set(code, record);
   }
   if (!fs.lstatSync(ledgerFile).isFile()) throw new Error('Missing release ledger');
-  const rows = fs.readFileSync(ledgerFile, 'utf8').split('\n')
-    .filter((line) => /^\|\s*`\d+`\s*\|/.test(line));
-  if (!rows.length) throw new Error('Empty release ledger');
-  const ledger = new Map();
-  for (const row of rows) {
-    const fields = row.split('|').slice(1, -1).map((field) => field.trim().replaceAll('`', ''));
-    const code = Number(fields[0]);
-    if (fields.length !== 6 || !Number.isSafeInteger(code) || ledger.has(code) ||
-        !/^(Published|Reserved|Failed|Withdrawn|Rejected)\b/.test(fields[5])) {
-      throw new Error('Invalid or duplicate ledger row: ' + row);
-    }
-    const sha256 = /^[a-f0-9]{64}$/.test(fields[3]) ? fields[3] : null;
-    if (fields[5].startsWith('Published') && !sha256) throw new Error('Published ledger row missing SHA-256: ' + code);
-    ledger.set(code, { versionCode: code, sha256, status: fields[5] });
-  }
+  const parsed = ledgerRows(fs.readFileSync(ledgerFile, 'utf8'));
+  const ledger = new Map(parsed.map((row) => [row.versionCode, {
+    versionCode: row.versionCode, sha256: row.sha256, status: row.status,
+  }]));
   for (const [code, reservation] of reservations) {
     const row = ledger.get(code);
     if (!row || !row.status.includes(reservation.id)) {
