@@ -983,7 +983,7 @@ async function main(args) {
   }
 }
 
-module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks, ledgerDiagnostics, allocate, synchronise, allocationOptions, DEFAULT_DIRECTORY, releaseDirectory, verifyArchiveMount };
+module.exports = { validateManifest, validateArtifact, inspectApk, stageApk, sha256, CERTIFICATE, PACKAGE, preflight, prepare, sourceState, nativeMetadata, localOptions, executeChecks, ledgerDiagnostics, allocate, synchronise, allocationOptions, DEFAULT_DIRECTORY, releaseDirectory, verifyArchiveMount, readReservation, ledgerRows };
 if (require.main === module) main(process.argv.slice(2)).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
