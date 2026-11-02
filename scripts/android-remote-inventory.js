@@ -3,8 +3,7 @@
 
 // Issue #067: read-only Obscurity inventory probe. This is NOT an allocation
 // attestation and must not be used to bypass android-release.js --history.
-const { execFileSync } = require('node:child_process');
-const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
 const HOST = 'evilnick@sancti.fi';
 const ROOT = '/opt/updates-site/client';
@@ -56,10 +55,12 @@ function inspect(output) {
 }
 
 function main() {
-  const output = execFileSync('ssh', [
-    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '--', HOST, 'sh', '-c', script,
-  ], { encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024 });
-  process.stdout.write(JSON.stringify(inspect(output), null, 2) + '\n');
+  const result = spawnSync('ssh', [
+    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '--', HOST, 'sh', '-s',
+  ], { input: script + '\n', encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024 });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error('Remote inventory SSH command failed: ' + (result.stderr || 'exit ' + result.status).trim());
+  process.stdout.write(JSON.stringify(inspect(result.stdout), null, 2) + '\n');
 }
 
 if (require.main === module) {
