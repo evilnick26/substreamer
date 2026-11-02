@@ -34,3 +34,8 @@ explicitly approved process, using the exact archived bytes. This script does no
 perform publication or authorise any release.
 
 **Status:** first implementation for review, not yet tested on Futwick.
+
+The native `android/` project is generated and not tracked in Git. The builder
+requires it to exist on Futwick and refuses to regenerate it automatically.
+Before using the prototype, check that the native Gradle project and signing
+configuration match the current working build environment.
