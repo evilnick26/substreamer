@@ -26,3 +26,9 @@
 - Tests have **not** been executed; this is not an acceptance claim.
 - Outstanding: verify script syntax and tests on a checked-out branch, add simulated build failure tests, inspect initial counter against real Futwick history, and review mount/storage trust and provenance.
 - No allocation, build, signing, staging or publication was executed.
+
+## Further review
+- Confirmed `app.json` is tracked but `android/app/build.gradle` is generated and absent from GitHub.
+- Added a clear failure if the generated Android project is missing; no automatic prebuild.
+- Corrected Gradle versionCode replacement and checked the application ID.
+- No test execution or live Futwick operation performed.
