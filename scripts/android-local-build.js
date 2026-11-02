@@ -45,10 +45,12 @@ function updateVersions(code) {
   const appFile = path.join(ROOT, 'app.json');
   const gradleFile = path.join(ROOT, 'android/app/build.gradle');
   const app = JSON.parse(fs.readFileSync(appFile, 'utf8'));
+  requireTrue(fs.existsSync(gradleFile), 'Generated Android project missing; no prebuild will be run automatically');
   const gradle = fs.readFileSync(gradleFile, 'utf8');
   requireTrue(app.expo.android.package === 'fi.sancti.client', 'Unexpected application ID');
   const matches = [...gradle.matchAll(/^[ \t]*versionCode[ \t]+\d+[ \t]*$/gm)];
   requireTrue(matches.length === 1, 'Expected one Gradle versionCode');
+  requireTrue(/applicationId[ \t]+["']fi\.sancti\.client["']/.test(gradle), 'Unexpected Gradle application ID');
   app.expo.android.versionCode = code;
   writeAtomic(appFile, JSON.stringify(app, null, 2) + '\n');
   writeAtomic(gradleFile, gradle.replace(/^([ \t]*versionCode[ \t]+)\d+([ \t]*)$/m, (_, prefix, suffix) => prefix + code + suffix));
