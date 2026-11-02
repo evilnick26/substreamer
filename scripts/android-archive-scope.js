@@ -12,6 +12,7 @@ function approvedPath(value) {
 
 function verifyArchiveScope({ file, directory, archives, baseline }) {
   if (!file || !path.isAbsolute(file)) throw new Error('Absolute approved scope file required');
+  if (fs.realpathSync(file) !== file) throw new Error('Scope declaration path must be canonical');
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Scope declaration must be a regular file');
   const scope = JSON.parse(fs.readFileSync(file, 'utf8'));
