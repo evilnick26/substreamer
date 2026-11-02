@@ -52,6 +52,13 @@ async function reconcileLocalPublished({ directory, buildTools, ledgerFile, arch
     ...result,
     verifiedLocalCount: verifiedLocal.length,
     localArchiveInspectedFiles: localArchives.inspectedFiles,
+    // Preserve verified identities for the future evidence collector. The
+    // caller must still attest completeness; never treat this as authority.
+    inspectedArtifacts: localArchives.artifacts.map(({ versionCode, sha256, state }) =>
+      ({ versionCode, sha256, state })),
+    ledgerArtifacts: localState.ledger.map(({ versionCode, sha256, status }) =>
+      ({ versionCode, sha256, state: status.startsWith('Rejected') ? 'rejected' : 'occupied' })),
+    attemptedCodes: [...localState.attemptedCodes],
     localState: { ledgerCount: localState.ledgerCount, reservationCount: localState.reservationCount,
       attemptedCodes: localState.attemptedCodes, highestKnownCode: localState.highestKnownCode },
     limitations: 'Read-only comparison of caller-declared archives. Archive coverage, stable remote snapshot and refreshed history still require independent attestation.',
