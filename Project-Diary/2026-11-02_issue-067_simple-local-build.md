@@ -53,3 +53,9 @@
 - A failed archive may leave a partial staging file; its versionCode remains consumed and no publication occurs. Manual investigation/cleanup only.
 - Change committed but **not yet executed on Futwick**.
 - Important integration constraint: the separate issue worktree does not contain the generated `android/` project. The first real build must run from the established Futwick build checkout after integration, not from the disposable review worktree.
+
+## Futwick retest after staged archive change
+- User refreshed detached review worktree to commit `bf3e3735`.
+- `node --check scripts/android-local-build.js` succeeded; `node --test scripts/__tests__/android-local-build.test.js` passed **4/4**.
+- These tests do not yet exercise archive staging or actual Gradle execution.
+- No live counter initialisation, APK build, or publication.
