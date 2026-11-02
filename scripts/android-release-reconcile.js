@@ -78,6 +78,9 @@ async function report(options, dependencies = {}) {
   });
   const preview = local.inspectedArtifacts && local.ledgerArtifacts && local.attemptedCodes
     ? previewEvidence({ baseline, remote, local }) : null;
+  if (preview && local.status !== 'remote-baseline-consistent') {
+    throw new Error('Reconciliation did not succeed');
+  }
   let draftFile = null;
   if (options.draftOutput) {
     if (!preview) throw new Error('Full reconciled evidence required for a draft');
