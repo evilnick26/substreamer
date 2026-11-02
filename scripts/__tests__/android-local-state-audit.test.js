@@ -16,7 +16,15 @@ beforeEach(() => {
     JSON.stringify({ schemaVersion: 1, directory }));
   fs.writeFileSync(path.join(directory, '.allocations/80000191.json'),
     JSON.stringify({ schemaVersion: 2, reconciled: true, directory, id,
-      versionCode: 80000191, highWaterMark: 80000190 }));
+      versionCode: 80000191, highWaterMark: 80000190,
+      metadata: [
+        { path: 'app.json', original: 'before', target: 'after',
+          before: require('node:crypto').createHash('sha256').update('before').digest('hex'),
+          after: require('node:crypto').createHash('sha256').update('after').digest('hex') },
+        { path: 'android/app/build.gradle', original: 'native-before', target: 'native-after',
+          before: require('node:crypto').createHash('sha256').update('native-before').digest('hex'),
+          after: require('node:crypto').createHash('sha256').update('native-after').digest('hex') },
+      ] }));
   fs.writeFileSync(ledgerFile,
     '| `80000190` | 8.1.8 | Unknown | ' + 'a'.repeat(64) + ' | Unknown | Published |\n' +
     '| `80000191` | 8.1.8 | Unknown | Not built | Unknown | Reserved ' + id + ' |\n');
@@ -40,7 +48,7 @@ test('rejects reservation not present in ledger', () => {
 });
 test('rejects duplicate ledger versionCodes', () => {
   fs.appendFileSync(ledgerFile, '| `80000190` | 8.1.8 | Unknown | ' + 'a'.repeat(64) + ' | Unknown | Published |\n');
-  expect(() => auditReleaseState({ directory, ledgerFile })).toThrow('duplicate ledger');
+  expect(() => auditReleaseState({ directory, ledgerFile })).toThrow('Missing or duplicate release ledger history');
 });
 test('rejects registry identity mismatch', () => {
   fs.writeFileSync(path.join(directory, '.allocations/registry.json'),
