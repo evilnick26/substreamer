@@ -60,3 +60,6 @@ Following Futwick's reported 22/22 passing focused Jest tests (four suites, 4.04
 
 ## Double-read Obscurity observation
 After user confirmed all five focused suites passed on Futwick (27/27 tests, 2.071 seconds), changed the remote SSH probe to read APK filenames, SHA-256 hashes and active Alpha manifest twice and fail if the two observations differ (`123af9c9`). Updated parser tests for double-read output and added mutation test (`d5b493f2`, `5b00af9b`). This mitigates but cannot eliminate races; it is not an atomic snapshot and does not yet validate backup manifests or public HTTPS publication. New tests not yet run on Futwick. Still no history generator or allocator integration; no allocations or publication performed.
+
+## Futwick snapshot test failure and correction
+User ran remote inventory Jest suite on Futwick: five tests passed, one failed. The failing mutation fixture only prepended whitespace to the second Alpha manifest; parser trims manifest text, so no actual difference remained. Corrected fixture to change the second manifest versionCode (`fc53cae9`). This is a test fixture defect, not yet evidence of a production parser failure. Corrected test awaits Futwick rerun.
