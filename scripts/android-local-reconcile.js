@@ -38,9 +38,13 @@ async function reconcileLocalPublished({ directory, buildTools, ledgerFile, arch
   }
   const result = reconcileRemote(baseline, remote, verifiedLocal);
   for (const row of localState.ledger) {
-    if (!row.sha256 || !row.status.startsWith('Published')) continue;
+    if (!row.status.startsWith('Published')) continue;
+    if (!row.sha256) throw new Error('Published ledger entry has no checksum: ' + row.versionCode);
     const published = remote.apks.find((item) => item.versionCode === row.versionCode);
-    if (published && published.sha256 !== row.sha256) {
+    // A published artifact must remain in the immutable server archive.
+    // Missing files are not evidence that a versionCode can be reused.
+    if (!published) throw new Error('Published ledger APK missing from remote archive: ' + row.versionCode);
+    if (published.sha256 !== row.sha256) {
       throw new Error('Published ledger checksum conflicts with remote APK: ' + row.versionCode);
     }
   }
