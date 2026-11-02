@@ -66,3 +66,11 @@
 - On archive failure a `.partial-PID` file may remain for manual inspection; the final destination is not overwritten.
 - Six tests now exist; the two new tests are **not yet executed** on Futwick.
 - No live allocation, build, or publication.
+
+## Futwick six-test validation
+- User refreshed review worktree to commit `6a33640c`.
+- `node --check` passed for both builder and test script.
+- `node --test scripts/__tests__/android-local-build.test.js`: **6 tests passed, 0 failed**.
+- Archive tests confirmed complete staging and successful cleanup, plus refusal to overwrite an existing APK.
+- These tests do not simulate process termination mid-copy or execute Gradle.
+- No live versionCode allocation, APK build, or publication.
