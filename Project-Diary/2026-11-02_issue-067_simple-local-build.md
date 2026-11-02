@@ -18,3 +18,11 @@
 - Review filesystem durability, failure paths and signing/metadata checks;
   add automated tests before replacing the legacy workflow.
 - Device testing and publication require separate owner decisions.
+
+## Continuation — review pass
+- Removed stale Gradle output before invoking the build and require a fresh APK.
+- Added an archive record collision check and filesystem flushes for archived output.
+- Added two small Node tests for atomic counter-file replacement and temporary-file collisions.
+- Tests have **not** been executed; this is not an acceptance claim.
+- Outstanding: verify script syntax and tests on a checked-out branch, add simulated build failure tests, inspect initial counter against real Futwick history, and review mount/storage trust and provenance.
+- No allocation, build, signing, staging or publication was executed.
