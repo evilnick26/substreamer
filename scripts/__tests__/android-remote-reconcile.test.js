@@ -31,3 +31,23 @@ test('rejects inconsistent Alpha manifest', () => {
   const r = remote(); r.alpha.sha256 = sha('c');
   expect(() => reconcileRemote(baseline(), r)).toThrow('Alpha manifest mismatch');
 });
+
+test('accepts newer published APK when independently verified locally', () => {
+  const r = remote();
+  r.apks.push({ versionCode: 80000192, sha256: sha('b') });
+  expect(reconcileRemote(baseline(), r, [
+    { versionCode: 80000192, sha256: sha('b'), verified: true },
+  ]).highestPublishedCode).toBe(80000192);
+});
+test('rejects unverified local claims', () => {
+  expect(() => reconcileRemote(baseline(), remote(), [
+    { versionCode: 80000192, sha256: sha('b') },
+  ])).toThrow('unverified local APK record');
+});
+test('rejects newer APK with a conflicting local hash', () => {
+  const r = remote();
+  r.apks.push({ versionCode: 80000192, sha256: sha('c') });
+  expect(() => reconcileRemote(baseline(), r, [
+    { versionCode: 80000192, sha256: sha('b'), verified: true },
+  ])).toThrow('unrecognised published APK');
+});
