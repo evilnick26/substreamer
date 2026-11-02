@@ -51,3 +51,40 @@ test('rejects different occupied hashes for same versionCode', async () => {
     sha256: path.basename(file) === 'old.apk' ? sha('c') : sha('b'),
   }) })).rejects.toThrow('Conflicting occupied APK hashes');
 });
+
+test('preserves approved rejected alternate alongside published identity despite misleading filename', async () => {
+  const published = sha('a');
+  const rejected = sha('b');
+  const approved = { schemaVersion: 1, complete: true, artifacts: [
+    { versionCode: 80000190, sha256: published, state: 'occupied' },
+    { versionCode: 80000190, sha256: rejected, state: 'rejected' },
+  ] };
+  fs.renameSync(path.join(directory, 'old.apk'), path.join(directory, 'sanctifi-80000190.apk'));
+  fs.renameSync(path.join(extra, 'new.apk'), path.join(extra, 'sanctifi-80000191-misnamed.apk'));
+  fs.writeFileSync(path.join(extra, 'another-copy.apk'), 'duplicate');
+  const result = await run({ baseline: approved, inspect: async (file) => ({
+    versionCode: 80000190,
+    sha256: path.basename(file) === 'sanctifi-80000190.apk' ? published : rejected,
+  }) });
+  expect(result.inspectedFiles).toBe(3);
+  expect(result.artifacts.filter((a) => a.state === 'rejected')).toHaveLength(2);
+  expect(result.artifacts.filter((a) => a.state === 'occupied')).toHaveLength(1);
+});
+
+test('unapproved alternate signed identity remains fail-closed even when stored in quarantine', async () => {
+  const published = sha('a');
+  const approved = { schemaVersion: 1, complete: true, artifacts: [
+    { versionCode: 80000190, sha256: published, state: 'occupied' },
+  ] };
+  await expect(run({ baseline: approved, inspect: async (file) => ({
+    versionCode: 80000190,
+    sha256: path.basename(file) === 'old.apk' ? published : sha('b'),
+  }) })).rejects.toThrow('Conflicting occupied APK hashes');
+});
+
+test('baseline cannot classify identical APK identity as both occupied and rejected', async () => {
+  await expect(run({ baseline: { schemaVersion: 1, complete: true, artifacts: [
+    { versionCode: 80000190, sha256: sha('a'), state: 'occupied' },
+    { versionCode: 80000190, sha256: sha('a'), state: 'rejected' },
+  ] } })).rejects.toThrow('Contradictory historical artifact states');
+});
