@@ -17,12 +17,19 @@ const script = [
   'cat alpha.json',
 ].join('\n');
 
+function checkInventoryFileNames(filenames) {
+  if (new Set(filenames).size !== filenames.length) throw new Error('Duplicate APK listing');
+  for (const filename of filenames) {
+    if (!/^apks\/sanctifi-\d+\.apk$/.test(filename)) throw new Error('Unexpected remote APK filename');
+  }
+}
+
 function inspect(output) {
   const first = output.indexOf('\n---SHA256---\n');
   const second = output.indexOf('\n---ALPHA---\n');
   if (first < 0 || second < first) throw new Error('Incomplete remote inventory response');
   const filenames = output.slice(0, first).trim().split('\n').filter(Boolean);
-  const hashLines = output.slice(first + 14, second).trim().split('\n').filter(Boolean);
+  const hashLines = output.slice(first + '\n---SHA256---\n'.length, second).trim().split('\n').filter(Boolean);
   if (!filenames.length || hashLines.length !== filenames.length) throw new Error('Incomplete remote APK inventory');
   const hashes = new Map();
   for (const line of hashLines) {
@@ -35,7 +42,8 @@ function inspect(output) {
       throw new Error('APK listing and checksums disagree');
     }
   }
-  const manifest = JSON.parse(output.slice(second + 13));
+  checkInventoryFileNames(filenames);
+  const manifest = JSON.parse(output.slice(second + '\n---ALPHA---\n'.length));
   const apkName = `apks/sanctifi-${manifest.versionCode}.apk`;
   const current = hashes.get(apkName);
   if (manifest.schemaVersion !== 1 || !current ||
