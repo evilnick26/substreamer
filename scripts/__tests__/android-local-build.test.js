@@ -17,7 +17,7 @@ test('counter replacement is complete and leaves no temporary file', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('atomic writer refuses to replace a symlink destination via temporary-file collision', () => {
+test('atomic writer refuses an occupied temporary filename', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctifi-counter-'));
   try {
     const file = path.join(dir, 'last-code');
@@ -33,7 +33,7 @@ test('each reservation consumes a new code even without an APK', () => {
   try {
     const state = path.join(dir, '.local-build');
     fs.mkdirSync(state);
-    fs.writeFileSync(path.join(state, 'last-code'), '80000191\\n'.replace('\\n', '\n'));
+    fs.writeFileSync(path.join(state, 'last-code'), '80000191\n');
     assert.equal(reserve(state, dir), 80000192);
     // Simulate failure after allocation: no APK is created.
     assert.equal(reserve(state, dir), 80000193);
