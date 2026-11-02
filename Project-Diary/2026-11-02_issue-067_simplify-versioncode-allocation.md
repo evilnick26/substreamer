@@ -116,3 +116,6 @@ Owner verified 10/10 local APK files using inspectApk. Six distinct code/hash id
 
 ## Regression coverage for alternate quarantined identity
 Added three tests to `scripts/__tests__/android-local-archives.test.js` (commit `cd6a431`): explicitly approved rejected 80000190 alongside occupied published 80000190, with duplicate and misleadingly named quarantined APKs; unknown alternative must remain fail-closed; contradictory state for identical code/hash must fail. No classification was approved or added to actual baseline. Tests awaiting Futwick execution; no allocation, build or publication.
+
+## Futwick regression confirmation: 54/54
+Owner pulled through `f03b38d6` and ran the nine Android release-script Jest suites on Futwick: **9/9 suites passed, 54/54 tests passed, 0 failures, 2.661 seconds**. This validates the three newly added quarantine identity regression tests. Actual quarantine classification and full archive-scope approval remain pending owner confirmation. No versionCode allocation, build or publication.
