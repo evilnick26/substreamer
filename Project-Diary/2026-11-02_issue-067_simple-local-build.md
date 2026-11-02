@@ -32,3 +32,11 @@
 - Added a clear failure if the generated Android project is missing; no automatic prebuild.
 - Corrected Gradle versionCode replacement and checked the application ID.
 - No test execution or live Futwick operation performed.
+
+## Futwick validation — 2026-11-02
+- Futwick Node.js v24.11.1; original working tree clean; generated Gradle project present with applicationId `fi.sancti.client` and versionCode `80000191`.
+- Inspected archived APKs, attempt records, allocation filenames and `.allocations/registry.json`; highest evidenced consumed code is `80000191`. Registry contains schemaVersion and directory only, no higher counter. Next candidate is `80000192`.
+- Created separate Git worktree for branch. User executed `node --check` on builder and tests and `node --test scripts/__tests__/android-local-build.test.js`: **4/4 passed**.
+- Tests cover atomic writes, occupied temporary file, monotonic reservation after simulated failure, and collision refusal without consumption. They do not exercise a full Gradle build or process interruption.
+- Live counter remains uninitialised; no APK built or published.
+- Next: verify certificate and APK tooling on Futwick, then review full build and archival failure paths before authorising any live allocation.
