@@ -9,6 +9,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { reconcileLocalPublished } = require('./android-local-reconcile');
 const { releaseDirectory } = require('./android-release');
+const { previewEvidence } = require('./android-evidence-preview');
 
 function optionsFromArgs(args) {
   const values = {};
@@ -73,8 +74,11 @@ async function report(options, dependencies = {}) {
     directory: archive, buildTools: options.buildTools, ledgerFile: options.ledgerFile,
     archivePaths: options.archives, outputApk: options.outputApk, baseline, remote,
   });
+  const preview = local.inspectedArtifacts && local.ledgerArtifacts && local.attemptedCodes
+    ? previewEvidence({ baseline, remote, local }) : null;
   return {
     status: 'read-only-reconciled-not-attested',
+    evidencePreview: preview,
     remoteObservedAt: remote.observedAt,
     remotePublishedCount: local.publishedCount,
     highestPublishedCode: local.highestPublishedCode,
