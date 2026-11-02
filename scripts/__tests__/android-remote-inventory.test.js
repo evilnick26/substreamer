@@ -51,8 +51,8 @@ describe('remote inventory observation (issue #067)', () => {
   });
 
   test('rejects manifest changed during observation', () => {
-    const changed = sample().replace(/---ALPHA-AGAIN---\\n/, '---ALPHA-AGAIN---\\n');
-    expect(() => inspect(changed + ' ')).toThrow('Remote inventory changed');
+    const changed = sample().replace('---ALPHA-AGAIN---\n', '---ALPHA-AGAIN---\n ');
+    expect(() => inspect(changed)).toThrow('Remote inventory changed');
   });
 
   test('rejects truncated remote output', () => {
