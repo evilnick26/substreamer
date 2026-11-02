@@ -40,3 +40,9 @@
 - Tests cover atomic writes, occupied temporary file, monotonic reservation after simulated failure, and collision refusal without consumption. They do not exercise a full Gradle build or process interruption.
 - Live counter remains uninitialised; no APK built or published.
 - Next: verify certificate and APK tooling on Futwick, then review full build and archival failure paths before authorising any live allocation.
+
+## Existing APK tooling verification
+- User ran `apksigner verify --print-certs` and `aapt2 dump badging` against archived `sanctifi-80000191.apk` on Futwick.
+- Signature verification succeeded; SHA-256 certificate digest exactly matched the script's pinned digest `a6222ae2d79faeb5dea3e92528b399b0e4cabc6df3c08d6e43f33ffc55dc149c`.
+- APK metadata confirmed `fi.sancti.client`, versionCode `80000191`, versionName `8.1.8`.
+- Read-only verification only; no new allocation, build or publication.
