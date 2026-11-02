@@ -45,7 +45,15 @@ function verifyArchiveScope({ file, directory, archives, baseline }) {
     throw new Error('Approved scope omits historical archive path');
   }
   for (const folder of approved) {
-    const st = fs.lstatSync(folder);
+    let st;
+    try {
+      st = fs.lstatSync(folder);
+    } catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+        throw new Error('Archive scope path is not a canonical real directory: ' + folder);
+      }
+      throw error;
+    }
     if (!st.isDirectory() || st.isSymbolicLink() || fs.realpathSync(folder) !== folder) {
       throw new Error('Archive scope path is not a canonical real directory: ' + folder);
     }
