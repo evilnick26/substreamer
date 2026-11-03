@@ -50,3 +50,11 @@
 - Implemented `publish VERSION_CODE` orchestration: repeat preflight, upload existing archive, verify full public APK, show proposed manifest, request exact interactive `PUBLISH VERSION_CODE` approval, compare-and-swap atomic Alpha manifest promotion, verify public manifest and APK, rollback on verification failure, then write a separate immutable `.publication.json` record. Existing build-sidecar `deviceTested` is not a gate.
 - Added guarded remote promotion/rollback helper and unit/integration-style tests. **All new tests and actual write operations remain unvalidated on Futwick/Obscurity.** Do not run `publish` until tests and operational review pass.
 - Known operational considerations for review: interactive remote sudo, remote manifest backup retention, failure after remote rename but before SSH acknowledgement, remote permissions, and CDN/cache behaviour. No release has been published by this development session.
+
+## Operational recovery review — follow-up
+- Owner confirmed the actual remote `ssh -tt obscurity 'sudo /bin/sh -c ...'` prompts for sudo password and reports root plus both writable publication directories. No changes were made to the server.
+- Added a server-side `flock` around both Alpha promotion and rollback; compare-and-swap checksum verification remains inside the lock.
+- On SSH failure during promotion, inspect the current manifest: exact new bytes mean success, exact previous bytes mean no promotion, otherwise report UNKNOWN and require manual inspection. No blind retries.
+- Local publication record now uses a same-directory temporary file and exclusive hard-link creation, then reads it back; record failure is explicitly reported as post-publication bookkeeping failure, not as an excuse to roll back a verified release.
+- Added four regression tests for interrupted SSH outcomes and publication record integrity. These tests have NOT been run on Futwick. No live publication has occurred.
+- Remaining before first live release: Futwick tests; inspect lock availability and remote operational edge cases; assess PR branch integration with stale `sanctifi` base; owner approval for actual promotion.
