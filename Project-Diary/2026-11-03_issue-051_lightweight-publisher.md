@@ -44,3 +44,9 @@
 - Added `scripts/android-publish-verify.js`: full public GET (not HEAD), no-cache request headers, HTTP 200 required, streamed SHA-256, 1 GiB safety limit, downloaded APK signer/package inspection through the existing `inspectApk`, version and checksum comparison, temporary file cleanup.
 - Added five isolated tests for successful full GET, redirect rejection, correct APK identity, checksum mismatch and version mismatch. Tests are pending Futwick execution.
 - Deliberately no live server changes and no manifest promotion. Remaining work: CLI orchestration, explicit promotion confirmation, remote atomic manifest update, post-promotion verification and rollback, and real-world permission checks.
+
+## Final integration increment — follow-up
+- Owner confirmed 16/16 component tests pass on Futwick.
+- Implemented `publish VERSION_CODE` orchestration: repeat preflight, upload existing archive, verify full public APK, show proposed manifest, request exact interactive `PUBLISH VERSION_CODE` approval, compare-and-swap atomic Alpha manifest promotion, verify public manifest and APK, rollback on verification failure, then write a separate immutable `.publication.json` record. Existing build-sidecar `deviceTested` is not a gate.
+- Added guarded remote promotion/rollback helper and unit/integration-style tests. **All new tests and actual write operations remain unvalidated on Futwick/Obscurity.** Do not run `publish` until tests and operational review pass.
+- Known operational considerations for review: interactive remote sudo, remote manifest backup retention, failure after remote rename but before SSH acknowledgement, remote permissions, and CDN/cache behaviour. No release has been published by this development session.
