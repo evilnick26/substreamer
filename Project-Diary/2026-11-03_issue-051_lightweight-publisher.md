@@ -64,3 +64,10 @@
 - Command printed usage and exited before any upload or manifest change. Root cause: CLI dispatch accepted only `plan`, despite exporting and testing `publish()`.
 - Corrected CLI dispatch to accept `publish`; corrected live publication path to call the tested atomic record writer with explicit post-publication bookkeeping error handling.
 - Added two regression tests for CLI dispatch. Awaiting Futwick validation before retrying live publication; no live publication occurred.
+
+## First successful live Alpha publication and release notes follow-up
+- Owner ran `node scripts/android-publish.js publish 80000193` and approved promotion. Remote upload, checksums, public APK verification, Alpha manifest promotion, and local publication record all reported success. Alpha changed from 80000191 to 80000193. Immutable APK SHA256: ed79cf71c19e24319aec0ccbe1bbde31e49155c0b1bf356b12fa9405c81ed39c.
+- Publication revealed no CLI facility to enter changelog text; live manifest omitted `releaseNotes`.
+- Owner supplied exact release notes: "Switched Bookmark icon for Play More Like This on NPS. Bookmark is now in overflow menu".
+- Added CLI release notes prompt for future publications and guarded `amend-notes` operation to update the currently live Alpha manifest only, preserving versionCode, versionName, APK URL, and SHA256. Uses existing atomic promotion and public manifest verification; added regression tests.
+- Amendment has NOT been run against Obscurity; Futwick tests pending. Do not rerun `publish` for the already published APK.
