@@ -197,7 +197,7 @@ async function publish(code, deps = {}) {
 }
 if (require.main === module) {
   const [command, value, extra] = process.argv.slice(2);
-  if (!['plan', 'publish'].includes(command) || !/^[1-9]\\d*$/.test(value || '') || extra) {
+  if (!['plan', 'publish'].includes(command) || !/^[1-9]\d*$/.test(value || '') || extra) {
     console.error('Usage: node scripts/android-publish.js plan|publish VERSION_CODE');
     process.exitCode = 2;
   } else if (command === 'plan') {
