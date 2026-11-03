@@ -115,6 +115,17 @@ async function fetchPublicManifest(request = https.get) {
   });
   return validateManifest(JSON.parse(body));
 }
+function writePublicationRecord(file, record) {
+  const temp = file + '.tmp-' + crypto.randomBytes(8).toString('hex');
+  try {
+    fs.writeFileSync(temp, JSON.stringify(record, null, 2) + '\\n', { flag: 'wx', mode: 0o600 });
+    // Atomic creation without replacing an existing publication record.
+    fs.linkSync(temp, file);
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    check(saved.versionCode === record.versionCode && saved.sha256 === record.sha256,
+      'Publication record verification failed');
+  } finally { try { fs.unlinkSync(temp); } catch { /* best effort */ } }
+}
 function sameManifest(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -190,4 +201,4 @@ if (require.main === module) {
     }).catch(error => { console.error('Publication preflight failed:', error.message); process.exitCode = 1; });
   }
 }
-module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest };
+module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest, writePublicationRecord };
