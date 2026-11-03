@@ -118,7 +118,7 @@ async function fetchPublicManifest(request = https.get) {
 function writePublicationRecord(file, record) {
   const temp = file + '.tmp-' + crypto.randomBytes(8).toString('hex');
   try {
-    fs.writeFileSync(temp, JSON.stringify(record, null, 2) + '\\n', { flag: 'wx', mode: 0o600 });
+    fs.writeFileSync(temp, JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     // Atomic creation without replacing an existing publication record.
     fs.linkSync(temp, file);
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
