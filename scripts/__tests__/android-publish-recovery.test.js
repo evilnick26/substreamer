@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { promote, hash } = require('../android-publish-promote.js');
-const { writePublicationRecord } = require('../android-publish.js');
+const { writePublicationRecord, amendNotes } = require('../android-publish.js');
 const old = '{"versionCode":80000191}\n';
 const manifest = {
   schemaVersion: 1, versionCode: 80000193, versionName: '8.1.8',
@@ -60,4 +60,25 @@ test('CLI dispatches publish command (missing archive fails preflight, not usage
   assert.equal(result.status, 1);
   assert.doesNotMatch(result.stderr, /Usage:/);
   assert.match(result.stderr, /Publication command ended:/);
+});
+
+test('manifest-only amendment preserves APK identity and adds exact release notes', async () => {
+  const original = { ...manifest };
+  const notes = 'Switched Bookmark icon for Play More Like This on NPS. Bookmark is now in overflow menu';
+  let promoted;
+  const result = await amendNotes(80000193, notes, {
+    readCurrent: () => JSON.stringify(original),
+    approval: async () => true,
+    promote: (next) => { promoted = next; return { ok: true }; },
+    fetchPublicManifest: async () => promoted,
+  });
+  assert.equal(result.releaseNotes, notes);
+  for (const key of ['versionCode', 'versionName', 'apkUrl', 'sha256']) {
+    assert.equal(result[key], original[key]);
+  }
+});
+test('amendment refuses mismatched live Alpha version', async () => {
+  await assert.rejects(amendNotes(80000192, 'Notes', {
+    readCurrent: () => JSON.stringify(manifest),
+  }), /does not point/);
 });
