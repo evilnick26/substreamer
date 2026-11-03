@@ -147,3 +147,16 @@ npx tsc --noEmit
   static preferences. No device-level acceptance is claimed here.
 - Run the Swift harness on a Swift-equipped host and perform iOS native/device
   validation separately. No merge or release publication is part of this handoff.
+
+## 2026-11-03 — Futwick integration, Android acceptance and Alpha publication (follow-up)
+
+This section records subsequent owner/assistant work after the isolated implementation handoff above; the original investigation and outstanding-acceptance list are retained as historical records.
+
+- Futwick's clean local `sanctifi` was verified at `c48e6e26`, the exact implementation base. The feature branch's one commit `9525414eed67114bc516c5779624c0d913e4d3d4` was fetched and fast-forward merged into local `sanctifi`, without touching other worktrees.
+- On Futwick, focused Jest passed 14 suites / 106 tests across Android and iOS test configurations; `npx tsc --noEmit` passed. The native palette harness reported two skips because neither `kotlinc` nor `swiftc` was installed locally; this is **not** local native-harness validation.
+- `./gradlew assembleRelease` completed successfully in 11m 53s. The signed local test APK was verified as `fi.sancti.client`, `versionCode 80000193`, `versionName 8.1.8`, valid v2 signature. Local test APK SHA-256: `50d95670633bd3b11c6afe256f649fa4dba722e52135e3fc34206755aca3a908`. This was a test build, **not** the previously published Alpha 80000193.
+- The owner tested the corrected Android build on device and supplied screenshots for The Wedding Present — *Saturnalia*, Cinerama — *Seven Wonders of the World*, and Leonard Cohen — *Songs from a Room*. All showed neutral grey accents rather than the inappropriate bright blue. The owner explicitly accepted the result as **PASS**, noting that grey is less conspicuous but preferable. This acceptance does not assert exhaustive seven-cover, two-theme, cache/transition, or iOS device testing.
+- The established Futwick local build workflow created numbered Alpha candidate `80000194`. Read-only publication preflight reported `sanctifi-80000194.apk`, SHA-256 `183b04e37fa6efa90fd8edaaaf15f5d657cda218e02353f5d7cce0fc46dd39a4`, `versionName 8.1.8`, previous Alpha `80000193`, and no remote APK collision.
+- The owner executed `node scripts/android-publish.js publish 80000194` with release notes: “Further work to extract a suitable accent colour based on not-quite-monochrome Album Art”. The log confirmed immutable upload to Obscurity, remote checks, full public HTTPS APK verification, explicit `PUBLISH 80000194` approval, Alpha manifest promotion, and local publication record at `/media/data/Complete/Sanctifi/Releases/sanctifi-80000194.apk.publication.json`.
+- The owner committed `app.json` versionCode alignment as `847619b5` (`chore(android): align versionCode with published Alpha 80000194`). The generated `android/` directory remained Git-ignored and was not force-added. `git push origin sanctifi` succeeded, advancing GitHub `sanctifi` from `c48e6e26` to `847619b5`, including the fix commit `9525414e`.
+- Outcome: **Issue #74 resolved and released on Android in Alpha 80000194**. Swift native-harness and iOS device validation remain unperformed and are not implied by closure. Further neutral-grey salience refinements, if desired, should be separately scoped rather than silently added to this bug fix.
