@@ -46,3 +46,17 @@ test('publication record is valid JSON and never overwritten', () => {
     assert.deepEqual(fs.readdirSync(dir), ['publication.json']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('CLI rejects invalid command before any remote work', () => {
+  const script = path.resolve(__dirname, '../android-publish.js');
+  const result = spawnSync(process.execPath, [script, 'publish', 'not-a-code'], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage:/);
+});
+test('CLI dispatches publish command (missing archive fails preflight, not usage)', () => {
+  const script = path.resolve(__dirname, '../android-publish.js');
+  const result = spawnSync(process.execPath, [script, 'publish', '2100000000'], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.stderr, /Usage:/);
+  assert.match(result.stderr, /Publication command ended:/);
+});
