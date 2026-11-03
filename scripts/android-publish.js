@@ -63,7 +63,7 @@ async function plan(code) {
   const metadata = await inspectApk(file, BUILD_TOOLS);
   assert(metadata.versionCode === code && metadata.sha256 === record.sha256, 'APK identity differs from archived record');
   const remote = remoteInventory(filename);
-  const match = remote.match(new RegExp('^([a-f0-9]{64})\\\\s+\\\\S*/' + filename.replace('.', '\\\\.') + '
+  const match = remote.match(/^([a-f0-9]{64})\s+\/opt\/updates-site\/client\/apks\/sanctifi-\d+\.apk$/m);
   assert(!match || match[1] === record.sha256, 'Remote filename collision: DIFFERENT APK bytes');
   const alpha = remote.indexOf('{');
   if (alpha !== -1) {
