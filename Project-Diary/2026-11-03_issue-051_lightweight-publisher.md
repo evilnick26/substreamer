@@ -25,3 +25,9 @@
 - Test read-only plan on Futwick and inspect output; correct any issues before remote-write implementation.
 - Decide safe handling of sudo authentication and explicit device-acceptance attestation; do not infer approval from an unchanged local deviceTested=false sidecar.
 - Implement upload and promotion with full verification, rollback, tests and manual fallback.
+
+## Follow-up — 2026-11-03
+
+- Product owner explicitly rejected a separate device-acceptance flag or administrative gate: the deliberate approval to publish the exact APK is the acceptance decision. The existing `deviceTested: false` build sidecar must not block publication.
+- Replaced an accidentally malformed initial preflight implementation with a clean read-only planner. Added isolated Node.js tests for manifest inventory, collision rejection, downgrade prevention, archive checksum and dependency-injected planning.
+- No tests have been executed on Futwick yet; no remote writes or publication have occurred. Next checkpoint: run Node syntax and test commands on the development branch, then implement upload and promotion with explicit approval.
