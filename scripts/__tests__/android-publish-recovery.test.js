@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { promote, hash } = require('../android-publish-promote.js');
 const { writePublicationRecord } = require('../android-publish.js');
 const old = '{"versionCode":80000191}\n';
