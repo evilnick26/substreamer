@@ -71,3 +71,11 @@
 - Owner supplied exact release notes: "Switched Bookmark icon for Play More Like This on NPS. Bookmark is now in overflow menu".
 - Added CLI release notes prompt for future publications and guarded `amend-notes` operation to update the currently live Alpha manifest only, preserving versionCode, versionName, APK URL, and SHA256. Uses existing atomic promotion and public manifest verification; added regression tests.
 - Amendment has NOT been run against Obscurity; Futwick tests pending. Do not rerun `publish` for the already published APK.
+
+## Live release-notes amendment — validated
+- Owner ran `node scripts/android-publish.js amend-notes 80000193 "Switched Bookmark icon for Play More Like This on NPS. Bookmark is now in overflow menu"`.
+- Owner explicitly confirmed `PUBLISH 80000193`; interactive sudo and atomic manifest replacement succeeded.
+- CLI reported `Alpha release notes amended and publicly verified: 80000193`.
+- Existing immutable APK 80000193 was not rebuilt or re-uploaded. Notes-only manifest amendment preserved its version, URL and SHA256.
+- Latest Futwick test run: 30/30 tests passing, including amendment and actual CLI dispatch regression tests.
+- Issue #51 implementation and live operational acceptance criteria met. PR #69 remains draft; branch integration with `sanctifi` still requires reconciliation before merging. Do not conflate successful publication with PR merge.
