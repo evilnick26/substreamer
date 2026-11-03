@@ -79,3 +79,10 @@
 - Existing immutable APK 80000193 was not rebuilt or re-uploaded. Notes-only manifest amendment preserved its version, URL and SHA256.
 - Latest Futwick test run: 30/30 tests passing, including amendment and actual CLI dispatch regression tests.
 - Issue #51 implementation and live operational acceptance criteria met. PR #69 remains draft; branch integration with `sanctifi` still requires reconciliation before merging. Do not conflate successful publication with PR merge.
+
+## GitHub integration and closure
+- Issue #51 closed as **completed** after owner-confirmed live publication and successful notes amendment.
+- Original draft PR #69 was intentionally **not merged**: its branch contained unrelated issue #65/#67 changes (41 commits / 31 changed files relative to the prior `sanctifi` head).
+- Created clean branch `issue-051-publisher-clean` from `sanctifi` with exactly 11 issue #51 files (four implementation scripts, six test files and this diary). Comparison confirmed one commit ahead, zero behind, no unrelated files.
+- Clean PR #70 squash-merged into `sanctifi`, commit `8364b86c8f313c3c6b95e072af846af3b0baed83`. Original PR #69 closed as superseded.
+- No further server changes were made during GitHub integration. Local Futwick worktrees may still reference the older issue #51 branch and should not be assumed synchronised with `sanctifi`.
