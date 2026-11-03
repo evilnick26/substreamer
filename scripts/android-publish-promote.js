@@ -55,7 +55,7 @@ function scriptFor(action, expectedHash, nextJson, token) {
   return lines.join('\n');
 }
 function invoke(script, run = remote) {
-  return run(['-tt', 'obscurity', 'sudo /bin/sh -c ' + quote(script)], { interactive: true });
+  return run(['-tt', 'obscurity', 'sudo flock -x ' + quote(BASE + '/.alpha-publish.lock') + ' /bin/sh -c ' + quote(script)], { interactive: true });
 }
 function promote(manifest, previousRaw, deps = {}) {
   validateManifest(manifest);
@@ -66,8 +66,23 @@ function promote(manifest, previousRaw, deps = {}) {
   const after = hash(nextJson);
   const run = deps.run || remote;
   // Caller checks that readCurrent() still matches previousRaw before invoking.
-  invoke(scriptFor('promote', before, nextJson, token), run);
-  return { token, before, after, previousRaw, nextJson };
+  const state = { token, before, after, previousRaw, nextJson };
+  try {
+    invoke(scriptFor('promote', before, nextJson, token), run);
+  } catch (error) {
+    // SSH may disconnect after the atomic rename. Observe server state before
+    // deciding whether the operation succeeded; never blindly retry.
+    let observed;
+    try { observed = (deps.readCurrent || readCurrent)(run); }
+    catch (inspection) {
+      throw new Error('Promotion outcome UNKNOWN; inspect Alpha on Obscurity before retrying. SSH error: ' +
+        error.message + '; inspection error: ' + inspection.message);
+    }
+    if (hash(observed) === after) return state;
+    if (hash(observed) === before) throw new Error('Promotion did not take effect: ' + error.message);
+    throw new Error('Promotion outcome UNKNOWN: remote Alpha differs from both expected versions; manual inspection required');
+  }
+  return state;
 }
 function rollback(state, deps = {}) {
   invoke(scriptFor('rollback', state.after, state.previousRaw, state.token), deps.run || remote);
