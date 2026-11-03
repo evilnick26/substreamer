@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run the production pixel extractor without Expo (requires kotlinc/java or swiftc)."""
+import json
 import pathlib
 import shutil
 import subprocess
@@ -9,7 +10,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULE = ROOT / 'modules/expo-image-colors'
 
-# name, RGBA populations, expected monochrome. Opaque pixels exercise both
+# name, RGBA populations, expected neutral-accent flag. Opaque pixels exercise both
 # implementations' existing channel conversion without platform image decoders.
 CASES = [
     ('black', [(0, 0, 0, 255)] * 1000, True),
@@ -19,11 +20,13 @@ CASES = [
     ('sparse coloured noise', [(128, 128, 128, 255)] * 999 + [(255, 0, 0, 255)], True),
     ('coloured detail on grey', [(128, 128, 128, 255)] * 990 + [(255, 0, 0, 255)] * 10, False),
     ('single hue', [(0, 160, 80, 255)] * 1000, False),
-    ('warm grey', [(132, 128, 124, 255)] * 1000, False),
-    ('cool grey', [(124, 128, 132, 255)] * 1000, False),
-    ('sepia', [(145, 128, 105, 255)] * 1000, False),
-    ('olive', [(128, 128, 110, 255)] * 1000, False),
+    ('warm grey', [(132, 128, 124, 255)] * 1000, True),
+    ('cool grey', [(124, 128, 132, 255)] * 1000, True),
+    ('sepia', [(145, 128, 105, 255)] * 1000, True),
+    ('olive', [(128, 128, 110, 255)] * 1000, True),
     ('colour with neutral majority', [(128, 128, 128, 255)] * 800 + [(240, 20, 30, 255)] * 100 + [(20, 30, 240, 255)] * 100, False),
+    ('empty', [], None),
+    ('below alpha cutoff', [(128, 128, 128, 127)] * 1000, None),
     ('transparent', [(0, 0, 0, 0)] * 1000, None),
 ]
 
@@ -34,6 +37,15 @@ COLOUR_PALETTES = {
     'coloured detail on grey': ('#87110A', '#FFB5A5'),
     'sparse coloured noise': ('#87110A', '#FFB5A5'),
 }
+
+
+ALBUM_FIXTURES = json.loads((ROOT / 'scripts/fixtures/artwork-accent/albums.json').read_text())
+for fixture in ALBUM_FIXTURES:
+    rgb = fixture['rgb']
+    pixels = [tuple(bytes.fromhex(rgb[i:i + 6])) + (255,) for i in range(0, len(rgb), 6)]
+    CASES.append((fixture['name'], pixels, fixture['neutral']))
+
+ALBUM_PALETTES = {fixture['name']: fixture.get('palette') for fixture in ALBUM_FIXTURES}
 
 
 class NativePaletteTests(unittest.TestCase):
@@ -53,11 +65,20 @@ class NativePaletteTests(unittest.TestCase):
         fixture_lines = []
         for name, pixels, expected in CASES:
             values = ','.join(str((a << 24 | r << 16 | g << 8 | b) - (1 << 32) if a >= 128 else (a << 24 | r << 16 | g << 8 | b)) for r, g, b, a in pixels)
-            check = 'result == null' if expected is None else f'(result?.get("monochrome") == true) == {str(expected).lower()}'
+            check = 'result == null' if expected is None else f'result != null && (result["monochrome"] == true) == {str(expected).lower()}'
+            if name in ALBUM_PALETTES:
+                palette = ALBUM_PALETTES[name]
+                for mode in ['dark', 'light']:
+                    if palette is None:
+                        check += f' && result?.get("{mode}") == null'
+                    else:
+                        for field, colour in palette[mode].items():
+                            value = 'null' if colour is None else f'"{colour}"'
+                            check += f' && (result?.get("{mode}") as Map<*, *>)["{field}"] == {value}'
             if name in COLOUR_PALETTES:
                 for mode, colour in zip(['dark', 'light'], COLOUR_PALETTES[name]):
                     check += f' && (result?.get("{mode}") as Map<*, *>) ["primary"] == "{colour}"'
-            fixture_lines.append(f'run {{ val result = method.invoke(extractor, "{values}".split(",").map {{ it.toInt() }}.toIntArray()) as Map<*, *>?; check({check}) {{ "{name}: $result" }} }}')
+            fixture_lines.append(f'run {{ val result = method.invoke(extractor, "{values}".split(",").filter {{ it.isNotEmpty() }}.map {{ it.toInt() }}.toIntArray()) as Map<*, *>?; check({check}) {{ "{name}: $result" }} }}')
         main = '''
 fun main() {
   val extractor = Extractor()
@@ -75,7 +96,16 @@ fun main() {
         fixture_lines = []
         for name, pixels, expected in CASES:
             values = ','.join(str(channel) for pixel in pixels for channel in pixel)
-            check = 'result == nil' if expected is None else f'((result?["monochrome"] as? Bool) == true) == {str(expected).lower()}'
+            check = 'result == nil' if expected is None else f'result != nil && ((result?["monochrome"] as? Bool) == true) == {str(expected).lower()}'
+            if name in ALBUM_PALETTES:
+                palette = ALBUM_PALETTES[name]
+                for mode in ['dark', 'light']:
+                    if palette is None:
+                        check += f' && (result?["{mode}"] as? [String: Any?]) == nil'
+                    else:
+                        for field, colour in palette[mode].items():
+                            value = 'nil' if colour is None else f'"{colour}"'
+                            check += f' && ((result?["{mode}"] as? [String: Any?])?["{field}"] as? String) == {value}'
             if name in COLOUR_PALETTES:
                 for mode, colour in zip(['dark', 'light'], COLOUR_PALETTES[name]):
                     check += f' && ((result?["{mode}"] as? [String: Any?])?["primary"] as? String) == "{colour}"'

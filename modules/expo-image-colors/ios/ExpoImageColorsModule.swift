@@ -69,7 +69,7 @@ public class ExpoImageColorsModule: Module {
   private static let dominantChromaExponent = 0.5
 
   /// Core extraction. Returns a dict suitable for the Expo Modules bridge to
-  /// convert into the TS `Palette` interface, or nil without colour/neutrality evidence.
+  /// convert into the TS `Palette` interface, or nil when no visible pixels are available.
   private static func extractPalette(rgba: [UInt8], width: Int, height: Int) -> [String: Any?]? {
     var count = [Int](repeating: 0, count: hueBuckets)
     var sumR = [Double](repeating: 0, count: hueBuckets)
@@ -137,12 +137,13 @@ public class ExpoImageColorsModule: Module {
     }
     if visibleCount == 0 { return nil }
     // Population and mean chroma tolerate sparse noise; mean-vector chroma
-    // preserves coherent subtle tints even when no hue bucket survives.
+    // preserves coherent subtle tints when a hue bucket survives.
     let monochrome = Double(chromaticCount) / Double(visibleCount) <= 0.005 &&
       sumChroma / Double(visibleCount) <= 0.01 &&
       (sumA * sumA + sumLabB * sumLabB).squareRoot() / Double(visibleCount) <= 0.003
+    // A decoded image without a usable hue gets neutral accents, not a failure.
     if primaryIdx < 0 {
-      return monochrome ? ["dark": nil, "light": nil, "monochrome": true] : nil
+      return ["dark": nil, "light": nil, "monochrome": true]
     }
 
     return [

@@ -69,7 +69,7 @@ class ExpoImageColorsModule : Module() {
 
   /**
    * Core extraction. Returns a Map suitable for the Expo Modules bridge to
-   * convert into the TS `Palette` interface, or null without colour/neutrality evidence.
+   * convert into the TS `Palette` interface, or null when no visible pixels are available.
    */
   private fun extractPalette(pixels: IntArray): Map<String, Any?>? {
     val count = IntArray(hueBuckets)
@@ -138,13 +138,14 @@ class ExpoImageColorsModule : Module() {
     }
     if (visibleCount == 0) return null
     // Population and mean chroma tolerate sparse noise; mean-vector chroma
-    // preserves coherent subtle tints even when no hue bucket survives.
+    // preserves coherent subtle tints when a hue bucket survives.
     val monochrome = chromaticCount.toDouble() / visibleCount <= 0.005 &&
       sumChroma / visibleCount <= 0.01 &&
       sqrt(sumA * sumA + sumLabB * sumLabB) / visibleCount <= 0.003
-    if (primaryIdx < 0) return if (monochrome) mapOf(
+    // A decoded image without a usable hue gets neutral accents, not a failure.
+    if (primaryIdx < 0) return mapOf(
       "dark" to null, "light" to null, "monochrome" to true,
-    ) else null
+    )
 
     return mapOf(
       "monochrome" to monochrome,

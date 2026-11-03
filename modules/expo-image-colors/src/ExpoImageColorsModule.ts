@@ -8,7 +8,7 @@ export interface PaletteMode {
 }
 
 export interface Palette {
-  /** Image-wide neutrality, independent of the dominant hue and palette availability. */
+  /** Use neutral accents: image-wide neutrality or visible artwork without a usable hue. */
   monochrome?: boolean;
   /** Suitable for dark-mode backgrounds — always dark enough for white icons. */
   dark: PaletteMode | null;
@@ -19,8 +19,8 @@ export interface Palette {
 interface ExpoImageColorsNativeModule {
   /**
    * Extract the palette from a local image.
-   * Returns `null` for decode failure, fully transparent images, or no usable
-   * colour without monochrome evidence. Monochrome images may have null modes.
+   * Returns `null` for decode failure or no visible pixels. Visible artwork
+   * without a usable hue returns null modes with `monochrome: true`.
    */
   getImagePaletteAsync(uri: string): Promise<Palette | null>;
 }

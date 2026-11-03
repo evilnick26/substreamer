@@ -1,4 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react-native';
+import albumFixtures from '../../../scripts/fixtures/artwork-accent/albums.json';
 import { useSyncExternalStore } from 'react';
 import type { Palette } from 'expo-image-colors';
 import { clearArtworkPaletteCacheForTests } from '../../services/artworkPaletteService';
@@ -159,15 +160,23 @@ it('does not publish an obsolete cover result after the track changes', async ()
   expect(mockThemeStore.getState().artworkAccent?.coverKey).toBe('new|');
 });
 
-it('publishes theme-specific neutral accents for decoded monochrome artwork', async () => {
-  mockGetPalette.mockResolvedValue({ dark: null, light: null, monochrome: true });
+it.each(albumFixtures)('publishes the expected accent variants for $name', async (fixture) => {
+  mockGetPalette.mockResolvedValue({
+    monochrome: fixture.neutral,
+    dark: fixture.palette?.dark ?? null,
+    light: fixture.palette?.light ?? null,
+  });
   act(() => {
     mockThemeStore.setState({ primaryColor: 'artwork' });
-    mockPlayerStore.setState({ currentTrack: { coverArt: 'grey' } });
+    mockPlayerStore.setState({ currentTrack: { coverArt: 'album-fixture' } });
   });
   render(<ArtworkAccentController />);
   await waitFor(() => expect(mockThemeStore.getState().artworkAccent).toEqual({
-    coverKey: 'grey|', palette: { dark: '#909090', light: '#505050' },
+    coverKey: 'album-fixture|',
+    palette: fixture.neutral ? { dark: '#909090', light: '#505050' } : {
+      dark: fixture.palette?.dark.primary,
+      light: fixture.palette?.light.primary,
+    },
   }));
 });
 
@@ -183,7 +192,7 @@ it('uses neutral accents when sparse colour noise also produced a chromatic pale
   }));
 });
 
-it('preserves the fallback for a successfully decoded image without usable colour or neutrality', async () => {
+it('preserves the failure fallback for a null extraction result', async () => {
   mockGetPalette.mockResolvedValue(null);
   act(() => {
     mockThemeStore.setState({ primaryColor: 'artwork' });

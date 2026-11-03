@@ -33,9 +33,10 @@ export type { Palette, PaletteMode };
  * Image-wide monochrome detection uses all visible pixels before rejection:
  * at most 0.5% may have Oklab chroma > 0.02, mean chroma must be <= 0.01,
  * and mean-vector chroma <= 0.003 preserves coherent subtle tints.
- * Monochrome images without usable hue buckets have null dark/light modes.
- * Returns `null` for decode failure, no visible pixels, or no usable colour
- * without monochrome evidence. Gradient callers should fall back for null modes.
+ * Visible images without usable hue buckets return `monochrome: true` with
+ * null dark/light modes, requesting neutral accents without a gradient palette.
+ * Returns `null` for decode failure or no visible pixels.
+ * Gradient callers should fall back for null modes.
  */
 export function getImagePaletteAsync(uri: string): Promise<Palette | null> {
   return ExpoImageColorsModule.getImagePaletteAsync(uri);
