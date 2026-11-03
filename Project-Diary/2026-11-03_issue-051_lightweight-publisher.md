@@ -58,3 +58,9 @@
 - Local publication record now uses a same-directory temporary file and exclusive hard-link creation, then reads it back; record failure is explicitly reported as post-publication bookkeeping failure, not as an excuse to roll back a verified release.
 - Added four regression tests for interrupted SSH outcomes and publication record integrity. These tests have NOT been run on Futwick. No live publication has occurred.
 - Remaining before first live release: Futwick tests; inspect lock availability and remote operational edge cases; assess PR branch integration with stale `sanctifi` base; owner approval for actual promotion.
+
+## First live invocation — CLI dispatch defect
+- Owner approved live publication of 80000193, then ran `node scripts/android-publish.js publish 80000193`.
+- Command printed usage and exited before any upload or manifest change. Root cause: CLI dispatch accepted only `plan`, despite exporting and testing `publish()`.
+- Corrected CLI dispatch to accept `publish`; corrected live publication path to call the tested atomic record writer with explicit post-publication bookkeeping error handling.
+- Added two regression tests for CLI dispatch. Awaiting Futwick validation before retrying live publication; no live publication occurred.
