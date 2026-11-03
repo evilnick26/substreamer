@@ -6,6 +6,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { inspectApk, validateManifest } = require('./android-release.js');
+const { upload } = require('./android-publish-upload.js');
+const { verifyPublicApk } = require('./android-publish-verify.js');
+const { readCurrent, promote, rollback, hash } = require('./android-publish-promote.js');
+const https = require('node:https');
+const readline = require('node:readline/promises');
 
 const ARCHIVE = '/media/data/Complete/Sanctifi/Releases';
 const BASE = '/opt/updates-site/client';
@@ -87,10 +92,96 @@ async function plan(code, deps = {}) {
     apkUrl: URL + '/apks/' + local.filename,
   };
 }
+async function fetchPublicManifest(request = https.get) {
+  const url = URL + '/alpha.json?verify=' + crypto.randomBytes(8).toString('hex');
+  const body = await new Promise((resolve, reject) => {
+    const req = request(url, { headers: { 'Cache-Control': 'no-cache' }, timeout: 30000 }, response => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error('Public Alpha manifest HTTP ' + response.statusCode));
+        return;
+      }
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => {
+        text += chunk;
+        if (text.length > 20000) req.destroy(new Error('Public manifest too large'));
+      });
+      response.on('end', () => resolve(text));
+      response.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('Public manifest timed out')));
+  });
+  return validateManifest(JSON.parse(body));
+}
+function sameManifest(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+async function approval(code) {
+  check(process.stdin.isTTY && process.stdout.isTTY, 'Publication requires interactive approval');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await rl.question('Type PUBLISH ' + code + ' to promote Alpha: ');
+    return answer.trim() === 'PUBLISH ' + code;
+  } finally { rl.close(); }
+}
+async function publish(code, deps = {}) {
+  const preflight = await (deps.plan || plan)(code);
+  const local = readLocal(code, deps.archive || ARCHIVE);
+  const manifest = validateManifest({
+    schemaVersion: 1, versionCode: code, versionName: preflight.versionName,
+    apkUrl: preflight.apkUrl, sha256: preflight.sha256,
+    ...(deps.releaseNotes ? { releaseNotes: deps.releaseNotes } : {}),
+  });
+  console.log('Candidate:', JSON.stringify(manifest, null, 2));
+  console.log('Current Alpha:', preflight.currentAlpha);
+  check(preflight.remoteApk === 'absent' || preflight.remoteApk === 'identical', 'Remote APK collision');
+  if (preflight.remoteApk === 'absent') {
+    console.log('Uploading immutable APK (remote sudo may request password)...');
+    (deps.upload || upload)(local.file, local.filename, preflight.sha256);
+  }
+  // Verify the actual publicly hosted APK before any manifest change.
+  console.log('Verifying public APK by full HTTPS download...');
+  await (deps.verifyPublicApk || verifyPublicApk)(manifest);
+  const previousRaw = (deps.readCurrent || readCurrent)();
+  check(previousRaw !== 'ALPHA_ABSENT', 'Alpha manifest missing');
+  const previous = validateManifest(JSON.parse(previousRaw));
+  check(previous.versionCode <= code, 'Refusing Alpha downgrade');
+  check(!sameManifest(previous, manifest), 'Alpha already points to this exact release; nothing to publish');
+  console.log('Proposed Alpha:', previous.versionCode, '->', code);
+  const approved = await (deps.approval || approval)(code);
+  check(approved, 'Publication cancelled; Alpha manifest unchanged');
+  // Compare-and-swap within remote sudo script rejects concurrent manifest edits.
+  const state = (deps.promote || promote)(manifest, previousRaw);
+  try {
+    const publicManifest = await (deps.fetchPublicManifest || fetchPublicManifest)();
+    check(sameManifest(publicManifest, manifest), 'Public Alpha manifest differs from approved manifest');
+    await (deps.verifyPublicApk || verifyPublicApk)(manifest);
+  } catch (error) {
+    console.error('Post-promotion verification failed:', error.message);
+    try {
+      (deps.rollback || rollback)(state);
+      console.error('Previous Alpha manifest restored on Obscurity; verify public cache separately.');
+    } catch (recovery) {
+      throw new Error('PUBLICATION VERIFICATION FAILED AND ROLLBACK FAILED: ' + recovery.message + '; original: ' + error.message);
+    }
+    throw error;
+  }
+  const record = {
+    schemaVersion: 1, channel: 'alpha', versionCode: code, sha256: preflight.sha256,
+    previousVersionCode: previous.versionCode, publishedAt: new Date().toISOString(),
+    publicApkVerified: true, publicManifestVerified: true,
+  };
+  const recordPath = local.file + '.publication.json';
+  fs.writeFileSync(recordPath, JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  console.log('Published Alpha', code, 'and recorded:', recordPath);
+  return record;
+}
 if (require.main === module) {
   const [command, value, extra] = process.argv.slice(2);
   if (command !== 'plan' || !/^[1-9]\d*$/.test(value || '') || extra) {
-    console.error('Usage: node scripts/android-publish.js plan VERSION_CODE');
+    console.error('Usage: node scripts/android-publish.js plan|publish VERSION_CODE');
     process.exitCode = 2;
   } else {
     plan(Number(value)).then(result => {
@@ -99,4 +190,4 @@ if (require.main === module) {
     }).catch(error => { console.error('Publication preflight failed:', error.message); process.exitCode = 1; });
   }
 }
-module.exports = { digest, readLocal, inspectRemote, parseRemote, plan };
+module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest };
