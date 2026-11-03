@@ -8,7 +8,7 @@ const { spawnSync } = require('node:child_process');
 const { inspectApk, validateManifest } = require('./android-release.js');
 const { upload } = require('./android-publish-upload.js');
 const { verifyPublicApk } = require('./android-publish-verify.js');
-const { readCurrent, promote, rollback, hash } = require('./android-publish-promote.js');
+const { readCurrent, promote, rollback } = require('./android-publish-promote.js');
 const https = require('node:https');
 const readline = require('node:readline/promises');
 
