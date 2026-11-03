@@ -38,3 +38,9 @@
 - Added isolated `scripts/android-publish-upload.js`: SCP to uniquely named remote /tmp, remote interactive sudo checksum verification and installation with exclusive hard-link publication, root:root/644 check, and best-effort temp cleanup. It does not modify channel manifests.
 - Added isolated unit tests for upload command construction and cleanup. This helper is NOT yet connected to the public CLI, has NOT been executed against Obscurity, and its tests are pending Futwick execution.
 - Outstanding: validate helper and security/error handling, integrate a single command, public HTTPS full-download checks, explicit confirmation, atomic manifest promotion/rollback, tests and end-to-end dry run.
+
+## Public HTTPS verification increment — follow-up
+- Owner confirmed 11/11 preflight and upload-helper tests pass on Futwick; upload helper has not been used against Obscurity.
+- Added `scripts/android-publish-verify.js`: full public GET (not HEAD), no-cache request headers, HTTP 200 required, streamed SHA-256, 1 GiB safety limit, downloaded APK signer/package inspection through the existing `inspectApk`, version and checksum comparison, temporary file cleanup.
+- Added five isolated tests for successful full GET, redirect rejection, correct APK identity, checksum mismatch and version mismatch. Tests are pending Futwick execution.
+- Deliberately no live server changes and no manifest promotion. Remaining work: CLI orchestration, explicit promotion confirmation, remote atomic manifest update, post-promotion verification and rollback, and real-world permission checks.
