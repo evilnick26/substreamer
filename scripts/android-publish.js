@@ -129,6 +129,15 @@ function writePublicationRecord(file, record) {
 function sameManifest(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
+async function askReleaseNotes() {
+  check(process.stdin.isTTY && process.stdout.isTTY, 'Release notes require an interactive terminal');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const notes = await rl.question('Release notes (blank for none): ');
+    check(notes.length <= 4000, 'Release notes exceed 4000 characters');
+    return notes;
+  } finally { rl.close(); }
+}
 async function approval(code) {
   check(process.stdin.isTTY && process.stdout.isTTY, 'Publication requires interactive approval');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -140,10 +149,11 @@ async function approval(code) {
 async function publish(code, deps = {}) {
   const preflight = await (deps.plan || plan)(code);
   const local = readLocal(code, deps.archive || ARCHIVE);
+  const notes = deps.releaseNotes !== undefined ? deps.releaseNotes : await (deps.askReleaseNotes || askReleaseNotes)();
   const manifest = validateManifest({
     schemaVersion: 1, versionCode: code, versionName: preflight.versionName,
     apkUrl: preflight.apkUrl, sha256: preflight.sha256,
-    ...(deps.releaseNotes ? { releaseNotes: deps.releaseNotes } : {}),
+    ...(notes ? { releaseNotes: notes } : {}),
   });
   console.log('Candidate:', JSON.stringify(manifest, null, 2));
   console.log('Current Alpha:', preflight.currentAlpha);
@@ -195,16 +205,47 @@ async function publish(code, deps = {}) {
   }
   return record;
 }
+async function amendNotes(code, notes, deps = {}) {
+  check(typeof notes === 'string' && notes.length > 0 && notes.length <= 4000,
+    'Release notes must be 1-4000 characters');
+  const previousRaw = (deps.readCurrent || readCurrent)();
+  check(previousRaw !== 'ALPHA_ABSENT', 'Alpha manifest missing');
+  const previous = validateManifest(JSON.parse(previousRaw));
+  check(previous.versionCode === code, 'Alpha does not point to requested versionCode');
+  const manifest = validateManifest({ ...previous, releaseNotes: notes });
+  check(!sameManifest(previous, manifest), 'Release notes already match');
+  console.log('Manifest-only amendment for Alpha', code);
+  console.log('Release notes:', notes);
+  const approved = await (deps.approval || approval)(code);
+  check(approved, 'Amendment cancelled');
+  const state = (deps.promote || promote)(manifest, previousRaw);
+  try {
+    const publicManifest = await (deps.fetchPublicManifest || fetchPublicManifest)();
+    check(sameManifest(publicManifest, manifest), 'Public Alpha manifest differs from approved amendment');
+  } catch (error) {
+    console.error('Amendment verification failed:', error.message);
+    try { (deps.rollback || rollback)(state); }
+    catch (recovery) { throw new Error('AMENDMENT AND ROLLBACK FAILED: ' + recovery.message); }
+    throw error;
+  }
+  console.log('Alpha release notes amended and publicly verified:', code);
+  return manifest;
+}
 if (require.main === module) {
   const [command, value, extra] = process.argv.slice(2);
-  if (!['plan', 'publish'].includes(command) || !/^[1-9]\d*$/.test(value || '') || extra) {
-    console.error('Usage: node scripts/android-publish.js plan|publish VERSION_CODE');
+  if (!['plan', 'publish', 'amend-notes'].includes(command) || !/^[1-9]\d*$/.test(value || '') || (command !== 'amend-notes' && extra)) {
+    console.error('Usage: node scripts/android-publish.js plan|publish|amend-notes VERSION_CODE [NOTES]');
     process.exitCode = 2;
   } else if (command === 'plan') {
     plan(Number(value)).then(result => {
       console.log(JSON.stringify(result, null, 2));
       console.log('READ ONLY: no transfer, publication or manifest change performed.');
     }).catch(error => { console.error('Publication preflight failed:', error.message); process.exitCode = 1; });
+  } else if (command === 'amend-notes') {
+    amendNotes(Number(value), extra || '').catch(error => {
+      console.error('Amendment command ended:', error.message);
+      process.exitCode = 1;
+    });
   } else {
     publish(Number(value)).catch(error => {
       console.error('Publication command ended:', error.message);
@@ -212,4 +253,4 @@ if (require.main === module) {
     });
   }
 }
-module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest, writePublicationRecord };
+module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest, writePublicationRecord, amendNotes, askReleaseNotes };
