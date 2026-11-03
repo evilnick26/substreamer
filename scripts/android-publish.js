@@ -149,7 +149,7 @@ async function approval(code) {
 async function publish(code, deps = {}) {
   const preflight = await (deps.plan || plan)(code);
   const local = readLocal(code, deps.archive || ARCHIVE);
-  const notes = deps.releaseNotes !== undefined ? deps.releaseNotes : await (deps.askReleaseNotes || askReleaseNotes)();
+  const notes = deps.releaseNotes || '';
   const manifest = validateManifest({
     schemaVersion: 1, versionCode: code, versionName: preflight.versionName,
     apkUrl: preflight.apkUrl, sha256: preflight.sha256,
@@ -247,7 +247,7 @@ if (require.main === module) {
       process.exitCode = 1;
     });
   } else {
-    publish(Number(value)).catch(error => {
+    askReleaseNotes().then(releaseNotes => publish(Number(value), { releaseNotes })).catch(error => {
       console.error('Publication command ended:', error.message);
       process.exitCode = 1;
     });
