@@ -63,7 +63,7 @@ test('post-promotion manifest mismatch triggers rollback', async () => {
   try {
     f.deps.fetchPublicManifest = async () => previous;
     await assert.rejects(publish(code, f.deps), /differs/);
-    assert.deepEqual(f.calls.slice(-3), ['promote', 'rollback'].includes(f.calls.at(-1)) ? ['promote', 'rollback'] : []);
+    assert.deepEqual(f.calls.slice(-3), ['approval', 'promote', 'rollback']);
     assert.equal(f.calls.at(-1), 'rollback');
     assert.equal(fs.existsSync(f.file + '.publication.json'), false);
   } finally { fs.rmSync(f.archive, { recursive: true, force: true }); }
