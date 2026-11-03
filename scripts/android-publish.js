@@ -185,20 +185,31 @@ async function publish(code, deps = {}) {
     publicApkVerified: true, publicManifestVerified: true,
   };
   const recordPath = local.file + '.publication.json';
-  fs.writeFileSync(recordPath, JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-  console.log('Published Alpha', code, 'and recorded:', recordPath);
+  try {
+    (deps.writePublicationRecord || writePublicationRecord)(recordPath, record);
+    console.log('Published Alpha', code, 'and recorded:', recordPath);
+  } catch (error) {
+    console.error('ALPHA IS PUBLISHED AND PUBLICLY VERIFIED, but local record creation failed:', error.message);
+    console.error('Do not rerun publish; reconcile the local publication record from the live Alpha manifest.');
+    throw new Error('Publication succeeded; local record needs repair: ' + error.message);
+  }
   return record;
 }
 if (require.main === module) {
   const [command, value, extra] = process.argv.slice(2);
-  if (command !== 'plan' || !/^[1-9]\d*$/.test(value || '') || extra) {
+  if (!['plan', 'publish'].includes(command) || !/^[1-9]\\d*$/.test(value || '') || extra) {
     console.error('Usage: node scripts/android-publish.js plan|publish VERSION_CODE');
     process.exitCode = 2;
-  } else {
+  } else if (command === 'plan') {
     plan(Number(value)).then(result => {
       console.log(JSON.stringify(result, null, 2));
       console.log('READ ONLY: no transfer, publication or manifest change performed.');
     }).catch(error => { console.error('Publication preflight failed:', error.message); process.exitCode = 1; });
+  } else {
+    publish(Number(value)).catch(error => {
+      console.error('Publication command ended:', error.message);
+      process.exitCode = 1;
+    });
   }
 }
 module.exports = { digest, readLocal, inspectRemote, parseRemote, plan, publish, approval, fetchPublicManifest, writePublicationRecord };
