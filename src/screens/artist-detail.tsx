@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -24,6 +24,7 @@ import { BottomChrome } from '../components/BottomChrome';
 import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { SectionTitle } from '../components/SectionTitle';
 import { SongCard } from '../components/SongCard';
+import { SongRow } from '../components/SongRow';
 import { closeOpenRow } from '../components/SwipeableRow';
 import { DetailScreenBackground } from '../components/DetailScreenBackground';
 import { PlayAllButton, ShufflePlayButton } from '../components/DetailHeroButtons';
@@ -35,23 +36,24 @@ import { useTheme } from '../hooks/useTheme';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import { refreshCoverArt } from '../services/imageCacheService';
 import { PillToggle } from '../components/PillToggle';
-import { playAllByArtist, playMoreByArtist, toggleStar } from '../services/moreOptionsService';
+import { toggleStar } from '../services/moreOptionsService';
 import { shuffleArray } from '../utils/arrayHelpers';
 import { groupArtistReleases, type ArtistReleaseListItem } from '../utils/artistReleaseGroups';
 import { playTrack } from '../services/playerService';
 import {
+  fetchAlbumDetail,
   fetchArtistBase,
   fetchArtistBio,
   fetchArtistInfo,
   fetchArtistTopSongs,
 } from '../services/detailFetchService';
 import { getDb } from '../store/persistence/db';
-import { getArtistBase } from '../db/repository/details';
+import { processingOverlayStore } from '../store/processingOverlayStore';
+import { getArtistBase, getArtistLibraryViews, type ArtistLibraryViews } from '../db/repository/details';
 import { subscribeDetailChanged } from '../db/detailNotifier';
 import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { moreOptionsStore } from '../store/moreOptionsStore';
 import { offlineModeStore } from '../store/offlineModeStore';
-import { playbackSettingsStore, type ArtistPlayMode } from '../store/playbackSettingsStore';
 
 import {
   type AlbumID3,
@@ -67,6 +69,9 @@ const HEADER_BAR_HEIGHT = 44;
 const CARD_WIDTH = 88;
 const HORIZONTAL_GAP = 10;
 
+type ArtistLibraryView = 'releases' | 'appearances' | 'all';
+
+
 /* ------------------------------------------------------------------ */
 /*  Main screen                                                       */
 /* ------------------------------------------------------------------ */
@@ -76,7 +81,6 @@ export function ArtistDetailScreen() {
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const groupReleases = layoutPreferencesStore((s) => s.groupArtistReleasesByType);
-  const artistPlayMode = playbackSettingsStore((s) => s.artistPlayMode);
   const { width: screenWidth } = useWindowDimensions();
   const heroImageSize = Math.min(Math.max(HERO_IMAGE_SIZE, screenWidth * 0.35), 280);
   const insets = useSafeAreaInsets();
@@ -89,6 +93,10 @@ export function ArtistDetailScreen() {
   }, [id]);
 
   const [artist, setArtist] = useState<ArtistWithAlbumsID3 | null>(null);
+  const [libraryView, setLibraryView] = useState<ArtistLibraryView>('releases');
+  const [libraryViews, setLibraryViews] = useState<ArtistLibraryViews | null>(null);
+  const libraryViewInitialized = useRef(false);
+  const playbackBusy = useRef(false);
   const [similarArtists, setSimilarArtists] = useState<ArtistID3[]>([]);
   const [heroFallbackUrl, setHeroFallbackUrl] = useState<string | undefined>(undefined);
   const [topSongs, setTopSongs] = useState<Child[]>([]);
@@ -122,14 +130,27 @@ export function ArtistDetailScreen() {
       return;
     }
     let alive = true;
-    const read = () =>
-      getArtistBase(db, id).then((d) => {
-        if (!alive || !d) return;
+    const read = async () => {
+      // The base and library views are independent: failure to read one must
+      // not prevent the other from updating.
+      const [baseResult, viewsResult] = await Promise.allSettled([
+        getArtistBase(db, id),
+        getArtistLibraryViews(db, id),
+      ]);
+
+      if (!alive) return;
+
+      if (baseResult.status === 'fulfilled' && baseResult.value) {
+        const d = baseResult.value;
         setArtist({ ...d.artist, album: d.albums } as ArtistWithAlbumsID3);
-        // Presence is the repository's rule (albums present, or a known-empty artist) —
-        // never "the row exists", which is true for everything after a list sync.
+        // Preserve the repository's existing cache-completeness rule.
         setHasCache(true);
-      });
+      }
+
+      if (viewsResult.status === 'fulfilled') {
+        setLibraryViews(viewsResult.value);
+      }
+    };
     read()
       .catch(() => { /* treat a read failure as a miss → server fetch */ })
       .finally(() => { if (alive) setCacheChecked(true); });
@@ -227,7 +248,9 @@ export function ArtistDetailScreen() {
   });
 
   /* ---- Derived values ---- */
-  const albums = artist?.album ?? [];
+  // Structured album-artist credits take precedence once the local
+  // library views have loaded. The base artist cache remains a fallback.
+  const albums = libraryViews?.releases ?? artist?.album ?? [];
 
   const sortedAlbums = useMemo(() => {
     if (albums.length === 0) return albums;
@@ -241,6 +264,17 @@ export function ArtistDetailScreen() {
   const releaseItems = useMemo(
     () => groupReleases ? groupArtistReleases(sortedAlbums) : sortedAlbums,
     [sortedAlbums, groupReleases],
+  );
+
+  // Playback follows the exact album order displayed in Releases.
+  const playbackReleaseAlbums = useMemo(
+    () => groupReleases
+      ? (releaseItems as ArtistReleaseListItem[])
+          .filter((item): item is Extract<ArtistReleaseListItem, { type: 'album' }> =>
+            item.type === 'album')
+          .map((item) => item.album)
+      : sortedAlbums,
+    [releaseItems, groupReleases, sortedAlbums],
   );
 
   const renderAlbumItem = useCallback(
@@ -268,6 +302,25 @@ export function ArtistDetailScreen() {
   }, []);
   const releaseItemType = useCallback((item: AlbumID3 | ArtistReleaseListItem) =>
     'type' in item ? item.type : 'album', []);
+
+  // The main list and playback buttons consume the same selected collection.
+  const visibleSongs = libraryView === 'appearances'
+    ? (libraryViews?.appearances ?? [])
+    : libraryView === 'all'
+      ? (libraryViews?.all ?? [])
+      : [];
+
+  const renderLibrarySong = useCallback(
+    ({ item }: { item: Child }) => (
+      <SongRow song={item} songs={visibleSongs} />
+    ),
+    [visibleSongs],
+  );
+
+  const librarySongKeyExtractor = useCallback(
+    (item: Child) => item.id,
+    [],
+  );
 
   const topSongsRenderItem = useCallback(
     ({ item }: { item: Child }) => (
@@ -297,17 +350,106 @@ export function ArtistDetailScreen() {
     [],
   );
 
-  const playModeOptions = useMemo(
-    (): [{ key: ArtistPlayMode; label: string }, { key: ArtistPlayMode; label: string }] => [
-      { key: 'topSongs', label: t('topSongs') },
-      { key: 'allSongs', label: t('allSongs') },
-    ],
-    [t],
-  );
+  const libraryViewOptions = useMemo(() => {
+    const options = [
+      { key: 'releases' as const, label: t('releases') },
+      { key: 'appearances' as const, label: t('appearances') },
+      { key: 'all' as const, label: t('allArtistTracks') },
+    ];
 
-  const handlePlayModeChange = useCallback((mode: ArtistPlayMode) => {
-    playbackSettingsStore.getState().setArtistPlayMode(mode);
+    if (!libraryViews) return options;
+
+    const available = options.filter(
+      (option) => libraryViews[option.key].length > 0,
+    );
+
+    // Retain a useful empty-state destination when no music is indexed.
+    return available.length > 0 ? available : options.slice(0, 1);
+  }, [libraryViews, t]);
+
+  // Choose a useful initial view once the local collections are known.
+  // Subsequent cache refreshes must not override the user's selection.
+  useEffect(() => {
+    if (!libraryViews || libraryViewInitialized.current) return;
+
+    libraryViewInitialized.current = true;
+
+    if (libraryViews.releases.length > 0) {
+      setLibraryView('releases');
+    } else if (libraryViews.appearances.length > 0) {
+      setLibraryView('appearances');
+    } else if (libraryViews.all.length > 0) {
+      setLibraryView('all');
+    }
+  }, [libraryViews]);
+
+  const handleLibraryViewChange = useCallback((view: ArtistLibraryView) => {
+    libraryViewInitialized.current = true;
+    setLibraryView(view);
   }, []);
+
+  const handlePlayLibraryView = useCallback(async (shuffle: boolean) => {
+    if (playbackBusy.current || !artist || !libraryViews) return;
+    playbackBusy.current = true;
+
+    const overlay = processingOverlayStore.getState();
+    overlay.show(t('loading'));
+
+    try {
+      let songs: Child[];
+
+      if (libraryView === 'releases') {
+        songs = [];
+
+        // Fetch in displayed album order. Album details already provide
+        // their own disc/track ordering.
+        for (const album of playbackReleaseAlbums) {
+          let detail = await fetchAlbumDetail(album.id, { prefetchCovers: false });
+
+          // A nonempty local result may still be incomplete.
+          if (
+            detail &&
+            !offlineMode &&
+            album.songCount != null &&
+            (detail.song?.length ?? 0) < album.songCount
+          ) {
+            detail = await fetchAlbumDetail(album.id, {
+              prefetchCovers: false,
+              force: true,
+            });
+          }
+
+          if (!detail?.song?.length) {
+            throw new Error(`No tracks available for album ${album.id}`);
+          }
+
+          if (
+            album.songCount != null &&
+            detail.song.length < album.songCount
+          ) {
+            throw new Error(`Incomplete tracklist for album ${album.id}`);
+          }
+
+          songs.push(...detail.song);
+        }
+      } else {
+        songs = libraryViews[libraryView];
+      }
+
+      if (songs.length === 0) {
+        throw new Error(`Empty artist library view: ${libraryView}`);
+      }
+
+      const queue = shuffle ? shuffleArray(songs) : [...songs];
+      await playTrack(queue[0], queue);
+      overlay.showSuccess(t('loading'));
+    } catch (error) {
+      console.warn('[ArtistDetail] Unable to play library view', error);
+      overlay.showError(t('failedToLoadArtistSongs', { artist: artist.name }));
+    } finally {
+      playbackBusy.current = false;
+    }
+  }, [artist, libraryViews, libraryView, playbackReleaseAlbums, offlineMode, t]);
 
   const listHeader = useMemo(() => {
     if (!artist) return null;
@@ -334,40 +476,19 @@ export function ArtistDetailScreen() {
         </View>
         <View style={styles.heroButtons}>
           <PillToggle
-            options={playModeOptions}
-            selected={artistPlayMode}
-            onSelect={handlePlayModeChange}
+            options={libraryViewOptions}
+            selected={libraryView}
+            onSelect={handleLibraryViewChange}
             colors={colors}
           />
           <View style={styles.heroPlayButtons}>
-            {/* Top songs arrive after the base, so an unarrived list must not read as an
-                empty one — that would silently fall through to "more by artist" and play
-                the wrong thing. Only the topSongs mode depends on it; allSongs needs the
-                base alone and stays live. */}
             <ShufflePlayButton
-              disabled={artistPlayMode === 'topSongs' && !topSongsSettled}
-              onPress={() => {
-                if (artistPlayMode === 'allSongs') {
-                  playAllByArtist(artist.id, artist.name, true);
-                } else if (topSongs.length > 1) {
-                  const shuffled = shuffleArray(topSongs);
-                  playTrack(shuffled[0], shuffled);
-                } else {
-                  playMoreByArtist(artist.id, artist.name);
-                }
-              }}
+              disabled={!libraryViews}
+              onPress={() => { void handlePlayLibraryView(true); }}
             />
             <PlayAllButton
-              disabled={artistPlayMode === 'topSongs' && !topSongsSettled}
-              onPress={() => {
-                if (artistPlayMode === 'allSongs') {
-                  playAllByArtist(artist.id, artist.name, false);
-                } else if (topSongs.length > 0) {
-                  playTrack(topSongs[0], topSongs);
-                } else {
-                  playMoreByArtist(artist.id, artist.name);
-                }
-              }}
+              disabled={!libraryViews}
+              onPress={() => { void handlePlayLibraryView(false); }}
             />
           </View>
         </View>
@@ -451,7 +572,7 @@ export function ArtistDetailScreen() {
             )}
 
             {/* ---- Release sorting and unified-list heading ---- */}
-            {albums.length > 0 && (
+            {libraryView === 'releases' && albums.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   {!groupReleases && <SectionTitle title={t('releases')} color={colors.label} />}
@@ -500,9 +621,11 @@ export function ArtistDetailScreen() {
     topSongsKeyExtractor,
     similarArtistsRenderItem,
     similarArtistsKeyExtractor,
-    artistPlayMode,
-    playModeOptions,
-    handlePlayModeChange,
+    libraryViewOptions,
+    libraryViews,
+    handlePlayLibraryView,
+    libraryView,
+    handleLibraryViewChange,
     t,
   ]);
 
@@ -549,10 +672,22 @@ export function ArtistDetailScreen() {
         <DetailScreenBackground coverArt={artist?.coverArt} isWide={isWide} />
 
         <FlashList
-          data={releaseItems}
-          renderItem={renderAlbumItem}
-          getItemType={releaseItemType}
-          keyExtractor={albumKeyExtractor}
+          data={[...(libraryView === 'releases' ? releaseItems : visibleSongs)]}
+          renderItem={({ item }) =>
+            libraryView === 'releases'
+              ? renderAlbumItem({ item: item as AlbumID3 | ArtistReleaseListItem })
+              : renderLibrarySong({ item: item as Child })
+          }
+          getItemType={(item) =>
+            libraryView === 'releases'
+              ? releaseItemType(item as AlbumID3 | ArtistReleaseListItem)
+              : 'song'
+          }
+          keyExtractor={(item) =>
+            libraryView === 'releases'
+              ? albumKeyExtractor(item as AlbumID3 | ArtistReleaseListItem)
+              : librarySongKeyExtractor(item as Child)
+          }
           drawDistance={LIST_DRAW_DISTANCE}
           ListHeaderComponent={listHeader}
           onScrollBeginDrag={closeOpenRow}

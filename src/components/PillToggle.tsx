@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type ThemeColors } from '../constants/theme';
@@ -9,7 +9,7 @@ interface PillToggleOption<K extends string> {
 }
 
 interface PillToggleProps<K extends string> {
-  options: [PillToggleOption<K>, PillToggleOption<K>];
+  options: readonly PillToggleOption<K>[];
   selected: K;
   onSelect: (key: K) => void;
   colors: ThemeColors;
@@ -21,53 +21,32 @@ function PillToggleInner<K extends string>({
   onSelect,
   colors,
 }: PillToggleProps<K>) {
-  const handlePressA = useCallback(() => onSelect(options[0].key), [onSelect, options]);
-  const handlePressB = useCallback(() => onSelect(options[1].key), [onSelect, options]);
-
   return (
     <View style={[styles.container, { backgroundColor: colors.inputBg }]}>
-      <Pressable
-        onPress={handlePressA}
-        style={[
-          styles.half,
-          selected === options[0].key && { backgroundColor: colors.primary },
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected: selected === options[0].key }}
-      >
-        <Text
+      {options.map((option) => (
+        <Pressable
+          key={option.key}
+          onPress={() => onSelect(option.key)}
           style={[
-            styles.label,
-            selected === options[0].key
-              ? styles.labelActive
-              : { color: colors.textSecondary },
+            styles.half,
+            selected === option.key && { backgroundColor: colors.primary },
           ]}
-          numberOfLines={1}
+          accessibilityRole="button"
+          accessibilityState={{ selected: selected === option.key }}
         >
-          {options[0].label}
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={handlePressB}
-        style={[
-          styles.half,
-          selected === options[1].key && { backgroundColor: colors.primary },
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected: selected === options[1].key }}
-      >
-        <Text
-          style={[
-            styles.label,
-            selected === options[1].key
-              ? styles.labelActive
-              : { color: colors.textSecondary },
-          ]}
-          numberOfLines={1}
-        >
-          {options[1].label}
-        </Text>
-      </Pressable>
+          <Text
+            style={[
+              styles.label,
+              selected === option.key
+                ? styles.labelActive
+                : { color: colors.textSecondary },
+            ]}
+            numberOfLines={1}
+          >
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }

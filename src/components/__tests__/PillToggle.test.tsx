@@ -22,6 +22,37 @@ const OPTIONS: [{ key: string; label: string }, { key: string; label: string }] 
 ];
 
 describe('PillToggle', () => {
+  it('supports three options with correct selection and interaction', () => {
+    const options = [
+      { key: 'releases', label: 'Releases' },
+      { key: 'appearances', label: 'Appearances' },
+      { key: 'all', label: 'All' },
+    ] as const;
+    const onSelect = jest.fn();
+
+    const { getByText, getAllByRole } = render(
+      <PillToggle
+        options={options}
+        selected="appearances"
+        onSelect={onSelect}
+        colors={COLORS}
+      />
+    );
+
+    expect(getByText('Releases')).toBeTruthy();
+    expect(getByText('Appearances')).toBeTruthy();
+    expect(getByText('All')).toBeTruthy();
+
+    const buttons = getAllByRole('button');
+    expect(buttons).toHaveLength(3);
+    expect(buttons.map((button) => button.props.accessibilityState?.selected))
+      .toEqual([false, true, false]);
+
+    fireEvent.press(getByText('All'));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('all');
+  });
+
   it('renders both option labels', () => {
     const { getByText } = render(
       <PillToggle options={OPTIONS} selected="a" onSelect={jest.fn()} colors={COLORS} />
