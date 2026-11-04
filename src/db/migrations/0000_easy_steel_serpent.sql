@@ -7,6 +7,7 @@ CREATE TABLE `album_artists` (
 	FOREIGN KEY (`album_id`) REFERENCES `albums`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `idx_album_artists_artist_id` ON `album_artists` (`artist_id`,`album_id`);--> statement-breakpoint
 CREATE TABLE `album_disc_titles` (
 	`album_id` text NOT NULL,
 	`disc` integer NOT NULL,
@@ -1132,6 +1133,7 @@ CREATE TABLE `song_artists` (
 	FOREIGN KEY (`song_id`) REFERENCES `songs`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `idx_song_artists_artist_id` ON `song_artists` (`artist_id`,`song_id`);--> statement-breakpoint
 CREATE TABLE `song_contributors` (
 	`song_id` text NOT NULL,
 	`pos` integer NOT NULL,

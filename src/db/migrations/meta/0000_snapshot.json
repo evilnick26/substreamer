@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4ddbf233-8996-4242-9fdd-84d1f3338f24",
+  "id": "3657e6ab-6655-4842-b310-30c953943b53",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "album_artists": {
@@ -36,7 +36,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_album_artists_artist_id": {
+          "name": "idx_album_artists_artist_id",
+          "columns": [
+            "artist_id",
+            "album_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "album_artists_album_id_albums_id_fk": {
           "name": "album_artists_album_id_albums_id_fk",
@@ -7583,7 +7592,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_song_artists_artist_id": {
+          "name": "idx_song_artists_artist_id",
+          "columns": [
+            "artist_id",
+            "song_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "song_artists_song_id_songs_id_fk": {
           "name": "song_artists_song_id_songs_id_fk",

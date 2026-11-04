@@ -605,7 +605,10 @@ export const songArtists = sqliteTable(
     // denormalized so the ref is self-contained even if the artist isn't in `artists`
     artistName: text('artist_name'),
   },
-  (t) => ({ pk: primaryKey({ columns: [t.songId, t.pos] }) }),
+  (t) => ({
+    pk: primaryKey({ columns: [t.songId, t.pos] }),
+    artistIdx: index('idx_song_artists_artist_id').on(t.artistId, t.songId),
+  }),
 );
 
 export const songAlbumArtists = sqliteTable(
@@ -711,7 +714,10 @@ export const albumArtists = sqliteTable(
     artistId: text('artist_id'),
     artistName: text('artist_name'),
   },
-  (t) => ({ pk: primaryKey({ columns: [t.albumId, t.pos] }) }),
+  (t) => ({
+    pk: primaryKey({ columns: [t.albumId, t.pos] }),
+    artistIdx: index('idx_album_artists_artist_id').on(t.artistId, t.albumId),
+  }),
 );
 
 export const albumReleaseTypes = sqliteTable(
