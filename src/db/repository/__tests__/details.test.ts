@@ -310,6 +310,33 @@ describe('Issue #55 — artist library views', () => {
     expect(wrong.all.map((s) => s.id)).toEqual(['scalar-song']);
   });
 
+  it('does not classify songs with unknown parent albums as appearances', async () => {
+    await upsertArtists(db(), [
+      artist('partial', 'Partially Synced Artist', { albumCount: 1 }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('missing-parent', 'Album Not Yet Synced', {
+        albumId: 'unsynced-album',
+        artistId: 'partial',
+        artists: [credit('partial', 'Partially Synced Artist')],
+      }),
+      song('no-album-id', 'Album Identity Unknown', {
+        artistId: 'partial',
+        artists: [credit('partial', 'Partially Synced Artist')],
+      }),
+    ]);
+
+    const views = await getArtistLibraryViews(db(), 'partial');
+
+    expect(views.releases).toEqual([]);
+    expect(views.appearances).toEqual([]);
+    expect(views.all.map((s) => s.id).sort()).toEqual([
+      'missing-parent',
+      'no-album-id',
+    ]);
+  });
+
 });
 
 describe('artist detail parts', () => {

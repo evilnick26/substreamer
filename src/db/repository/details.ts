@@ -203,10 +203,32 @@ export async function getArtistLibraryViews(
   const all = allRows.map(songListRowToChild);
   const releaseIds = new Set(releases.map((album) => album.id));
 
+  // A track is a confirmed appearance only when its parent album is
+  // present locally and is not credited to the selected artist.
+  // Missing parent albums remain unclassified until synchronised.
+  const parentAlbumIds = [
+    ...new Set(all.map((song) => song.albumId).filter((albumId): albumId is string => !!albumId)),
+  ];
+  const knownAlbumIds = new Set<string>();
+
+  // Query in bounded batches to avoid SQLite parameter-count limits.
+  for (let offset = 0; offset < parentAlbumIds.length; offset += 500) {
+    const batch = parentAlbumIds.slice(offset, offset + 500);
+    const placeholders = batch.map(() => '?').join(', ');
+    const rows = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM albums WHERE id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) knownAlbumIds.add(row.id);
+  }
+
   return {
     releases,
     appearances: all.filter(
-      (song) => !song.albumId || !releaseIds.has(song.albumId),
+      (song) =>
+        !!song.albumId &&
+        knownAlbumIds.has(song.albumId) &&
+        !releaseIds.has(song.albumId),
     ),
     all,
   };
