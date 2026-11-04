@@ -92,6 +92,48 @@ describe('getAlbumDetail', () => {
   });
 });
 
+describe('Issue #55 — Arctic Monkeys compilation appearance', () => {
+  it('preserves separate track-artist and album-artist credits', async () => {
+    await upsertArtists(db(), [
+      artist('arctic', 'Arctic Monkeys', { albumCount: 0 }),
+      artist('various', 'Various Artists', { albumCount: 1 }),
+    ]);
+
+    await upsertAlbums(db(), [
+      album('help2', 'HELP(2)', {
+        artistId: 'various',
+        artist: 'Various Artists',
+        artists: [{ id: 'various', name: 'Various Artists' }],
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('opening-night', 'Opening Night', {
+        albumId: 'help2',
+        artistId: 'arctic',
+        artist: 'Arctic Monkeys',
+        artists: [{ id: 'arctic', name: 'Arctic Monkeys' }],
+        albumArtists: [{ id: 'various', name: 'Various Artists' }],
+      }),
+    ]);
+
+    const trackCredits = await db().getAllAsync<{ artist_id: string }>(
+      'SELECT artist_id FROM song_artists WHERE song_id = ?',
+      ['opening-night'],
+    );
+    const albumCredits = await db().getAllAsync<{ artist_id: string }>(
+      'SELECT artist_id FROM album_artists WHERE album_id = ?',
+      ['help2'],
+    );
+
+    expect(trackCredits.map((r) => r.artist_id)).toEqual(['arctic']);
+    expect(albumCredits.map((r) => r.artist_id)).toEqual(['various']);
+
+    const arctic = await getArtistBase(db(), 'arctic');
+    expect(arctic?.albums).toEqual([]);
+  });
+});
+
 describe('artist detail parts', () => {
   it('getArtistBase returns the artist + albums, newest first', async () => {
     await upsertArtists(db(), [artist('ar1', 'The Beatles', { albumCount: 2 })]);

@@ -25,6 +25,81 @@ beforeEach(() => {
   for (const t of ['songs', 'albums', 'artists']) db().runSync(`DELETE FROM ${t}`);
 });
 
+describe('Issue #55 — structured song artist credits', () => {
+  it('stores track artists independently of album artists', async () => {
+    const songId = '6KCjv3huDFf6st9NwgDTkA';
+
+    await upsertSongs(db(), [
+      song(songId, {
+        title: 'Opening Night',
+        albumId: '1HnSBWe40dyddSl6hAYRdC',
+        artist: 'Arctic Monkeys',
+        artistId: '42AeaghSVsS1oWaeLVmBOK',
+        artists: [
+          { id: '42AeaghSVsS1oWaeLVmBOK', name: 'Arctic Monkeys' },
+        ],
+        albumArtists: [
+          { id: '63sqASlAfjbGMuLP4JhnZU', name: 'Various Artists' },
+        ],
+      }),
+    ]);
+
+    const trackArtists = db().getAllSync(
+      'SELECT artist_id, artist_name FROM song_artists WHERE song_id = ? ORDER BY pos',
+      [songId],
+    );
+
+    const albumArtists = db().getAllSync(
+      'SELECT artist_id, artist_name FROM song_album_artists WHERE song_id = ? ORDER BY pos',
+      [songId],
+    );
+
+    expect(trackArtists).toEqual([
+      {
+        artist_id: '42AeaghSVsS1oWaeLVmBOK',
+        artist_name: 'Arctic Monkeys',
+      },
+    ]);
+
+    expect(albumArtists).toEqual([
+      {
+        artist_id: '63sqASlAfjbGMuLP4JhnZU',
+        artist_name: 'Various Artists',
+      },
+    ]);
+  });
+});
+describe('Issue #55 — incomplete metadata updates', () => {
+  it('documents loss of structured credits after an incomplete upsert', async () => {
+    const songId = 'issue55-incomplete';
+
+    await upsertSongs(db(), [
+      song(songId, {
+        artist: 'Arctic Monkeys',
+        artists: [{ id: 'arctic', name: 'Arctic Monkeys' }],
+        albumArtists: [{ id: 'various', name: 'Various Artists' }],
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song(songId, { artist: 'Arctic Monkeys' }),
+    ]);
+
+    const trackArtists = db().getAllSync(
+      'SELECT artist_id FROM song_artists WHERE song_id = ?',
+      [songId],
+    );
+
+    const albumArtists = db().getAllSync(
+      'SELECT artist_id FROM song_album_artists WHERE song_id = ?',
+      [songId],
+    );
+
+    expect(trackArtists).toEqual([]);
+    expect(albumArtists).toEqual([]);
+  });
+});
+
 describe('conditional `starred` key', () => {
   it('omits the key entirely when the payload has no starred date', () => {
     expect('starred' in songRow(song('s1'))).toBe(false);
