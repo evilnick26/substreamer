@@ -704,7 +704,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="album-list"
-          options={{ ...blurHeaderOptions, title: i18n.t('albums'), headerBackTitle: i18n.t('back') }}
+          options={{ ...blurHeaderOptions, title: i18n.t('releases'), headerBackTitle: i18n.t('back') }}
         />
         <Stack.Screen
           name="album/[id]"

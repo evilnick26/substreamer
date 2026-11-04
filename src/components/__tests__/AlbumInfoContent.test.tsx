@@ -398,7 +398,7 @@ describe('AlbumInfoContent', () => {
       />,
     );
 
-    expect(getByText("Album details aren't available for compilations.")).toBeTruthy();
+    expect(getByText("Release details aren't available for compilations.")).toBeTruthy();
     // The redundant "Album Artist: Various Artists" credit row is suppressed.
     expect(queryByText('Album Artist')).toBeNull();
   });
@@ -418,7 +418,7 @@ describe('AlbumInfoContent', () => {
       />,
     );
 
-    expect(getByText('No album details available for this track.')).toBeTruthy();
+    expect(getByText('No release details available for this track.')).toBeTruthy();
   });
 
   it('does not render album artist row when same as artist', () => {
@@ -657,7 +657,7 @@ describe('AlbumInfoContent', () => {
         />,
       );
 
-      expect(getByText(/Couldn't load album info/i)).toBeTruthy();
+      expect(getByText(/Couldn't load release info/i)).toBeTruthy();
     });
 
     it('invokes onRetry when the retry button is pressed', () => {

@@ -155,6 +155,12 @@ beforeEach(() => {
   mockShowMoreOptions.mockClear();
 });
 
+it('retains Unknown Album for missing conventional track metadata', () => {
+  const ui = render(<TrackRow track={track} colors={colors} onPress={jest.fn()} showAlbumName />);
+  expect(ui.getByText('Unknown Album')).toBeTruthy();
+  expect(ui.queryByText('Unknown Release')).toBeNull();
+});
+
 describe('TrackRow — offline-unplayable disabled state', () => {
   it('online + not downloaded: row is interactive, onPress fires on tap', () => {
     mockOfflineMode = false;

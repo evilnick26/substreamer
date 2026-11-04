@@ -43,7 +43,7 @@ export function LibraryScreen() {
   }, [activeSegment]);
 
   const segments = useMemo(
-    () => normalizeLibraryOrder(libraryOrder).map((key) => ({ key, label: t(key) })),
+    () => normalizeLibraryOrder(libraryOrder).map((key) => ({ key, label: t(key === 'albums' ? 'releases' : key) })),
     [t, libraryOrder],
   );
 

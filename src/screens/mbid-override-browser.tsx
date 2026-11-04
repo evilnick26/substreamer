@@ -130,7 +130,7 @@ export function MbidOverrideBrowserScreen() {
   const segments = useMemo<Segment<MbidOverrideType>[]>(
     () => [
       { key: 'artist', label: t('artists') },
-      { key: 'album', label: t('albums') },
+      { key: 'album', label: t('releases') },
     ],
     [t],
   );

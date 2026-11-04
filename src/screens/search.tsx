@@ -186,7 +186,7 @@ export function SearchScreen() {
     }
     if (filtered.albums.length > 0) {
       result.push({
-        titleKey: 'albums',
+        titleKey: 'releases',
         data: filtered.albums.map((a) => ({ type: 'album' as const, data: a })),
       });
     }

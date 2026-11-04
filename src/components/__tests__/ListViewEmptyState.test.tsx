@@ -48,7 +48,7 @@ const views = [
     render: (loading: boolean) => (
       <AlbumListView items={[]} toAlbum={albumIdentity} loading={loading} />
     ),
-    empty: 'No albums found',
+    empty: 'No releases found',
   },
   {
     name: 'ArtistListView',

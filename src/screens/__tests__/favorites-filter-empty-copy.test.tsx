@@ -72,7 +72,7 @@ const lastSong = (): EmptyCopy => songRenders[songRenders.length - 1];
 const lastAlbum = (): EmptyCopy => albumRenders[albumRenders.length - 1];
 const lastArtist = (): EmptyCopy => artistRenders[artistRenders.length - 1];
 
-const showAlbums = (r: RenderAPI): void => fireEvent.press(r.getByText('Albums'));
+const showAlbums = (r: RenderAPI): void => fireEvent.press(r.getByText('Releases'));
 const showArtists = (r: RenderAPI): void => fireEvent.press(r.getByText('Artists'));
 
 beforeAll(() => ensureNormalizedSchema(db()));
@@ -152,9 +152,9 @@ describe('FavoritesScreen — albums segment empty copy', () => {
   it('keeps the "star some albums" copy when no filter is on', async () => {
     const r = render(<FavoritesScreen />);
     showAlbums(r);
-    await waitFor(() => expect(lastAlbum().emptyMessage).toBe('No favorite albums yet'));
+    await waitFor(() => expect(lastAlbum().emptyMessage).toBe('No favorite releases yet'));
     expect(lastAlbum().emptySubtitle).toBe(
-      'Star albums you love and they will appear here, or check your filters',
+      'Star releases you love and they will appear here, or check your filters',
     );
   });
 });

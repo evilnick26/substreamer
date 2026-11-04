@@ -94,6 +94,7 @@ describe('buildSnapshot', () => {
   it('builds exactly the 4 sections in order', async () => {
     const snap = await __test.buildSnapshot();
     expect(snap.rootId).toBe('root');
+    expect(snap.sections.find((s) => s.id === sectionId('albums'))?.title).toBe('Releases');
     expect(snap.sections.map((s) => s.id)).toEqual([
       sectionId('home'),
       sectionId('favorites'),

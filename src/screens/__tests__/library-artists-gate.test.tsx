@@ -20,6 +20,8 @@ import { fireEvent, render, waitFor, type RenderAPI } from '@testing-library/rea
 import { filterBarStore } from '../../store/filterBarStore';
 import { offlineModeStore } from '../../store/offlineModeStore';
 import { LibraryScreen } from '../library';
+import { layoutPreferencesStore } from '../../store/layoutPreferencesStore';
+import { LibraryLayoutCard } from '../../components/settings/LibraryLayoutCard';
 
 /** Open the Artists segment — the gate under test only renders there. The screen defers
  *  segment content past an idle window (`runWhenIdle`), so callers assert inside
@@ -33,6 +35,16 @@ const showArtists = (): RenderAPI => {
 beforeEach(() => {
   filterBarStore.setState({ downloadedOnly: false, favoritesOnly: false });
   offlineModeStore.setState({ offlineMode: false });
+});
+
+it('displays Releases and its accessibility label while preserving the albums preference id', () => {
+  layoutPreferencesStore.setState({ libraryOrder: ['albums', 'artists', 'songs', 'playlists'] });
+  const r = render(<><LibraryScreen /><LibraryLayoutCard /></>);
+  expect(r.getAllByText('Releases')).toHaveLength(2);
+  expect(r.getByLabelText('Reorder Releases')).toBeTruthy();
+  fireEvent.press(r.getAllByText('Releases')[0]);
+  expect(layoutPreferencesStore.getState().libraryOrder).toEqual(['albums', 'artists', 'songs', 'playlists']);
+  expect(r.queryByText('Albums')).toBeNull();
 });
 
 /**

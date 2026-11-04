@@ -352,10 +352,10 @@ const ALL_OPTIONS = [
   'Play More by This Artist',
   'Play Next',
   'Add to Queue',
-  'Go to Album',
+  'Go to Release',
   'Go to Artist',
   'Share',
-  'Album Details',
+  'Release Details',
   'Track Details',
   'Set MusicBrainz ID',
   'Exclude from Scrobbling',
@@ -420,7 +420,7 @@ describe('MoreOptionsSheet — options per entity (online, default source)', () 
       'Play More by This Artist',
       'Play Next',
       'Add to Queue',
-      'Go to Album',
+      'Go to Release',
       'Go to Artist',
       'Share',
       'Track Details',
@@ -438,7 +438,7 @@ describe('MoreOptionsSheet — options per entity (online, default source)', () 
       'Add to Queue',
       'Go to Artist',
       'Share',
-      'Album Details',
+      'Release Details',
       'Set MusicBrainz ID',
       'Exclude from Scrobbling',
       'Download',
@@ -469,21 +469,21 @@ describe('MoreOptionsSheet — options in offline mode', () => {
     mockOfflineMode = true;
   });
 
-  it('song keeps only the local actions; Go to Album hidden when its album is not cached', () => {
+  it('song keeps only the local actions; Go to Release hidden when its album is not cached', () => {
     open(songEntity);
     expect(shownOptions()).toEqual(['Play More by This Artist', 'Play Next', 'Add to Queue', 'Track Details']);
   });
 
-  it('song offers Go to Album when its album is cached', () => {
+  it('song offers Go to Release when its album is cached', () => {
     mockCachedItems = { al1: { type: 'album', songIds: ['s1'] } };
     open(songEntity);
-    expect(screen.queryByText('Go to Album')).toBeTruthy();
+    expect(screen.queryByText('Go to Release')).toBeTruthy();
   });
 
-  it('song without an album id never offers Go to Album', () => {
+  it('song without an album id never offers Go to Release', () => {
     mockCachedItems = { al1: { type: 'album', songIds: ['s1'] } };
     open({ type: 'song', item: { ...song, albumId: undefined } as Child });
-    expect(screen.queryByText('Go to Album')).toBeNull();
+    expect(screen.queryByText('Go to Release')).toBeNull();
   });
 
   it('album', () => {
@@ -491,7 +491,7 @@ describe('MoreOptionsSheet — options in offline mode', () => {
     expect(shownOptions()).toEqual([
       'Play More by This Artist',
       'Add to Queue',
-      'Album Details',
+      'Release Details',
       'Set MusicBrainz ID',
       'Exclude from Scrobbling',
       'Download',
@@ -646,12 +646,12 @@ describe('MoreOptionsSheet — header', () => {
   it('artist: name and album count', () => {
     open(artistEntity);
     expect(screen.queryByText('Some Artist')).toBeTruthy();
-    expect(screen.queryByText('3 albums')).toBeTruthy();
+    expect(screen.queryByText('3 releases')).toBeTruthy();
   });
 
   it('artist without an album count shows zero', () => {
     open({ type: 'artist', item: { id: 'ar2', name: 'New' } as ArtistID3 });
-    expect(screen.queryByText('0 albums')).toBeTruthy();
+    expect(screen.queryByText('0 releases')).toBeTruthy();
   });
 
   it('playlist: name and track count', () => {
@@ -817,15 +817,15 @@ describe('MoreOptionsSheet — navigation', () => {
     expect(mockSetPlayerExpanded).not.toHaveBeenCalled();
   });
 
-  it('Go to Album pushes the album route', () => {
+  it('Go to Release pushes the album route', () => {
     open(songEntity);
-    fireEvent.press(screen.getByText('Go to Album'));
+    fireEvent.press(screen.getByText('Go to Release'));
     sheetClosed();
     expect(mockRouterPush).toHaveBeenCalledWith('/album/al1');
     expect(mockSetPlayerExpanded).not.toHaveBeenCalled();
   });
 
-  it.each(['Go to Artist', 'Go to Album'])('%s collapses the tablet-landscape player first', (label) => {
+  it.each(['Go to Artist', 'Go to Release'])('%s collapses the tablet-landscape player first', (label) => {
     open(songEntity, 'player-tablet-landscape');
     fireEvent.press(screen.getByText(label));
     expect(mockSetPlayerExpanded).toHaveBeenCalledWith(false);
@@ -836,7 +836,7 @@ describe('MoreOptionsSheet — navigation', () => {
     '%s does not touch the tablet player layout',
     (source) => {
       open(songEntity, source);
-      fireEvent.press(screen.getByText('Go to Album'));
+      fireEvent.press(screen.getByText('Go to Release'));
       expect(mockSetPlayerExpanded).not.toHaveBeenCalled();
       expect(mockRouterPush).toHaveBeenCalledWith('/album/al1');
     },
@@ -844,9 +844,9 @@ describe('MoreOptionsSheet — navigation', () => {
 });
 
 describe('MoreOptionsSheet — details modals', () => {
-  it('Album Details opens the album modal after the sheet closes, and closes it', async () => {
+  it('Release Details opens the album modal after the sheet closes, and closes it', async () => {
     open(albumEntity);
-    fireEvent.press(screen.getByText('Album Details'));
+    fireEvent.press(screen.getByText('Release Details'));
     await waitFor(() => expect(screen.queryByText('album-details:Test Album')).toBeTruthy());
     sheetClosed();
     fireEvent.press(screen.getByTestId('album-details'));
@@ -864,7 +864,7 @@ describe('MoreOptionsSheet — details modals', () => {
 
   it('a details modal stays mounted beneath a re-opened sheet', async () => {
     open(albumEntity);
-    fireEvent.press(screen.getByText('Album Details'));
+    fireEvent.press(screen.getByText('Release Details'));
     await waitFor(() => expect(screen.queryByTestId('album-details')).toBeTruthy());
     act(() => moreOptionsStore.getState().show(songEntity));
     expect(screen.queryByTestId('album-details')).toBeTruthy();
@@ -879,7 +879,7 @@ describe('MoreOptionsSheet — details modals', () => {
     act(() => moreOptionsStore.getState().show(albumEntity));
     fireEvent.press(screen.getByTestId('track-details'));
     expect(screen.queryByTestId('track-details')).toBeNull();
-    fireEvent.press(screen.getByText('Album Details'));
+    fireEvent.press(screen.getByText('Release Details'));
     await waitFor(() => expect(screen.queryByTestId('album-details')).toBeTruthy());
     act(() => moreOptionsStore.getState().show(songEntity));
     fireEvent.press(screen.getByTestId('album-details'));

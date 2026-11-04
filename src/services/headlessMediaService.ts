@@ -305,7 +305,7 @@ async function buildSnapshot(): Promise<BrowseSnapshot> {
       icon: SectionIcon.Favourites,
       items: favItems,
     },
-    { id: sectionId('albums'), title: i18n.t('albums'), icon: SectionIcon.Albums, items: albumItems },
+    { id: sectionId('albums'), title: i18n.t('releases'), icon: SectionIcon.Albums, items: albumItems },
     {
       id: sectionId('playlists'),
       title: i18n.t('playlists'),

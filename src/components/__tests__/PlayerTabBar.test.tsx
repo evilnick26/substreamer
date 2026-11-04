@@ -64,7 +64,7 @@ describe('PlayerTabBar', () => {
     fireEvent.press(getByLabelText('Queue'));
     expect(onSelect).toHaveBeenCalledWith('queue');
 
-    fireEvent.press(getByLabelText('Album Info'));
+    fireEvent.press(getByLabelText('Release Info'));
     expect(onSelect).toHaveBeenCalledWith('info');
 
     fireEvent.press(getByLabelText('Lyrics'));
@@ -98,7 +98,7 @@ describe('PlayerTabBar', () => {
 
     expect(getByLabelText('Now Playing')).toBeTruthy();
     expect(getByLabelText('Queue')).toBeTruthy();
-    expect(queryByLabelText('Album Info')).toBeNull();
+    expect(queryByLabelText('Release Info')).toBeNull();
     expect(queryByLabelText('Lyrics')).toBeNull();
   });
 
@@ -109,7 +109,7 @@ describe('PlayerTabBar', () => {
 
     expect(getByLabelText('Now Playing')).toBeTruthy();
     expect(getByLabelText('Queue')).toBeTruthy();
-    expect(getByLabelText('Album Info')).toBeTruthy();
+    expect(getByLabelText('Release Info')).toBeTruthy();
     expect(getByLabelText('Lyrics')).toBeTruthy();
   });
 
@@ -118,7 +118,7 @@ describe('PlayerTabBar', () => {
       <PlayerTabBar activeTab="info" onSelect={jest.fn()} colors={COLORS} />,
     );
 
-    const infoTab = getByLabelText('Album Info');
+    const infoTab = getByLabelText('Release Info');
     expect(infoTab.props.accessibilityRole).toBe('tab');
     expect(infoTab.props.accessibilityState).toEqual({ selected: true });
 

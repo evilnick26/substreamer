@@ -85,8 +85,8 @@ describe('i18n', () => {
   });
 
   it('handles other plural keys', () => {
-    expect(i18n.t('albumCount', { count: 1 })).toBe('1 album');
-    expect(i18n.t('albumCount', { count: 3 })).toBe('3 albums');
+    expect(i18n.t('albumCount', { count: 1 })).toBe('1 release');
+    expect(i18n.t('albumCount', { count: 3 })).toBe('3 releases');
   });
 
   it('returns the key itself for missing keys', () => {

@@ -83,6 +83,12 @@ beforeEach(() => {
   jest.mocked(fetchArtistBase).mockClear();
 });
 
+it.each([0, 1, 2])('shows the artist count for %i releases without changing its value', async (count) => {
+  mockAlbums = Array.from({ length: count }, (_, index) => makeAlbum(`release-${index}`, 2024, ['EP']));
+  const ui = render(<ArtistDetailScreen />);
+  await waitFor(() => expect(ui.getByText(`${count} ${count === 1 ? 'release' : 'releases'}`)).toBeTruthy());
+});
+
 it('renders canonical sections once, preserving row objects, artwork and versions', async () => {
   const ui = render(<ArtistDetailScreen />);
   await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
@@ -100,7 +106,7 @@ it('updates immediately from the Appearance switch and restores the original uni
   await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
   fireEvent(ui.getByLabelText('Group artist releases by type'), 'valueChange', false);
   expect(ui.queryAllByTestId('release-header')).toHaveLength(0);
-  expect(ui.getByText('Albums')).toBeTruthy();
+  expect(ui.getByText('Releases')).toBeTruthy();
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children))
     .toEqual(['single', 'album-new', 'unknown', 'ep', 'album-old']);
   fireEvent(ui.getByLabelText('Group artist releases by type'), 'valueChange', true);
@@ -126,6 +132,6 @@ it('hides empty sections and keeps sorting available for an Other-only artist', 
   fireEvent.press(ui.getByText('Newest'));
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children)).toEqual(['old', 'new']);
   act(() => layoutPreferencesStore.getState().setGroupArtistReleasesByType(false));
-  expect(ui.getByText('Albums')).toBeTruthy();
+  expect(ui.getByText('Releases')).toBeTruthy();
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children)).toEqual(['old', 'new']);
 });

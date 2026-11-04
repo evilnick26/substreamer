@@ -80,7 +80,7 @@ function getSubtitleText(target: AddToPlaylistTarget, t: (key: string, options?:
     const count = target.songs.length;
     return t('tracksFromQueue', { count });
   }
-  const name = target.item.name ?? t('unknownAlbum');
+  const name = target.item.name ?? t('unknownRelease');
   const artist = target.item.artist ?? t('unknownArtist');
   return `${name} — ${artist}`;
 }

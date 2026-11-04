@@ -37,7 +37,7 @@ type FavoritesSegment = 'songs' | 'albums' | 'artists';
 
 const SEGMENT_KEYS = [
   { key: 'songs', labelKey: 'songs' },
-  { key: 'albums', labelKey: 'albums' },
+  { key: 'albums', labelKey: 'releases' },
   { key: 'artists', labelKey: 'artists' },
 ] as const;
 

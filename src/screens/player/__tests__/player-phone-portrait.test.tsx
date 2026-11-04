@@ -522,7 +522,7 @@ describe('PlayerPhonePortrait', () => {
     const { getByLabelText, getByText } = render(<PlayerPhonePortrait />);
 
     act(() => {
-      fireEvent.press(getByLabelText('Album Info'));
+      fireEvent.press(getByLabelText('Release Info'));
     });
 
     expect(getByText('AlbumInfoContent')).toBeTruthy();
@@ -627,7 +627,7 @@ describe('PlayerPhonePortrait', () => {
 
     // Select info tab
     act(() => {
-      fireEvent.press(getByLabelText('Album Info'));
+      fireEvent.press(getByLabelText('Release Info'));
     });
 
     // Now it should be mounted

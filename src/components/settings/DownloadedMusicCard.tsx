@@ -108,7 +108,10 @@ export function DownloadedMusicCard() {
     const playlists = db ? await countPlaylists(db) : 0;
     confirm({
       title: t('downloadFullLibraryConfirmTitle'),
-      message: t('downloadFullLibraryConfirmBody', { albums, playlists }),
+      message: t('downloadFullLibraryConfirmBody', {
+        albums: t('albumCount', { count: albums }),
+        playlists: t('playlistCount', { count: playlists }),
+      }),
       confirmLabel: t('downloadFullLibraryConfirm'),
       onConfirm: () => fireAndForget(enqueueFullLibraryDownload(), 'fullLibraryDownload'),
     });

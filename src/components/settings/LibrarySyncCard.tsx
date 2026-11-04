@@ -151,7 +151,7 @@ export function LibrarySyncCard() {
       <SettingsSectionTitle>{t('librarySync')}</SettingsSectionTitle>
       <View style={[settingsStyles.card, settingsStyles.cardPadded, { backgroundColor: colors.card }]}>
         <View style={[settingsStyles.infoRow, { borderBottomColor: colors.border }]}>
-          <Text style={[settingsStyles.infoLabel, { color: colors.textPrimary }]}>{t('albums')}</Text>
+          <Text style={[settingsStyles.infoLabel, { color: colors.textPrimary }]}>{t('releases')}</Text>
           <Text style={[settingsStyles.infoValue, { color: colors.textSecondary }]}>{displayAlbums}</Text>
         </View>
         <View style={[settingsStyles.infoRow, { borderBottomColor: colors.border }]}>

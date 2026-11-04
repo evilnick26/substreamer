@@ -15,8 +15,18 @@ jest.mock('../../../hooks/useTheme', () => ({
 }));
 
 const mockAlert = jest.fn();
+const mockConfirm = jest.fn();
 jest.mock('../../../hooks/useThemedAlert', () => ({
-  useThemedAlert: () => ({ alert: mockAlert, confirm: jest.fn() }),
+  useThemedAlert: () => ({ alert: mockAlert, confirm: mockConfirm }),
+}));
+
+jest.mock('../../../db/repository/albums', () => ({
+  ...jest.requireActual('../../../db/repository/albums'),
+  countAlbums: jest.fn(),
+}));
+jest.mock('../../../db/repository/playlists', () => ({
+  ...jest.requireActual('../../../db/repository/playlists'),
+  countPlaylists: jest.fn(),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -58,6 +68,26 @@ import { DownloadedMusicCard } from '../DownloadedMusicCard';
 import { connectivityStore } from '../../../store/connectivityStore';
 import { imageDownloadQueueStore } from '../../../store/imageDownloadQueueStore';
 import { offlineModeStore } from '../../../store/offlineModeStore';
+import { musicCacheStore } from '../../../store/musicCacheStore';
+import { countAlbums } from '../../../db/repository/albums';
+import { countPlaylists } from '../../../db/repository/playlists';
+
+describe('full-library download confirmation terminology', () => {
+  it.each([[0, 0], [1, 2], [2, 1]])('pluralizes %i releases and %i playlists independently', async (albums, playlists) => {
+    mockConfirm.mockClear();
+    offlineModeStore.setState({ offlineMode: false });
+    connectivityStore.setState({ isServerReachable: true });
+    musicCacheStore.setState({ downloadQueue: [] });
+    jest.mocked(countAlbums).mockResolvedValue(albums);
+    jest.mocked(countPlaylists).mockResolvedValue(playlists);
+    render(<DownloadedMusicCard />);
+    fireEvent.press(screen.getByText('Download Full Library'));
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    expect(mockConfirm.mock.calls[0][0].message).toBe(
+      `This queues ${albums} ${albums === 1 ? 'release' : 'releases'} and ${playlists} ${playlists === 1 ? 'playlist' : 'playlists'} for download. It can take a while and use significant storage.`,
+    );
+  });
+});
 
 describe('DownloadedMusicCard refresh covers', () => {
   beforeEach(() => {

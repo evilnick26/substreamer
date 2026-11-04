@@ -454,7 +454,7 @@ export function ArtistDetailScreen() {
             {albums.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  {!groupReleases && <SectionTitle title={t('albums')} color={colors.label} />}
+                  {!groupReleases && <SectionTitle title={t('releases')} color={colors.label} />}
                   <Pressable
                     onPress={() => setAlbumSortDesc((prev) => !prev)}
                     style={({ pressed }) => [

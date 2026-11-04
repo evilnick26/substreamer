@@ -99,7 +99,7 @@ describe('LibrarySyncBanner', () => {
   it('suppresses the album phase on a library below the display threshold', () => {
     setSyncState({ librarySyncPhase: 'fetching', librarySyncCursor: 10 });
     const { queryByText } = render(<LibrarySyncBanner />);
-    expect(queryByText(/Syncing albums/i)).toBeNull();
+    expect(queryByText(/Syncing releases/i)).toBeNull();
   });
 
   it('surfaces a sync paused by request errors, so it does not just look stopped', () => {

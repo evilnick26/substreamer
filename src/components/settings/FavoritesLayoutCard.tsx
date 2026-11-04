@@ -12,7 +12,7 @@ import { SettingsSectionTitle } from './SettingsSectionTitle';
 
 const ROWS: { key: 'favSongLayout' | 'favAlbumLayout' | 'favArtistLayout'; labelKey: string }[] = [
   { key: 'favSongLayout', labelKey: 'songs' },
-  { key: 'favAlbumLayout', labelKey: 'albums' },
+  { key: 'favAlbumLayout', labelKey: 'releases' },
   { key: 'favArtistLayout', labelKey: 'artists' },
 ];
 

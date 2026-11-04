@@ -456,7 +456,7 @@ const JumpBackInItem = memo(function JumpBackInItem({
         style={[styles.jumpTitle, { color: colors.textPrimary }, size > 120 && styles.jumpTitleLarge]}
         numberOfLines={1}
       >
-        {album.name ?? t('unknownAlbum')}
+        {album.name ?? t('unknownRelease')}
       </Text>
     </Pressable>
   );

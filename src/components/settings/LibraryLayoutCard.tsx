@@ -29,6 +29,7 @@ function SortableLayoutRow({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const label = t(id === 'albums' ? 'releases' : id);
   const offset = useRef(new Animated.Value(0)).current;
   const latest = useRef({ index, onMove, onDragActive });
   latest.current = { index, onMove, onDragActive };
@@ -63,10 +64,10 @@ function SortableLayoutRow({
       { backgroundColor: colors.card, borderColor: colors.border },
       dragging && { zIndex: 10, elevation: 6, opacity: 0.92, transform: [{ translateY: offset }] },
     ]}>
-      <View {...responder.panHandlers} style={styles.dragHandle} accessibilityLabel={`Reorder ${t(id)}`} accessibilityRole="adjustable">
+      <View {...responder.panHandlers} style={styles.dragHandle} accessibilityLabel={`Reorder ${label}`} accessibilityRole="adjustable">
         <MaterialCommunityIcons name="drag-vertical" size={24} color={colors.textSecondary} />
       </View>
-      <Text style={[styles.label, { color: colors.textPrimary }]}>{t(id)}</Text>
+      <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
       <View style={styles.icons}>
         <Pressable onPress={() => setLayout('list')} hitSlop={8} style={({ pressed }) => pressed && settingsStyles.pressed}>
           <MaterialCommunityIcons name="view-list-outline" size={22} color={layout === 'list' ? colors.primary : colors.textSecondary} />

@@ -74,8 +74,8 @@ test('shows loading with cached rows, keeps them on failure and retries', async 
   expect(view.getByLabelText('Loading…')).toBeTruthy();
   expect(view.getByText('Title cached')).toBeTruthy();
   await act(async () => { reject(new Error('network')); });
-  await view.findByText('Unable to refresh albums. Showing the last available list.');
-  expect(view.queryByText('No recently uploaded albums.')).toBeNull();
+  await view.findByText('Unable to refresh releases. Showing the last available list.');
+  expect(view.queryByText('No recently uploaded releases.')).toBeNull();
   fetchAlbums.mockResolvedValue([album('recovered')]);
   fireEvent.press(view.getByText('Retry'));
   await view.findByText('Title recovered');
@@ -86,10 +86,10 @@ test.each(['mode', 'connection'])('offline %s retains cache and makes no request
   if (kind === 'mode') offlineModeStore.setState({ offlineMode: true });
   else connectivityStore.setState({ hasConnection: false });
   const view = render(<HomeScreen />);
-  expect(view.getByText('Offline — showing the last available albums.')).toBeTruthy();
+  expect(view.getByText('Offline — showing the last available releases.')).toBeTruthy();
   expect(view.getByText('Title cached')).toBeTruthy();
   expect(fetchAlbums).not.toHaveBeenCalled();
-  expect(view.queryByText('No recently uploaded albums.')).toBeNull();
+  expect(view.queryByText('No recently uploaded releases.')).toBeNull();
   await act(async () => {
     offlineModeStore.setState({ offlineMode: false });
     connectivityStore.setState({ hasConnection: true });
@@ -101,15 +101,15 @@ test('successful empty response clears SQL membership and displays empty state',
   await albumListsStore.getState().refreshRecentlyAdded(20);
   fetchAlbums.mockResolvedValue([]);
   const view = render(<HomeScreen />);
-  await view.findByText('No recently uploaded albums.');
+  await view.findByText('No recently uploaded releases.');
   expect(await listAlbumListRows(getDb()!, 'recentlyAdded')).toEqual([]);
 });
 
 test('failure without cache is an error, not an empty library', async () => {
   fetchAlbums.mockRejectedValue(new Error('unreachable'));
   const view = render(<HomeScreen />);
-  await view.findByText('Unable to refresh albums. Showing the last available list.');
-  expect(view.queryByText('No recently uploaded albums.')).toBeNull();
+  await view.findByText('Unable to refresh releases. Showing the last available list.');
+  expect(view.queryByText('No recently uploaded releases.')).toBeNull();
 });
 
 test('logo preserves the asset aspect ratio without an opaque background and rows are capped at 20', async () => {

@@ -252,7 +252,7 @@ describe('header', () => {
     render(<AddToPlaylistSheet />);
     await elapseRevealDelay();
 
-    expect(screen.getByText('Unknown Album — Unknown Artist')).toBeTruthy();
+    expect(screen.getByText('Unknown Release — Unknown Artist')).toBeTruthy();
     expect(mockCachedImage).not.toHaveBeenCalled();
   });
 

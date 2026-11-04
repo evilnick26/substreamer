@@ -383,7 +383,7 @@ export function SearchResultsOverlay() {
             {slots.albums > 0 && (
               <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: colors.label }]}>
-                  {t('albums')}
+                  {t('releases')}
                 </Text>
                 {results.albums.slice(0, slots.albums).map((album) => (
                   <CompactAlbumRow
