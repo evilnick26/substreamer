@@ -133,6 +133,85 @@ export async function getArtistBase(db: InternalDb, id: string): Promise<ArtistB
   };
 }
 
+export interface ArtistLibraryViews {
+  /** Complete albums credited to this artist as an album artist. */
+  releases: LibraryAlbum[];
+  /** Artist-credited tracks on albums not credited to this artist. */
+  appearances: LibrarySong[];
+  /** All tracks credited to this artist, regardless of album ownership. */
+  all: LibrarySong[];
+}
+
+/**
+ * Local artist-credit relationships. These are cached-library results, not a
+ * guarantee that the server's complete library has finished syncing.
+ *
+ * Structured credits take precedence over scalar artist_id. The scalar value
+ * is used only when the entity has no structured credits at all.
+ */
+export async function getArtistLibraryViews(
+  db: InternalDb,
+  id: string,
+): Promise<ArtistLibraryViews> {
+  const albumCredit = `(
+    EXISTS (
+      SELECT 1 FROM album_artists aa
+      WHERE aa.album_id = a.id AND aa.artist_id = ?
+    )
+    OR (
+      a.artist_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM album_artists aa WHERE aa.album_id = a.id
+      )
+    )
+  )`;
+
+  const songCredit = `(
+    EXISTS (
+      SELECT 1 FROM song_artists sa
+      WHERE sa.song_id = s.id AND sa.artist_id = ?
+    )
+    OR (
+      s.artist_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM song_artists sa WHERE sa.song_id = s.id
+      )
+    )
+  )`;
+
+  const [albumRows, allRows] = await Promise.all([
+    db.getAllAsync<AlbumListRow>(
+      `SELECT ${ALBUM_LIST_COLS} FROM albums a
+       WHERE ${albumCredit}
+       ORDER BY a.year DESC, a.sort_title, a.id`,
+      [id, id],
+    ),
+    db.getAllAsync<SongListRow>(
+      `SELECT ${SONG_LIST_COLS_S} FROM songs s
+       WHERE ${songCredit}
+       ORDER BY s.sort_title, s.id`,
+      [id, id],
+    ),
+  ]);
+
+  await Promise.all([
+    hydrateAlbumRows(db, albumRows),
+    hydrateSongRows(db, allRows),
+  ]);
+
+  const releases = albumRows.map(albumListRowToAlbumID3);
+  const all = allRows.map(songListRowToChild);
+  const releaseIds = new Set(releases.map((album) => album.id));
+
+  return {
+    releases,
+    appearances: all.filter(
+      (song) => !song.albumId || !releaseIds.has(song.albumId),
+    ),
+    all,
+  };
+}
+
 /** getArtistInfo2 envelope + its similar artists. `null` = never fetched. */
 export async function getArtistInfoRow(db: InternalDb, id: string): Promise<ArtistInfoRow | null> {
   const row = await db.getFirstAsync<Row>('SELECT * FROM artist_info WHERE artist_id = ?', [id]);

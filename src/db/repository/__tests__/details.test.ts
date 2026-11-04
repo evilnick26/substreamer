@@ -14,6 +14,7 @@ import { upsertSongs } from '../songs';
 import {
   getAlbumDetail,
   getArtistBase,
+  getArtistLibraryViews,
   getArtistBioRow,
   getArtistInfoRow,
   getArtistTopSongsRow,
@@ -31,6 +32,10 @@ const song = (id: string, title: string, extra: Partial<Child> = {}): Child => (
 const artist = (id: string, name: string, extra: Partial<ArtistID3> = {}): ArtistID3 => ({
   id, name, albumCount: 0, ...extra,
 });
+const credit = (id: string, name: string): ArtistID3 => ({
+  id, name, albumCount: 0,
+});
+
 const playlist = (id: string, name: string, extra: Partial<Playlist> = {}): Playlist => ({
   id, name, created: new Date('2020-01-01'), changed: new Date('2020-01-01'), duration: 0, songCount: 0, ...extra,
 });
@@ -103,7 +108,7 @@ describe('Issue #55 — Arctic Monkeys compilation appearance', () => {
       album('help2', 'HELP(2)', {
         artistId: 'various',
         artist: 'Various Artists',
-        artists: [{ id: 'various', name: 'Various Artists' }],
+        artists: [credit('various', 'Various Artists')],
       }),
     ]);
 
@@ -112,8 +117,8 @@ describe('Issue #55 — Arctic Monkeys compilation appearance', () => {
         albumId: 'help2',
         artistId: 'arctic',
         artist: 'Arctic Monkeys',
-        artists: [{ id: 'arctic', name: 'Arctic Monkeys' }],
-        albumArtists: [{ id: 'various', name: 'Various Artists' }],
+        artists: [credit('arctic', 'Arctic Monkeys')],
+        albumArtists: [credit('various', 'Various Artists')],
       }),
     ]);
 
@@ -132,6 +137,179 @@ describe('Issue #55 — Arctic Monkeys compilation appearance', () => {
     const arctic = await getArtistBase(db(), 'arctic');
     expect(arctic?.albums).toEqual([]);
   });
+});
+
+describe('Issue #55 — artist library views', () => {
+  it('finds a compilation appearance without treating its album as a release', async () => {
+    await upsertArtists(db(), [
+      artist('arctic', 'Arctic Monkeys', { albumCount: 0 }),
+      artist('various', 'Various Artists', { albumCount: 1 }),
+    ]);
+
+    await upsertAlbums(db(), [
+      album('help2', 'HELP(2)', {
+        artistId: 'various',
+        artist: 'Various Artists',
+        artists: [credit('various', 'Various Artists')],
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('opening-night', 'Opening Night', {
+        albumId: 'help2',
+        artistId: 'arctic',
+        artist: 'Arctic Monkeys',
+        artists: [credit('arctic', 'Arctic Monkeys')],
+        albumArtists: [credit('various', 'Various Artists')],
+      }),
+    ]);
+
+    const views = await getArtistLibraryViews(db(), 'arctic');
+
+    expect(views.releases.map((a) => a.id)).toEqual([]);
+    expect(views.appearances.map((s) => s.id)).toEqual(['opening-night']);
+    expect(views.all.map((s) => s.id)).toEqual(['opening-night']);
+  });
+  it('separates complete releases from individually credited tracks', async () => {
+    await upsertArtists(db(), [
+      artist('main', 'Main Artist', { albumCount: 1 }),
+      artist('guest', 'Guest Artist', { albumCount: 0 }),
+      artist('various', 'Various Artists', { albumCount: 1 }),
+    ]);
+
+    await upsertAlbums(db(), [
+      album('own-album', 'Own Album', {
+        artistId: 'main',
+        artist: 'Main Artist',
+        artists: [credit('main', 'Main Artist')],
+      }),
+      album('compilation', 'Compilation', {
+        artistId: 'various',
+        artist: 'Various Artists',
+        artists: [credit('various', 'Various Artists')],
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('own-track', 'Own Track', {
+        albumId: 'own-album',
+        artistId: 'main',
+        artists: [credit('main', 'Main Artist')],
+      }),
+      song('guest-track', 'Guest Track', {
+        albumId: 'own-album',
+        artistId: 'guest',
+        artists: [credit('guest', 'Guest Artist')],
+      }),
+      song('compilation-track', 'Compilation Track', {
+        albumId: 'compilation',
+        artistId: 'main',
+        artists: [credit('main', 'Main Artist')],
+      }),
+    ]);
+
+    const views = await getArtistLibraryViews(db(), 'main');
+
+    expect(views.releases.map((a) => a.id)).toEqual(['own-album']);
+    expect(views.appearances.map((s) => s.id)).toEqual(['compilation-track']);
+    expect(views.all.map((s) => s.id).sort()).toEqual([
+      'compilation-track',
+      'own-track',
+    ]);
+  });
+
+  it('recognises multi-artist credits without duplicate results', async () => {
+    await upsertArtists(db(), [
+      artist('joint-a', 'Joint Artist A', { albumCount: 1 }),
+      artist('joint-b', 'Joint Artist B', { albumCount: 1 }),
+      artist('various', 'Various Artists', { albumCount: 1 }),
+    ]);
+
+    await upsertAlbums(db(), [
+      album('joint-album', 'Joint Album', {
+        artistId: 'joint-a',
+        artists: [
+          credit('joint-a', 'Joint Artist A'),
+          credit('joint-b', 'Joint Artist B'),
+        ],
+      }),
+      album('joint-compilation', 'Joint Compilation', {
+        artistId: 'various',
+        artists: [credit('various', 'Various Artists')],
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('joint-song', 'Joint Song', {
+        albumId: 'joint-album',
+        artistId: 'joint-a',
+        artists: [
+          credit('joint-a', 'Joint Artist A'),
+          credit('joint-b', 'Joint Artist B'),
+        ],
+      }),
+      song('joint-appearance', 'Joint Appearance', {
+        albumId: 'joint-compilation',
+        artistId: 'joint-a',
+        artists: [
+          credit('joint-a', 'Joint Artist A'),
+          credit('joint-b', 'Joint Artist B'),
+        ],
+      }),
+    ]);
+
+    for (const id of ['joint-a', 'joint-b']) {
+      const views = await getArtistLibraryViews(db(), id);
+
+      expect(views.releases.map((a) => a.id)).toEqual(['joint-album']);
+      expect(views.appearances.map((s) => s.id)).toEqual(['joint-appearance']);
+      expect(views.all.map((s) => s.id).sort()).toEqual([
+        'joint-appearance',
+        'joint-song',
+      ]);
+    }
+  });
+
+  it('prefers structured credits and falls back to scalar IDs only when absent', async () => {
+    await upsertArtists(db(), [
+      artist('correct', 'Correct Artist', { albumCount: 1 }),
+      artist('wrong', 'Wrong Scalar Artist', { albumCount: 0 }),
+    ]);
+
+    await upsertAlbums(db(), [
+      album('structured-album', 'Structured Album', {
+        artistId: 'wrong',
+        artists: [credit('correct', 'Correct Artist')],
+      }),
+      album('scalar-album', 'Scalar Album', {
+        artistId: 'wrong',
+      }),
+    ]);
+
+    await upsertSongs(db(), [
+      song('structured-song', 'Structured Song', {
+        albumId: 'structured-album',
+        artistId: 'wrong',
+        artists: [credit('correct', 'Correct Artist')],
+      }),
+      song('scalar-song', 'Scalar Song', {
+        albumId: 'scalar-album',
+        artistId: 'wrong',
+      }),
+    ]);
+
+    const correct = await getArtistLibraryViews(db(), 'correct');
+    const wrong = await getArtistLibraryViews(db(), 'wrong');
+
+    expect(correct.releases.map((a) => a.id)).toEqual(['structured-album']);
+    expect(correct.appearances).toEqual([]);
+    expect(correct.all.map((s) => s.id)).toEqual(['structured-song']);
+
+    expect(wrong.releases.map((a) => a.id)).toEqual(['scalar-album']);
+    expect(wrong.appearances).toEqual([]);
+    expect(wrong.all.map((s) => s.id)).toEqual(['scalar-song']);
+  });
+
 });
 
 describe('artist detail parts', () => {

@@ -20,6 +20,10 @@ const artist = (id: string, extra: Partial<ArtistID3> = {}): ArtistID3 => ({
   ...extra,
 });
 
+const credit = (id: string, name: string): ArtistID3 => ({
+  id, name, albumCount: 0,
+});
+
 beforeAll(() => ensureNormalizedSchema(db()));
 beforeEach(() => {
   for (const t of ['songs', 'albums', 'artists']) db().runSync(`DELETE FROM ${t}`);
@@ -36,10 +40,10 @@ describe('Issue #55 — structured song artist credits', () => {
         artist: 'Arctic Monkeys',
         artistId: '42AeaghSVsS1oWaeLVmBOK',
         artists: [
-          { id: '42AeaghSVsS1oWaeLVmBOK', name: 'Arctic Monkeys' },
+          credit('42AeaghSVsS1oWaeLVmBOK', 'Arctic Monkeys'),
         ],
         albumArtists: [
-          { id: '63sqASlAfjbGMuLP4JhnZU', name: 'Various Artists' },
+          credit('63sqASlAfjbGMuLP4JhnZU', 'Various Artists'),
         ],
       }),
     ]);
@@ -76,8 +80,8 @@ describe('Issue #55 — incomplete metadata updates', () => {
     await upsertSongs(db(), [
       song(songId, {
         artist: 'Arctic Monkeys',
-        artists: [{ id: 'arctic', name: 'Arctic Monkeys' }],
-        albumArtists: [{ id: 'various', name: 'Various Artists' }],
+        artists: [credit('arctic', 'Arctic Monkeys')],
+        albumArtists: [credit('various', 'Various Artists')],
       }),
     ]);
 
