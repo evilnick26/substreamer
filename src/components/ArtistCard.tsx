@@ -2,6 +2,7 @@ import Ionicons from "@react-native-vector-icons/ionicons/static";
 import { useRouter } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
 import { LongPressable } from './LongPressable';
@@ -22,6 +23,7 @@ export const ArtistCard = memo(function ArtistCard({
   width?: number;
 }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const starred = useIsStarred('artist', artist.id);
   const rating = useRating(artist.id, artist.userRating);
@@ -65,9 +67,7 @@ export const ArtistCard = memo(function ArtistCard({
           style={[styles.albumCount, { color: colors.textSecondary }]}
           numberOfLines={1}
         >
-          {artist.albumCount === 1
-            ? '1 album'
-            : `${artist.albumCount} albums`}
+          {t('albumCount', { count: artist.albumCount })}
         </Text>
       </View>
     </LongPressable>

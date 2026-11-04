@@ -15,6 +15,8 @@ it.each(Object.keys(bundles))('%s separates release collections, classifications
   }
   expect(values.releases).not.toBe(values.albums);
   expect(values.unknownRelease).not.toBe(values.unknownAlbum);
+  expect(values.detailAlbum).toBe(values.album);
+  expect(values.detailAlbumArtist).not.toBe(values.detailAlbum);
   expect(placeholders(values.downloadFullLibraryConfirmBody)).toEqual(['{{albums}}', '{{playlists}}']);
   for (const [key, value] of Object.entries(values)) {
     if (/album|release|playlistCount/i.test(key) || key === 'searchForEntity') {
@@ -34,11 +36,11 @@ it.each([0, 1, 2])('renders %i releases and playlists with independent English p
     .toContain(`${releases} and ${playlists}`);
 });
 
-it('keeps conventional English metadata, artwork and ReplayGain names', () => {
+it('keeps Album Artist, classification, artwork and ReplayGain names while labeling track releases universally', () => {
   expect(bundles.en.albums).toBe('Albums');
   expect(bundles.en.eps).toBe('EPs');
   expect(bundles.en.singles).toBe('Singles');
-  expect(bundles.en.detailAlbum).toBe('Album');
+  expect(bundles.en.detailAlbum).toBe('Release');
   expect(bundles.en.detailAlbumArtist).toBe('Album Artist');
   expect(bundles.en.colorAlbumArtwork).toBe('Album Artwork');
   expect(bundles.en.replayGainModeAlbum).toBe('Album');
