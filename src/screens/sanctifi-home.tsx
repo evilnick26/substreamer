@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
@@ -40,6 +40,17 @@ export function HomeScreen() {
     return () => { active = false; };
   }, [focused, offline, retry]);
 
+  const openUpdates = async () => {
+    try {
+      await Linking.openURL('https://updates.sancti.fi');
+    } catch {
+      Alert.alert(
+        'Unable to open Updates',
+        "The Updates website couldn't be opened in your browser."
+      );
+    }
+  };
+
   const groups = new Map<string, AlbumID3[]>();
   for (const album of albums.slice(0, 20)) {
     const date = formatAddedDate(album.created, dateFormat);
@@ -66,6 +77,14 @@ export function HomeScreen() {
           style={{ width: logoWidth, height: logoWidth * 261 / 1263 }}
         />
       </View>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel="sancti.fi Updates"
+        onPress={openUpdates}
+        style={styles.updatesLink}
+      >
+        <Text style={styles.updatesText}>sancti.fi Updates ↗</Text>
+      </Pressable>
       <Text style={[styles.heading, { color: colors.textPrimary }]}>{t('recentlyUploaded')}</Text>
       {offline ? (
         <Text style={[styles.notice, { color: colors.textSecondary }]}>{t('homeAlbumsOffline')}</Text>
@@ -110,6 +129,8 @@ export function HomeScreen() {
 
 const styles = StyleSheet.create({
   logoContainer: { marginHorizontal: 16, marginBottom: 24 },
+  updatesLink: { marginHorizontal: 16, marginBottom: 20, alignSelf: 'center' },
+  updatesText: { fontSize: 22, fontWeight: '600', color: '#909090', textAlign: 'center' },
   dateHeading: { fontSize: 14, fontWeight: '600', marginHorizontal: 16, marginTop: 12, marginBottom: 4 },
   heading: { fontSize: 22, fontWeight: '600', marginHorizontal: 16, marginBottom: 12 },
   notice: { marginHorizontal: 16, marginBottom: 12 },

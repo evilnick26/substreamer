@@ -13,7 +13,7 @@ jest.mock('../../components/CachedImage', () => ({ CachedImage: (props: object) 
 } }));
 
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 
 import { layoutPreferencesStore } from '../../store/layoutPreferencesStore';
@@ -46,6 +46,54 @@ beforeEach(async () => {
   albumListsStore.setState({ recentlyAdded: [] });
   await ensureNormalizedSchema(getDb()!);
   fetchAlbums.mockResolvedValue([album('old')]);
+});
+
+test('Updates link opens the external website', async () => {
+  const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  try {
+    const view = render(<HomeScreen />);
+    const link = view.getByRole('link', { name: 'sancti.fi Updates' });
+    expect(link).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(link);
+    });
+
+    expect(openURL).toHaveBeenCalledWith('https://updates.sancti.fi');
+  } finally {
+    openURL.mockRestore();
+  }
+});
+
+test('Updates link reports browser-opening failures', async () => {
+  const openURL = jest.spyOn(Linking, 'openURL')
+    .mockRejectedValue(new Error('no browser'));
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+  try {
+    const view = render(<HomeScreen />);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole('link', { name: 'sancti.fi Updates' }));
+    });
+
+    expect(alert).toHaveBeenCalledWith(
+      'Unable to open Updates',
+      "The Updates website couldn't be opened in your browser."
+    );
+  } finally {
+    openURL.mockRestore();
+    alert.mockRestore();
+  }
+});
+
+test('Updates link remains available offline without a server request', () => {
+  offlineModeStore.setState({ offlineMode: true });
+
+  const view = render(<HomeScreen />);
+
+  expect(view.getByRole('link', { name: 'sancti.fi Updates' })).toBeTruthy();
+  expect(fetchAlbums).not.toHaveBeenCalled();
 });
 
 test('requests exactly 20 on each opening and displays a newly returned album without library sync', async () => {
