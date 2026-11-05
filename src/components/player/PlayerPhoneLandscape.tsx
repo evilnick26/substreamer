@@ -12,6 +12,8 @@ import { PlayerProgressBar } from '@/components/PlayerProgressBar';
 import { RepeatButton } from '@/components/RepeatButton';
 import { ShuffleButton } from '@/components/ShuffleButton';
 import { getAlbumVersion } from '@/db/repository/albums';
+import { MarqueeText } from '@/components/MarqueeText';
+import { formatPlayerAlbumLabel } from '@/utils/playerAlbumLabel';
 import { getDb } from '@/store/persistence/db';
 import { layoutPreferencesStore } from '@/store/layoutPreferencesStore';
 import { useCanSkip } from '@/hooks/useCanSkip';
@@ -95,10 +97,11 @@ export function PlayerPhoneLandscape({
               <Text style={{ color: colors.textSecondary, fontSize: 14 }} numberOfLines={1}>{currentTrack.artist ?? t('unknownArtist')}</Text>
             </Pressable>
             <Pressable testID="landscape-album-link" accessibilityRole={albumId ? 'button' : undefined} accessibilityLabel={currentTrack.album ?? undefined} disabled={!albumId} onPress={() => { if (albumId) router.push(`/album/${albumId}`); }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                {currentTrack.year != null && currentTrack.year > 0 ? `(${currentTrack.year}) ${currentTrack.album ?? ''}` : currentTrack.album ?? ''}
-              </Text>
-              {showAlbumVersion && !!albumVersion && <Text testID="landscape-album-version" style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{albumVersion}</Text>}
+              <View style={{ width: '100%', minWidth: 0 }}>
+                <MarqueeText style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  {formatPlayerAlbumLabel(currentTrack.year, currentTrack.album, showAlbumVersion ? albumVersion : null)}
+                </MarqueeText>
+              </View>
             </Pressable>
             <PlayerProgressBar
               position={position} duration={duration} bufferedPosition={bufferedPosition}

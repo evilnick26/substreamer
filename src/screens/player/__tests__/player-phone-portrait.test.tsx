@@ -349,29 +349,27 @@ describe('PlayerPhonePortrait', () => {
     playerStore.setState({ currentTrack: { ...MOCK_TRACK, year: 1994, album: 'Troublegum' } });
     const { getByText, queryByTestId } = render(<PlayerPhonePortrait />);
     await act(async () => { await Promise.resolve(); });
-    expect(getByText('(1994) Troublegum')).toBeTruthy();
-    expect(queryByTestId('player-album-version')).toBeNull();
+    expect(getByText('(1994) - Troublegum')).toBeTruthy();
   });
 
   it('shows the album version when the preference is on', async () => {
     getAlbumVersion.mockResolvedValue('Deluxe Edition');
     layoutPreferencesStore.getState().setShowAlbumVersion(true);
     const { findByText } = render(<PlayerPhonePortrait />);
-    expect(await findByText('Deluxe Edition')).toBeTruthy();
+    expect(await findByText('Test Album - Deluxe Edition')).toBeTruthy();
   });
 
   it('shows album title immediately and loads the optional version locally', async () => {
     getAlbumVersion.mockResolvedValue('Deluxe Edition');
     const { getByText, findByText } = render(<PlayerPhonePortrait />);
     expect(getByText('Test Album')).toBeTruthy();
-    expect(await findByText('Deluxe Edition')).toBeTruthy();
+    expect(await findByText('Test Album - Deluxe Edition')).toBeTruthy();
     expect(getAlbumVersion).toHaveBeenCalledWith(expect.anything(), 'album-1');
   });
 
   it('keeps album title when version is unavailable', async () => {
     const { getByText, queryByTestId } = render(<PlayerPhonePortrait />);
     expect(getByText('Test Album')).toBeTruthy();
-    expect(queryByTestId('player-album-version')).toBeNull();
   });
 
   it('shows the album year before the album title', () => {
@@ -379,7 +377,7 @@ describe('PlayerPhonePortrait', () => {
       currentTrack: { ...MOCK_TRACK, year: 1994, album: 'Troublegum' },
     });
     const { getByText } = render(<PlayerPhonePortrait />);
-    expect(getByText('(1994) Troublegum')).toBeTruthy();
+    expect(getByText('(1994) - Troublegum')).toBeTruthy();
   });
 
   it('shows the album title without a year when the year is unavailable', () => {
@@ -440,9 +438,9 @@ describe('PlayerPhonePortrait', () => {
     act(() => {
       playerStore.setState({ currentTrack: { ...MOCK_TRACK, id: 'track-new', albumId: 'album-2', album: 'New Album' } });
     });
-    expect(await findByText('New Edition')).toBeTruthy();
+    expect(await findByText('New Album - New Edition')).toBeTruthy();
     await act(async () => { resolveOld('Old Edition'); });
-    expect(queryByText('Old Edition')).toBeNull();
+    expect(queryByText('New Album - Old Edition')).toBeNull();
   });
 
   it('renders empty state when no current track', () => {
@@ -768,8 +766,7 @@ test('inline lyrics preserves sanctifi phone ordering, local version and album/a
   const push = jest.fn();
   jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
   const view = render(<PlayerPhonePortrait />);
-  expect(await view.findByText('Local Edition')).toBeTruthy();
-  expect(view.getByText('Test Album')).toBeTruthy();
+  expect(await view.findByText('Test Album - Local Edition')).toBeTruthy();
   expect(view.queryByTestId('progress-bar')).toBeNull();
   expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Synced, Original!');
   const ids = ['player-progress-section', 'player-controls', 'player-track-info'];
@@ -839,15 +836,15 @@ describe('refined landscape parity', () => {
     getAlbumVersion.mockResolvedValue('Deluxe Edition');
     playerStore.setState({ currentTrack: { ...MOCK_TRACK, year: 2024 } });
     const screen = render(<PlayerPhonePortrait landscape />);
-    expect(screen.getByText('(2024) Test Album')).toBeTruthy();
-    expect(await screen.findByText('Deluxe Edition')).toBeTruthy();
+    expect(screen.getByText('(2024) - Test Album')).toBeTruthy();
+    expect(await screen.findByText('(2024) - Test Album - Deluxe Edition')).toBeTruthy();
     fireEvent.press(screen.getByTestId('landscape-artist-link'));
     fireEvent.press(screen.getByTestId('landscape-album-link'));
     expect(push).toHaveBeenNthCalledWith(1, '/artist/artist-1');
     expect(push).toHaveBeenNthCalledWith(2, '/album/album-1');
     act(() => layoutPreferencesStore.getState().setShowAlbumVersion(false));
-    expect(screen.queryByTestId('landscape-album-version')).toBeNull();
-    expect(screen.getByText('(2024) Test Album')).toBeTruthy();
+    expect(screen.queryByText('(2024) - Test Album - Deluxe Edition')).toBeNull();
+    expect(screen.getByText('(2024) - Test Album')).toBeTruthy();
     jest.restoreAllMocks();
   });
 

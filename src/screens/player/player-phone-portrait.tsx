@@ -32,6 +32,7 @@ import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
 import { MarqueeText } from '@/components/MarqueeText';
+import { formatPlayerAlbumLabel } from '@/utils/playerAlbumLabel';
 import { MoreOptionsButton } from '@/components/MoreOptionsButton';
 import { PhoneLandscapeHeader, PHONE_LANDSCAPE_HEADER_HEIGHT } from '@/components/player/PhoneLandscapeHeader';
 import { PlayerPhoneLandscape } from '@/components/player/PlayerPhoneLandscape';
@@ -715,23 +716,9 @@ const PlayerContent = memo(function PlayerContent({
               onPress={openAlbum}
               style={styles.albumLine}
             >
-              <View style={styles.albumTitleWrap}>
-                <MarqueeText style={[styles.albumTitle, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}>
-                  {currentTrack.year != null && currentTrack.year > 0
-                    ? `(${currentTrack.year}) ${currentTrack.album ?? ''}`
-                    : currentTrack.album ?? ''}
-                </MarqueeText>
-              </View>
-              {showAlbumVersion && !!albumVersion && (
-                <Text
-                  testID="player-album-version"
-                  style={[styles.albumVersion, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {albumVersion}
-                </Text>
-              )}
+              <MarqueeText style={[styles.albumTitle, { color: colors.textSecondary, fontSize: m.artistFont - 2 }]}>
+                {formatPlayerAlbumLabel(currentTrack.year, currentTrack.album, showAlbumVersion ? albumVersion : null)}
+              </MarqueeText>
             </Pressable>
           </View>
           <View style={styles.trackActionColumn}>
@@ -996,24 +983,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   albumLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
     minWidth: 0,
     minHeight: 21,
   },
-  albumTitleWrap: {
-    flex: 1,
-    minWidth: 0,
-    overflow: 'hidden',
-  },
   albumTitle: {
     fontSize: 14,
-  },
-  albumVersion: {
-    flexShrink: 1,
-    maxWidth: '30%',
-    marginLeft: 8,
-    textAlign: 'right',
   },
   favoriteButton: {
     paddingLeft: 12,
