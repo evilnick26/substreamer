@@ -531,8 +531,8 @@ export function ArtistDetailScreen() {
               </View>
             )}
 
-            {/* ---- Top Songs ---- */}
-            {topSongs.length > 0 && (
+            {/* ---- Top Songs (hidden for sancti.fi; implementation retained) ---- */}
+            {false && topSongs.length > 0 && (
               <View style={styles.section}>
                 <SectionTitle title={t('topSongs')} color={colors.label} />
                 {/* Uncapped: the fetch is already bounded by the list-length setting, so what
@@ -552,8 +552,8 @@ export function ArtistDetailScreen() {
               </View>
             )}
 
-            {/* ---- Similar Artists ---- */}
-            {similarArtists.length > 0 && (
+            {/* ---- Similar Artists (hidden for sancti.fi; implementation retained) ---- */}
+            {false && similarArtists.length > 0 && (
               <View style={styles.section}>
                 <SectionTitle title={t('similarArtists')} color={colors.label} />
                 <FlashList
