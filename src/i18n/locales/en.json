@@ -1206,6 +1206,8 @@
   "homeAlbumsEmpty": "No recently uploaded releases.",
   "homeAddedDateUnavailable": "Added date unavailable",
   "releases": "Releases",
+  "appearances": "Appearances",
+  "allArtistTracks": "All",
   "unknownRelease": "Unknown Release",
   "playlistCount_one": "{{count}} playlist",
   "playlistCount_few": "{{count}} playlists",

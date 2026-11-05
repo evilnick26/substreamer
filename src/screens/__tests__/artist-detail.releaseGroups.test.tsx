@@ -43,11 +43,43 @@ jest.mock('../../hooks/useIsStarred', () => ({ useIsStarred: () => false }));
 jest.mock('../../components/CachedImage', () => ({ CachedImage: () => null }));
 jest.mock('../../components/ArtistCard', () => ({ ArtistCard: () => null }));
 jest.mock('../../components/SongCard', () => ({ SongCard: () => null }));
+jest.mock('../../components/SongRow', () => {
+  const { Text } = require('react-native');
+  return {
+    SongRow: ({ song }: { song: { id: string; title: string } }) => (
+      <Text testID="song-row">{song.title}</Text>
+    ),
+  };
+});
 jest.mock('../../components/BottomChrome', () => ({ BottomChrome: () => null }));
 jest.mock('../../components/MoreOptionsButton', () => ({ MoreOptionsButton: () => null }));
 jest.mock('../../components/DetailScreenBackground', () => ({ DetailScreenBackground: () => null }));
-jest.mock('../../components/DetailHeroButtons', () => ({ PlayAllButton: () => null, ShufflePlayButton: () => null }));
-jest.mock('../../components/PillToggle', () => ({ PillToggle: () => null }));
+jest.mock('../../components/DetailHeroButtons', () => {
+  const { Pressable, Text } = require('react-native');
+  const Button = ({ onPress, disabled, label }: any) => (
+    <Pressable onPress={onPress} disabled={disabled}>
+      <Text>{label}</Text>
+    </Pressable>
+  );
+  return {
+    PlayAllButton: (props: any) => <Button {...props} label="Test Play All" />,
+    ShufflePlayButton: (props: any) => <Button {...props} label="Test Shuffle All" />,
+  };
+});
+jest.mock('../../components/PillToggle', () => {
+  const { Pressable, Text, View } = require('react-native');
+  return {
+    PillToggle: ({ options, onSelect }: any) => (
+      <View>
+        {options.map((option: any) => (
+          <Pressable key={option.key} onPress={() => onSelect(option.key)}>
+            <Text>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ),
+  };
+});
 jest.mock('../../components/SwipeableRow', () => ({ closeOpenRow: jest.fn() }));
 jest.mock('../../services/moreOptionsService', () => ({ playAllByArtist: jest.fn(), playMoreByArtist: jest.fn(), toggleStar: jest.fn() }));
 jest.mock('../../services/playerService', () => ({ playTrack: jest.fn() }));
@@ -61,26 +93,180 @@ jest.mock('../../store/playbackSettingsStore', () => ({ playbackSettingsStore: O
 jest.mock('../../services/detailFetchService', () => ({
   fetchArtistBase: jest.fn(), fetchArtistBio: jest.fn(async () => null),
   fetchArtistInfo: jest.fn(async () => null), fetchArtistTopSongs: jest.fn(async () => null),
+  fetchAlbumDetail: jest.fn(),
 }));
 const makeAlbum = (id: string, year: number, releaseTypes?: string[]): AlbumID3 => ({
   id, name: id, year, releaseTypes, songCount: 1, duration: 20, coverArt: `art-${id}`, version: 'Deluxe',
 });
 let mockAlbums: AlbumID3[];
-jest.mock('../../db/repository/details', () => ({ getArtistBase: jest.fn(async () => ({
-  artist: { id: 'ballboy', name: 'Ballboy', albumCount: mockAlbums.length }, albums: mockAlbums,
-})) }));
+let mockAppearances: Array<{ id: string; title: string; albumId: string; isDir: false }> = [];
+let mockAllSongs: Array<{ id: string; title: string; albumId: string; isDir: false }> = [];
+jest.mock('../../db/repository/details', () => ({
+  getArtistBase: jest.fn(async () => ({
+    artist: { id: 'ballboy', name: 'Ballboy', albumCount: mockAlbums.length },
+    albums: mockAlbums,
+  })),
+  getArtistLibraryViews: jest.fn(async () => ({
+    releases: mockAlbums,
+    appearances: mockAppearances,
+    all: mockAllSongs,
+  })),
+}));
 
 import { ArtistDetailScreen } from '../artist-detail';
 import { ArtistAlbumSortOrderCard } from '../../components/settings/ArtistAlbumSortOrderCard';
 import { layoutPreferencesStore } from '../../store/layoutPreferencesStore';
-import { fetchArtistBase } from '../../services/detailFetchService';
+import { fetchAlbumDetail, fetchArtistBase } from '../../services/detailFetchService';
+import { playTrack } from '../../services/playerService';
 
 beforeEach(() => {
+  jest.mocked(playTrack).mockClear();
+  jest.mocked(fetchAlbumDetail).mockReset();
   mockRowAlbums.length = 0;
+  mockAppearances = [];
+  mockAllSongs = [];
   mockAlbums = [makeAlbum('single', 2024, ['Single']), makeAlbum('album-new', 2023, ['Album']),
     makeAlbum('unknown', 2022), makeAlbum('ep', 2021, ['EP', 'Live']), makeAlbum('album-old', 2020, ['Album'])];
   layoutPreferencesStore.setState({ groupArtistReleasesByType: true, artistAlbumSortOrder: 'newest' });
   jest.mocked(fetchArtistBase).mockClear();
+});
+
+it('plays complete releases in displayed group order, including guest-credited tracks', async () => {
+  mockAlbums = [
+    makeAlbum('single-release', 2025, ['Single']),
+    makeAlbum('album-release', 2020, ['Album']),
+  ];
+
+  const albumTrack = {
+    id: 'album-track', title: 'Ballboy Track',
+    albumId: 'album-release', artist: 'Ballboy', isDir: false,
+  };
+  const guestTrack = {
+    id: 'guest-track', title: 'Guest-Credited Track',
+    albumId: 'album-release', artist: 'Another Artist', isDir: false,
+  };
+  const singleTrack = {
+    id: 'single-track', title: 'Single Track',
+    albumId: 'single-release', artist: 'Ballboy', isDir: false,
+  };
+
+  jest.mocked(fetchAlbumDetail).mockImplementation(async (albumId) => ({
+    id: albumId,
+    song: albumId === 'album-release'
+      ? [albumTrack, guestTrack]
+      : [singleTrack],
+  } as any));
+
+  const ui = render(<ArtistDetailScreen />);
+  await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(2));
+
+  fireEvent.press(ui.getByText('Test Play All'));
+
+  await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(1));
+
+  expect(jest.mocked(fetchAlbumDetail).mock.calls.map(([id]) => id))
+    .toEqual(['album-release', 'single-release']);
+
+  expect(jest.mocked(playTrack).mock.calls[0][1].map((song: any) => song.id))
+    .toEqual(['album-track', 'guest-track', 'single-track']);
+});
+
+it('plays only the selected Appearances or All collection', async () => {
+  mockAppearances = [
+    { id: 'appearance-1', title: 'Guest Appearance', albumId: 'compilation', isDir: false },
+  ];
+  mockAllSongs = [
+    { id: 'own-track', title: 'Own Track', albumId: 'own-release', isDir: false },
+    ...mockAppearances,
+  ];
+
+  const ui = render(<ArtistDetailScreen />);
+  await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
+
+  fireEvent.press(ui.getByText('Appearances'));
+  await waitFor(() => expect(ui.getByText('Guest Appearance')).toBeTruthy());
+
+  fireEvent.press(ui.getByText('Test Play All'));
+  await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(1));
+
+  expect(jest.mocked(playTrack).mock.calls[0][1].map((song: any) => song.id))
+    .toEqual(['appearance-1']);
+
+  fireEvent.press(ui.getByText('All'));
+  await waitFor(() => expect(ui.getByText('Own Track')).toBeTruthy());
+
+  fireEvent.press(ui.getByText('Test Play All'));
+  await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(2));
+
+  expect(jest.mocked(playTrack).mock.calls[1][1].map((song: any) => song.id))
+    .toEqual(['own-track', 'appearance-1']);
+
+  expect(fetchAlbumDetail).not.toHaveBeenCalled();
+});
+
+it('shuffles only tracks from the selected Appearances collection', async () => {
+  mockAppearances = [
+    { id: 'guest-a', title: 'Guest A', albumId: 'compilation', isDir: false },
+    { id: 'guest-b', title: 'Guest B', albumId: 'compilation', isDir: false },
+    { id: 'guest-c', title: 'Guest C', albumId: 'compilation', isDir: false },
+  ];
+  mockAllSongs = [
+    { id: 'own-track', title: 'Own Track', albumId: 'own-release', isDir: false },
+    ...mockAppearances,
+  ];
+
+  const ui = render(<ArtistDetailScreen />);
+  await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
+
+  fireEvent.press(ui.getByText('Appearances'));
+  await waitFor(() => expect(ui.getByText('Guest A')).toBeTruthy());
+
+  fireEvent.press(ui.getByText('Test Shuffle All'));
+  await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(1));
+
+  const queue = jest.mocked(playTrack).mock.calls[0][1];
+  expect(queue).toHaveLength(3);
+  expect(queue.map((song: any) => song.id).sort())
+    .toEqual(['guest-a', 'guest-b', 'guest-c']);
+  expect(jest.mocked(playTrack).mock.calls[0][0].id).toBe(queue[0].id);
+  expect(fetchAlbumDetail).not.toHaveBeenCalled();
+});
+
+it('opens Appearances for an artist with no releases', async () => {
+  mockAlbums = [];
+  mockAppearances = [
+    { id: 'guest-only', title: 'Guest Only Track', albumId: 'compilation', isDir: false },
+  ];
+  mockAllSongs = [...mockAppearances];
+
+  const ui = render(<ArtistDetailScreen />);
+
+  await waitFor(() => {
+    expect(ui.getByText('Guest Only Track')).toBeTruthy();
+  });
+
+  expect(ui.queryAllByTestId('album-row')).toHaveLength(0);
+});
+
+it('defaults to Releases and switches the visible collection to Appearances', async () => {
+  mockAppearances = [
+    { id: 'guest-track', title: 'Guest Appearance', albumId: 'compilation', isDir: false },
+  ];
+
+  const ui = render(<ArtistDetailScreen />);
+
+  await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
+
+  fireEvent.press(ui.getByText('Appearances'));
+
+  await waitFor(() => {
+    expect(ui.queryAllByTestId('album-row')).toHaveLength(0);
+    expect(ui.getByText('Guest Appearance')).toBeTruthy();
+  });
+
+  fireEvent.press(ui.getByText('Releases'));
+
+  await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
 });
 
 it.each([0, 1, 2])('shows the artist count for %i releases without changing its value', async (count) => {
@@ -106,7 +292,7 @@ it('updates immediately from the Appearance switch and restores the original uni
   await waitFor(() => expect(ui.getAllByTestId('album-row')).toHaveLength(5));
   fireEvent(ui.getByLabelText('Group artist releases by type'), 'valueChange', false);
   expect(ui.queryAllByTestId('release-header')).toHaveLength(0);
-  expect(ui.getByText('Releases')).toBeTruthy();
+  expect(ui.getAllByText('Releases').length).toBeGreaterThan(0);
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children))
     .toEqual(['single', 'album-new', 'unknown', 'ep', 'album-old']);
   fireEvent(ui.getByLabelText('Group artist releases by type'), 'valueChange', true);
@@ -132,6 +318,6 @@ it('hides empty sections and keeps sorting available for an Other-only artist', 
   fireEvent.press(ui.getByText('Newest'));
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children)).toEqual(['old', 'new']);
   act(() => layoutPreferencesStore.getState().setGroupArtistReleasesByType(false));
-  expect(ui.getByText('Releases')).toBeTruthy();
+  expect(ui.getAllByText('Releases').length).toBeGreaterThan(0);
   expect(ui.getAllByTestId('album-row').map((r) => r.props.children)).toEqual(['old', 'new']);
 });

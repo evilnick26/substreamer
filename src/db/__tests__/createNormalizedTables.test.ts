@@ -52,6 +52,51 @@ describe('ensureNormalizedSchema', () => {
     }
   });
 
+  it('adds artist-credit indexes to a populated database without losing records', () => {
+    const db = getDb();
+    expect(db).not.toBeNull();
+    ensureNormalizedSchema(db!);
+
+    db!.runSync("INSERT OR REPLACE INTO artists (id, name) VALUES ('upgrade-artist', 'Upgrade Artist')");
+    db!.runSync("INSERT OR REPLACE INTO albums (id, name) VALUES ('upgrade-album', 'Upgrade Album')");
+    db!.runSync(
+      "INSERT OR REPLACE INTO songs (id, title, sort_title, is_video) VALUES ('upgrade-song', 'Upgrade Song', 'upgrade song', 0)",
+    );
+    db!.runSync(
+      "INSERT OR REPLACE INTO album_artists (album_id, pos, artist_id, artist_name) VALUES ('upgrade-album', 0, 'upgrade-artist', 'Upgrade Artist')",
+    );
+    db!.runSync(
+      "INSERT OR REPLACE INTO song_artists (song_id, pos, artist_id, artist_name) VALUES ('upgrade-song', 0, 'upgrade-artist', 'Upgrade Artist')",
+    );
+
+    db!.execSync('DROP INDEX IF EXISTS idx_album_artists_artist_id');
+    db!.execSync('DROP INDEX IF EXISTS idx_song_artists_artist_id');
+
+    ensureNormalizedSchema(db!);
+    ensureNormalizedSchema(db!);
+
+    for (const [table, index] of [
+      ['album_artists', 'idx_album_artists_artist_id'],
+      ['song_artists', 'idx_song_artists_artist_id'],
+    ]) {
+      const found = db!.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND name = ?",
+        [table, index],
+      );
+      expect(found?.name).toBe(index);
+    }
+
+    const albumCredit = db!.getFirstSync<{ artist_id: string }>(
+      "SELECT artist_id FROM album_artists WHERE album_id = 'upgrade-album'",
+    );
+    const songCredit = db!.getFirstSync<{ artist_id: string }>(
+      "SELECT artist_id FROM song_artists WHERE song_id = 'upgrade-song'",
+    );
+
+    expect(albumCredit?.artist_id).toBe('upgrade-artist');
+    expect(songCredit?.artist_id).toBe('upgrade-artist');
+  });
+
   it('creates the keyset + favorites indexes on songs', () => {
     const db = getDb();
     ensureNormalizedSchema(db!);
