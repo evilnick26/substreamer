@@ -1,9 +1,9 @@
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
@@ -29,6 +29,22 @@ export function HomeScreen() {
   const [logoWidth, setLogoWidth] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retry, setRetry] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshInProgress = useRef(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (offline || refreshInProgress.current) return;
+    refreshInProgress.current = true;
+    setRefreshing(true);
+    try {
+      const success = await albumListsStore.getState().refreshRecentlyAdded(20);
+      if (success) setStatus('ready');
+      else if (albumListsStore.getState().recentlyAdded.length === 0) setStatus('error');
+    } finally {
+      refreshInProgress.current = false;
+      setRefreshing(false);
+    }
+  }, [offline]);
 
   useEffect(() => {
     if (!focused || offline) return;
@@ -60,12 +76,22 @@ export function HomeScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{
+    <ScrollView
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          enabled={!offline}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
+      contentContainerStyle={{
       paddingTop: insets.top + 12,
       paddingLeft: insets.left,
       paddingRight: insets.right,
       paddingBottom: 24,
-    }}>
+      }}>
       <View
         style={styles.logoContainer}
         onLayout={(event) => setLogoWidth(event.nativeEvent.layout.width)}
