@@ -669,9 +669,16 @@ describe('cycleRepeatMode', () => {
     await cycleRepeatMode();
     expect(mockTP.setRepeatMode).toHaveBeenCalledWith('track');
   });
-  it('one -> off', async () => {
+  it('one -> radio (native off)', async () => {
     playbackSettingsStore.setState({ repeatMode: 'one' } as any);
     await cycleRepeatMode();
+    expect(playbackSettingsStore.getState().repeatMode).toBe('radio');
+    expect(mockTP.setRepeatMode).toHaveBeenCalledWith('off');
+  });
+  it('radio -> off', async () => {
+    playbackSettingsStore.setState({ repeatMode: 'radio' } as any);
+    await cycleRepeatMode();
+    expect(playbackSettingsStore.getState().repeatMode).toBe('off');
     expect(mockTP.setRepeatMode).toHaveBeenCalledWith('off');
   });
 });

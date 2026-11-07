@@ -947,11 +947,11 @@ export async function removeNonDownloadedTracks(): Promise<void> {
   }
 }
 
-/** Cycle the repeat mode: off → all → one → off (persisted + native). */
+/** Cycle the repeat mode: off → all → one → radio → off (persisted + native). */
 export async function cycleRepeatMode(): Promise<void> {
   const current = playbackSettingsStore.getState().repeatMode;
   const next: RepeatModeSetting =
-    current === 'off' ? 'all' : current === 'all' ? 'one' : 'off';
+    current === 'off' ? 'all' : current === 'all' ? 'one' : current === 'one' ? 'radio' : 'off';
   playbackSettingsStore.getState().setRepeatMode(next);
   await tp.setRepeatMode(mapRepeatMode(next));
 }

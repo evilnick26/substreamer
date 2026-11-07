@@ -26,6 +26,9 @@ export function mapRepeatMode(mode: RepeatModeSetting): RepeatMode {
       return 'queue';
     case 'one':
       return 'track';
+    case 'radio':
+      // Radio Infinite extends the queue; RNQP must not loop it.
+      return 'off';
     default:
       return 'off';
   }

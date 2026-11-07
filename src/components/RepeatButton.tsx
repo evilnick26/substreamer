@@ -40,7 +40,7 @@ export const RepeatButton = memo(function RepeatButton({ size = ICON_SIZE }: Rep
       ]}
     >
       <View style={styles.iconWrap}>
-        <Ionicons name="repeat" size={size} color={iconColor} />
+        <Ionicons name={repeatMode === 'radio' ? 'infinite' : 'repeat'} size={size} color={iconColor} />
         {repeatMode === 'one' && (
           <View style={[styles.badge, { backgroundColor: colors.primary }]}>
             <Text
@@ -64,6 +64,8 @@ function getAccessibilityLabel(mode: RepeatModeSetting, t: (key: string) => stri
       return t('repeatAllLabel');
     case 'one':
       return t('repeatOneLabel');
+    case 'radio':
+      return t('repeatRadioLabel');
   }
 }
 

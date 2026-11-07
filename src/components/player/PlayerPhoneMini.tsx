@@ -43,7 +43,7 @@ export function PlayerPhoneMini() {
   const isBuffering = playbackState === 'buffering' || playbackState === 'loading';
   const canSkipNext =
     currentTrackIndex != null &&
-    (currentTrackIndex < queue.length - 1 || repeatMode !== 'off');
+    (currentTrackIndex < queue.length - 1 || repeatMode === 'all' || repeatMode === 'one');
 
   const handleSkipNext = useCallback(() => {
     if (canSkipNext) skipToNext();

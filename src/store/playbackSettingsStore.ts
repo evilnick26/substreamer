@@ -59,8 +59,8 @@ function normalizeFormat(value: StreamFormat): StreamFormat {
   return value === 'raw' ? 'raw' : value.trim().toLowerCase();
 }
 
-/** Repeat mode: off → repeat queue → repeat single track. */
-export type RepeatModeSetting = 'off' | 'all' | 'one';
+/** Repeat mode: off → repeat queue → repeat single track → Radio Infinite. */
+export type RepeatModeSetting = 'off' | 'all' | 'one' | 'radio';
 
 /** Supported playback speed multipliers. */
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;

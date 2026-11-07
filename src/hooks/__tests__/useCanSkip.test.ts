@@ -55,6 +55,21 @@ describe('useCanSkip', () => {
     expect(result.current.canSkipPrevious).toBe(true);
   });
 
+  it('does not wrap at queue end in radio mode', () => {
+    playerStore.setState({
+      currentTrackIndex: 1,
+      queue: [{ id: '1' }, { id: '2' }] as any[],
+    });
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+
+    const { result } = renderHook(() => useCanSkip());
+
+    expect(result.current).toEqual({
+      canSkipNext: false,
+      canSkipPrevious: true,
+    });
+  });
+
   it('returns both true in middle of queue with repeat off', () => {
     playerStore.setState({
       currentTrackIndex: 1,

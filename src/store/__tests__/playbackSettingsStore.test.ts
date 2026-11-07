@@ -132,6 +132,12 @@ describe('playbackSettingsStore', () => {
       expect(migratePlaybackSettings(blob, 1)).toBe(blob);
     });
 
+    it('preserves radio mode in a persisted v1 state', () => {
+      const blob = { repeatMode: 'radio' };
+      expect(migratePlaybackSettings(blob, 1)).toBe(blob);
+      expect(migratePlaybackSettings(blob, 1).repeatMode).toBe('radio');
+    });
+
     it('passes through a null/invalid blob unchanged', () => {
       expect(migratePlaybackSettings(null, 0)).toBeNull();
     });
