@@ -28,6 +28,7 @@ import { AlbumInfoContent } from '@/components/AlbumInfoContent';
 import { PlayerLyricsOrProgress } from '@/components/PlayerLyricsOrProgress';
 import { LyricsContent } from '@/components/LyricsContent';
 import { PlayMoreLikeThisButton } from '@/components/PlayMoreLikeThisButton';
+import { RadioInfiniteTestButton } from '@/components/RadioInfiniteTestButton';
 import { CachedImage } from '@/components/CachedImage';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { EmptyState } from '@/components/EmptyState';
@@ -724,6 +725,7 @@ const PlayerContent = memo(function PlayerContent({
           <View style={styles.trackActionColumn}>
             <FavoriteButton trackId={currentTrack.id} style={styles.favoriteButton} />
             <PlayMoreLikeThisButton style={styles.favoriteButton} />
+            <RadioInfiniteTestButton />
           </View>
         </View>
       </View>
