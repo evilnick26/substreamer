@@ -87,6 +87,10 @@ jest.mock('../../store/offlineModeStore', () => ({
   offlineModeStore: { getState: jest.fn(() => mockOfflineMode) },
 }));
 
+jest.mock('../radioInfiniteService', () => ({
+  requestRadioInfiniteRefill: jest.fn(),
+}));
+
 jest.mock('../subsonicService');
 
 const mockPersistQueue = jest.fn();

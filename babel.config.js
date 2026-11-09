@@ -10,7 +10,7 @@ module.exports = function (api) {
       // dev-only noise that isn't visible to users — no point shipping it or
       // spending cycles on it. Dev builds keep console intact.
       production: {
-        plugins: ['transform-remove-console'],
+        plugins: [['transform-remove-console', { exclude: ['info'] }]],
       },
     },
   };
