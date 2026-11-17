@@ -2,6 +2,7 @@
 import * as ExpoCrypto from 'expo-crypto';
 
 import { addToQueue } from './playerService';
+import { filterRadioInfiniteRecommendations } from './radioInfiniteFilter';
 import { getApi } from './subsonicService';
 import { authStore } from '../store/authStore';
 import { offlineModeStore } from '../store/offlineModeStore';
@@ -32,6 +33,7 @@ export async function refillRadioInfinite(): Promise<number> {
   const api = getApi();
   if (!api) throw new Error('Navidrome is unavailable.');
 
+  const repeatGeneration = playbackSettingsStore.getState().repeatGeneration;
   inFlight = true;
   try {
     const salt = Array.from(await ExpoCrypto.getRandomBytesAsync(16))
@@ -61,12 +63,6 @@ export async function refillRadioInfinite(): Promise<number> {
     const existingIds = new Set(originalQueue.map((song) => song.id));
     const distinctIds = [...new Set(ids)];
     const uniqueIds = distinctIds.filter((id) => !existingIds.has(id));
-    console.info('[RadioInfinite] Recommendation counts', {
-      received: ids.length,
-      repeatedWithinBatch: ids.length - distinctIds.length,
-      alreadyInQueue: distinctIds.length - uniqueIds.length,
-      eligible: uniqueIds.length,
-    });
     if (!uniqueIds.length) return 0;
     const resolved = await Promise.all(uniqueIds.map(async (id) => {
       const result = await api.getSong({ id });
@@ -79,6 +75,7 @@ export async function refillRadioInfinite(): Promise<number> {
     // Reject results if the mode, queue, login or network state changed during the request.
     const now = authStore.getState();
     if (playbackSettingsStore.getState().repeatMode !== 'radio' ||
+        playbackSettingsStore.getState().repeatGeneration !== repeatGeneration ||
         offlineModeStore.getState().offlineMode ||
         playerStore.getState().queue !== originalQueue ||
         now.username !== auth.username || now.password !== auth.password ||
@@ -88,14 +85,26 @@ export async function refillRadioInfinite(): Promise<number> {
     }
     // A cleared queue must never fall through addToQueue's start-playback branch.
     if (!playerStore.getState().queue.length) return 0;
-    await addToQueue(resolved);
-    console.info('[RadioInfinite] Append completed', {
-      requestedAppend: resolved.length,
-      queueLength: playerStore.getState().queue.length,
-    });
-    return resolved.length;
+
+    // IDs were cheaply deduplicated before getSong(); now apply the metadata
+    // rules against the queue and within this batch, preserving bridge order.
+    const eligible = filterRadioInfiniteRecommendations(originalQueue, resolved);
+    if (!eligible.length) return 0;
+
+    const beforeAppend = playerStore.getState().queue.length;
+    await addToQueue(eligible);
+    // addToQueue may omit unplayable tracks; report observed queue growth.
+    const queueLength = playerStore.getState().queue.length;
+    const appended = Math.max(0, queueLength - beforeAppend);
+    return appended;
   } finally {
     inFlight = false;
+    // If Radio was disabled and re-enabled while this request was in flight,
+    // the discarded old request must not suppress a refill for the new session.
+    if (playbackSettingsStore.getState().repeatGeneration !== repeatGeneration &&
+        playbackSettingsStore.getState().repeatMode === 'radio') {
+      requestRadioInfiniteRefill();
+    }
   }
 }
 

@@ -7,6 +7,15 @@
  * bailing when nothing is playable, and the public-API hydration guard.
  */
 
+// Issue #077: playerService imports Radio Infinite, which uses expo-crypto.
+// These tests do not exercise Radio Infinite authentication.
+jest.mock('expo-crypto', () => ({
+  getRandomBytesAsync: jest.fn(async () => new Uint8Array(16)),
+  digestStringAsync: jest.fn(async () => 'test-token'),
+  CryptoDigestAlgorithm: { MD5: 'MD5' },
+  CryptoEncoding: { HEX: 'hex' },
+}));
+
 jest.mock('react-native', () => ({
   // expo-modules-core looks optional native modules up here when expo-file-system loads.
   TurboModuleRegistry: { get: () => null },
@@ -106,7 +115,10 @@ jest.mock('../../store/musicCacheStore', () => ({
 
 const mockOfflineMode = { offlineMode: false };
 jest.mock('../../store/offlineModeStore', () => ({
-  offlineModeStore: { getState: jest.fn(() => mockOfflineMode) },
+  offlineModeStore: {
+    getState: jest.fn(() => mockOfflineMode),
+    subscribe: jest.fn(() => jest.fn()),
+  },
 }));
 
 const subsonicMocks = {

@@ -142,6 +142,10 @@ export interface PlaybackSettingsState {
   estimateContentLength: boolean;
   /** Repeat mode for queue playback. */
   repeatMode: RepeatModeSetting;
+  /** Repeat mode used when Radio Infinite is interrupted by Offline Mode. */
+  radioOfflineFallback: 'all' | 'off';
+  /** Transient epoch: invalidates asynchronous work across repeat-mode transitions. */
+  repeatGeneration: number;
   /** Playback speed multiplier (1 = normal). */
   playbackRate: PlaybackRate;
   /** Pitch-correction mode applied at non-1x speed (default 'none'). */
@@ -186,6 +190,7 @@ export interface PlaybackSettingsState {
   setStreamFormat: (format: StreamFormat) => void;
   setEstimateContentLength: (enabled: boolean) => void;
   setRepeatMode: (mode: RepeatModeSetting) => void;
+  setRadioOfflineFallback: (mode: 'all' | 'off') => void;
   setPlaybackRate: (rate: PlaybackRate) => void;
   setPitchCorrection: (mode: PitchCorrection) => void;
   setDownloadMaxBitRate: (bitRate: MaxBitRate) => void;
@@ -231,6 +236,8 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
       streamFormat: 'raw',
       estimateContentLength: Platform.OS === 'android',
       repeatMode: 'off',
+      radioOfflineFallback: 'all',
+      repeatGeneration: 0,
       playbackRate: 1,
       pitchCorrection: 'none',
       downloadMaxBitRate: 320,
@@ -251,7 +258,13 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
       setMaxBitRate: (maxBitRate) => set({ maxBitRate }),
       setStreamFormat: (streamFormat) => set({ streamFormat: normalizeFormat(streamFormat) }),
       setEstimateContentLength: (estimateContentLength) => set({ estimateContentLength }),
-      setRepeatMode: (repeatMode) => set({ repeatMode }),
+      setRepeatMode: (repeatMode) => set((state) => ({
+        repeatMode,
+        repeatGeneration: state.repeatMode === repeatMode
+          ? state.repeatGeneration
+          : state.repeatGeneration + 1,
+      })),
+      setRadioOfflineFallback: (radioOfflineFallback) => set({ radioOfflineFallback }),
       setPlaybackRate: (playbackRate) => set({ playbackRate }),
       setPitchCorrection: (pitchCorrection) => set({ pitchCorrection }),
       setDownloadMaxBitRate: (downloadMaxBitRate) => set({ downloadMaxBitRate }),
@@ -279,6 +292,7 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
         streamFormat: state.streamFormat,
         estimateContentLength: state.estimateContentLength,
         repeatMode: state.repeatMode,
+        radioOfflineFallback: state.radioOfflineFallback,
         playbackRate: state.playbackRate,
         pitchCorrection: state.pitchCorrection,
         downloadMaxBitRate: state.downloadMaxBitRate,

@@ -14,6 +14,7 @@ import { PlaybackModeCard } from '../components/settings/PlaybackModeCard';
 import { PlayerControlsCard } from '../components/settings/PlayerControlsCard';
 import { RemoteControlsCard } from '../components/settings/RemoteControlsCard';
 import { ReplayGainCard } from '../components/settings/ReplayGainCard';
+import { RadioInfiniteCard } from '../components/settings/RadioInfiniteCard';
 import { SkipIntervalsCard } from '../components/settings/SkipIntervalsCard';
 import { StreamingCard } from '../components/settings/StreamingCard';
 import { StreamFormatSheet } from '../components/StreamFormatSheet';
@@ -47,6 +48,7 @@ export function SettingsPlaybackScreen() {
   const playbackMode = playbackSettingsStore((s) => s.playbackMode);
   const crossfadeDurationMs = playbackSettingsStore((s) => s.crossfadeDurationMs);
   const replayGainMode = playbackSettingsStore((s) => s.replayGainMode);
+  const radioOfflineFallback = playbackSettingsStore((s) => s.radioOfflineFallback);
 
   const isDefault =
     maxBitRate === null &&
@@ -63,7 +65,8 @@ export function SettingsPlaybackScreen() {
     lookaheadCount === 3 &&
     playbackMode === 'gapless' &&
     crossfadeDurationMs === 5000 &&
-    replayGainMode === 'off';
+    replayGainMode === 'off' &&
+    radioOfflineFallback === 'all';
 
   const handleResetDefaults = useCallback(() => {
     confirm({
@@ -88,6 +91,7 @@ export function SettingsPlaybackScreen() {
         s.setPlaybackMode('gapless');
         s.setCrossfadeDurationMs(5000);
         s.setReplayGainMode('off');
+        s.setRadioOfflineFallback('all');
         updateRemoteCapabilities();
         void applyLookaheadCacheConfig();
         void applyPlaybackMode();
@@ -108,6 +112,7 @@ export function SettingsPlaybackScreen() {
           <DownloadingCard />
           <EqualizerCard />
           <ReplayGainCard />
+          <RadioInfiniteCard />
           <PlaybackModeCard />
           <LookaheadCacheCard />
           <PlayerControlsCard />

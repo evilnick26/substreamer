@@ -8,6 +8,7 @@ beforeEach(() => {
     streamFormat: 'raw',
     estimateContentLength: false,
     repeatMode: 'off',
+    radioOfflineFallback: 'all',
     playbackRate: 1,
     downloadMaxBitRate: 320,
     downloadFormat: 'mp3',
@@ -45,6 +46,17 @@ describe('playbackSettingsStore', () => {
   it('setRepeatMode updates repeat mode', () => {
     playbackSettingsStore.getState().setRepeatMode('all');
     expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+  });
+
+  it('defaults Radio Infinite offline fallback to Repeat All', () => {
+    expect(playbackSettingsStore.getState().radioOfflineFallback).toBe('all');
+  });
+
+  it('supports Repeat Off as the Radio Infinite offline fallback', () => {
+    playbackSettingsStore.getState().setRadioOfflineFallback('off');
+    expect(playbackSettingsStore.getState().radioOfflineFallback).toBe('off');
+    playbackSettingsStore.getState().setRadioOfflineFallback('all');
+    expect(playbackSettingsStore.getState().radioOfflineFallback).toBe('all');
   });
 
   it('setPlaybackRate updates rate', () => {

@@ -21,6 +21,7 @@ import {
   type RepeatModeSetting,
 } from '../store/playbackSettingsStore';
 import { backgroundPlaybackPromptStore } from '../store/backgroundPlaybackPromptStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { playbackToastStore } from '../store/playbackToastStore';
 import { playerStore } from '../store/playerStore';
 import { appStateStore } from '../store/appStateStore';
@@ -76,6 +77,51 @@ function maybePromptFireBackgroundPlayback(): void {
 /* ------------------------------------------------------------------ */
 
 let isPlayerReady = false;
+let repeatNativeUpdate: Promise<void> = Promise.resolve();
+
+/** Serialize RNQP repeat updates: older async calls must not win a later transition. */
+function applyNativeRepeatMode(mode: RepeatModeSetting): Promise<void> {
+  const update = repeatNativeUpdate.catch(() => {}).then(() => tp.setRepeatMode(mapRepeatMode(mode)));
+  repeatNativeUpdate = update;
+  return update;
+}
+
+let radioOfflineFallbackInitialized = false;
+
+/**
+ * Radio Infinite requires a network connection. Keep the semantic mode and
+ * native repeat mode in sync across manual/automatic Offline Mode changes,
+ * and also across asynchronous store hydration and future repeat-mode UIs.
+ * No automatic restoration of Radio Infinite when returning online.
+ */
+function initializeRadioOfflineFallback(): void {
+  if (radioOfflineFallbackInitialized) return;
+  radioOfflineFallbackInitialized = true;
+
+  const reconcile = (): void => {
+    if (!offlineModeStore.getState().offlineMode) return;
+    const settings = playbackSettingsStore.getState();
+    if (settings.repeatMode !== 'radio') return;
+    const fallback = settings.radioOfflineFallback === 'off' ? 'off' : 'all';
+    settings.setRepeatMode(fallback);
+    // Once initPlayer has started, synchronize native repeat as well. Calls
+    // are serialized with the startup and button-driven repeat updates.
+    if (isPlayerReady) {
+      void applyNativeRepeatMode(fallback).catch((error: unknown) => {
+        console.warn('[RadioInfinite] Offline repeat fallback failed:', error);
+      });
+    }
+  };
+  offlineModeStore.subscribe((state, prev) => {
+    if (state.offlineMode && !prev.offlineMode) reconcile();
+  });
+  playbackSettingsStore.subscribe((state, prev) => {
+    if (state.repeatMode !== prev.repeatMode && state.repeatMode === 'radio') reconcile();
+  });
+  reconcile();
+}
+
+
 /** The Child[] backing the current native queue, indexed by position. */
 let currentChildQueue: Child[] = [];
 /** Maps trackId → playlistId for tracks that originated from a playlist. */
@@ -119,6 +165,9 @@ function reportPlay(trackIndex: number): void {
  */
 export async function initPlayer(): Promise<void> {
   if (isPlayerReady) return;
+  // Reconcile persisted Offline Mode and Radio Infinite before applying
+  // native repeat, including headless startup without the root layout.
+  initializeRadioOfflineFallback();
   isPlayerReady = true;
 
   // Lock-screen / notification skip buttons (track vs interval) from settings.
@@ -126,7 +175,7 @@ export async function initPlayer(): Promise<void> {
 
   // Apply persisted playback settings.
   const settings = playbackSettingsStore.getState();
-  await tp.setRepeatMode(mapRepeatMode(settings.repeatMode));
+  await applyNativeRepeatMode(playbackSettingsStore.getState().repeatMode);
   await tp.setPlaybackSpeed(settings.playbackRate);
   // Pitch correction (only effective at rate != 1x). RNQP defaults to 'voice',
   // so the persisted mode must be pushed explicitly (our default is 'none').
@@ -194,11 +243,17 @@ export async function initPlayer(): Promise<void> {
     lastMilestoneValue = 0;
     refreshTrackSource();
     // Dynamic import avoids a static cycle: radioInfiniteService uses addToQueue.
-    void import('./radioInfiniteService').then(({ requestRadioInfiniteRefill }) => {
-      requestRadioInfiniteRefill();
-    }).catch((error: unknown) => {
-      console.warn('[RadioInfinite] Controller unavailable:', error);
-    });
+    // Do not load the controller for ordinary or offline playback.
+    if (
+      playbackSettingsStore.getState().repeatMode === 'radio' &&
+      !offlineModeStore.getState().offlineMode
+    ) {
+      void import('./radioInfiniteService').then(({ requestRadioInfiniteRefill }) => {
+        requestRadioInfiniteRefill();
+      }).catch((error: unknown) => {
+        console.warn('[RadioInfinite] Controller unavailable:', error);
+      });
+    }
   });
 
   // --- Playback source (local / cached / streaming) → store. No dedicated
@@ -962,9 +1017,12 @@ export async function cycleRepeatMode(): Promise<void> {
   const current = playbackSettingsStore.getState().repeatMode;
   const next: RepeatModeSetting =
     current === 'off' ? 'all' : current === 'all' ? 'one' : current === 'one' ? 'radio' : 'off';
+  // The store subscription immediately falls back if Radio is selected offline.
+  // Read the effective value rather than applying a stale requested mode.
   playbackSettingsStore.getState().setRepeatMode(next);
-  await tp.setRepeatMode(mapRepeatMode(next));
-  if (next === 'radio') {
+  const effective = playbackSettingsStore.getState().repeatMode;
+  await applyNativeRepeatMode(effective);
+  if (effective === 'radio') {
     requestRadioInfiniteRefill();
   }
 }

@@ -83,8 +83,26 @@ jest.mock('../../store/musicCacheStore', () => ({
 }));
 
 const mockOfflineMode = { offlineMode: false };
+const mockOfflineListeners: Array<(next: { offlineMode: boolean }, prev: { offlineMode: boolean }) => void> = [];
+function mockSetOfflineMode(offlineMode: boolean): void {
+  const prev = { ...mockOfflineMode };
+  mockOfflineMode.offlineMode = offlineMode;
+  if (prev.offlineMode !== offlineMode) {
+    for (const listener of mockOfflineListeners) listener({ ...mockOfflineMode }, prev);
+  }
+}
 jest.mock('../../store/offlineModeStore', () => ({
-  offlineModeStore: { getState: jest.fn(() => mockOfflineMode) },
+  offlineModeStore: {
+    getState: jest.fn(() => mockOfflineMode),
+    // Model Zustand's synchronous transition notifications for fallback tests.
+    subscribe: jest.fn((listener) => {
+      mockOfflineListeners.push(listener);
+      return () => {
+        const index = mockOfflineListeners.indexOf(listener);
+        if (index >= 0) mockOfflineListeners.splice(index, 1);
+      };
+    }),
+  },
 }));
 
 jest.mock('../radioInfiniteService', () => ({
@@ -210,8 +228,12 @@ beforeEach(async () => {
   mockTP.getState.mockReturnValue('none');
   mockTP.getCurrentTrackIndex.mockReturnValue(-1);
 
+  // Restore online state BEFORE changing repeat mode, avoiding test-to-test
+  // fallback notifications while resetting a previous offline scenario.
+  mockSetOfflineMode(false);
   playbackSettingsStore.setState({
     repeatMode: 'off',
+    radioOfflineFallback: 'all',
     playbackRate: 1,
     maxBitRate: null,
     streamFormat: 'raw',
@@ -225,7 +247,6 @@ beforeEach(async () => {
   (getStreamUrl as jest.Mock).mockReturnValue('https://example.com/stream.mp3');
   mockGetPersistedQueue.mockReturnValue(null);
   mockGetPersistedPosition.mockReturnValue(null);
-  mockOfflineMode.offlineMode = false;
 });
 
 describe('initPlayer', () => {
@@ -684,6 +705,91 @@ describe('cycleRepeatMode', () => {
     await cycleRepeatMode();
     expect(playbackSettingsStore.getState().repeatMode).toBe('off');
     expect(mockTP.setRepeatMode).toHaveBeenCalledWith('off');
+  });
+});
+
+describe('Radio Infinite offline fallback — regression', () => {
+  // Native repeat updates are serialized through a promise chain; drain it
+  // before inspecting the mock, rather than relying on arbitrary timeouts.
+  const drain = async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  };
+
+  it('switches Radio to Repeat All when Offline Mode activates (default)', async () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    const generation = playbackSettingsStore.getState().repeatGeneration;
+    mockSetOfflineMode(true);
+    expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+    expect(playbackSettingsStore.getState().repeatGeneration).toBe(generation + 1);
+    await drain();
+    expect(mockTP.setRepeatMode).toHaveBeenLastCalledWith('queue');
+  });
+
+  it('honours configured Repeat Off instead of Repeat All', async () => {
+    playbackSettingsStore.getState().setRadioOfflineFallback('off');
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    mockSetOfflineMode(true);
+    expect(playbackSettingsStore.getState().repeatMode).toBe('off');
+    await drain();
+    expect(mockTP.setRepeatMode).toHaveBeenLastCalledWith('off');
+  });
+
+  it('does not restore Radio or request recommendations when returning online', async () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    mockSetOfflineMode(true);
+    await drain();
+    mockTP.setRepeatMode.mockClear();
+    const { requestRadioInfiniteRefill } = require('../radioInfiniteService');
+    (requestRadioInfiniteRefill as jest.Mock).mockClear();
+    mockSetOfflineMode(false);
+    await drain();
+    expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+    expect(mockTP.setRepeatMode).not.toHaveBeenCalled();
+    expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+  });
+
+  it('immediately rejects selecting Radio while already offline', async () => {
+    mockSetOfflineMode(true);
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+    await drain();
+    expect(mockTP.setRepeatMode).toHaveBeenLastCalledWith('queue');
+  });
+
+  it('does not alter an existing non-Radio repeat mode when going offline', async () => {
+    playbackSettingsStore.getState().setRepeatMode('one');
+    mockSetOfflineMode(true);
+    await drain();
+    expect(playbackSettingsStore.getState().repeatMode).toBe('one');
+    expect(mockTP.setRepeatMode).not.toHaveBeenCalled();
+  });
+
+  it('serializes a pending native repeat update before the offline fallback', async () => {
+    let releaseFirst!: () => void;
+    const pending = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    mockTP.setRepeatMode.mockImplementationOnce(() => pending);
+    playbackSettingsStore.setState({ repeatMode: 'one' } as any);
+    const cycling = cycleRepeatMode(); // one -> radio; native 'off' pending
+    await drain();
+    expect(mockTP.setRepeatMode).toHaveBeenCalledWith('off');
+    mockSetOfflineMode(true); // fallback -> all; native 'queue' queued
+    expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+    expect(mockTP.setRepeatMode).toHaveBeenCalledTimes(1);
+    releaseFirst();
+    await cycling;
+    await drain();
+    expect(mockTP.setRepeatMode.mock.calls.map((call: unknown[]) => call[0])).toEqual(['off', 'queue']);
+  });
+
+  it('keeps the offline fallback after rapid offline-online-offline transitions', async () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    mockSetOfflineMode(true);
+    mockSetOfflineMode(false);
+    mockSetOfflineMode(true);
+    await drain();
+    expect(playbackSettingsStore.getState().repeatMode).toBe('all');
+    expect(mockTP.setRepeatMode).toHaveBeenLastCalledWith('queue');
   });
 });
 
