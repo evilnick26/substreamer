@@ -1,5 +1,8 @@
 import type { Child } from 'subsonic-api';
 
+const MIN_RADIO_DURATION_SECONDS = 90;
+const MAX_RADIO_DURATION_SECONDS = 480;
+
 /** Normalise only case and whitespace; keep complete titles and qualifiers. */
 function normalise(value?: string): string {
   return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -39,6 +42,17 @@ export function filterRadioInfiniteRecommendations(
   let previous = queue[queue.length - 1];
 
   for (const candidate of candidates) {
+    const duration = candidate.duration;
+
+    if (
+      duration == null ||
+      !Number.isFinite(duration) ||
+      duration < MIN_RADIO_DURATION_SECONDS ||
+      duration > MAX_RADIO_DURATION_SECONDS
+    ) {
+      continue;
+    }
+
     const identity = songKey(candidate);
 
     if (ids.has(candidate.id)) continue;

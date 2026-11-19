@@ -9,6 +9,7 @@ function song(id: string, overrides: Partial<Child> = {}): Child {
     title: `Title ${id}`,
     artist: `Artist ${id}`,
     album: `Album ${id}`,
+    duration: 180,
     ...overrides,
   };
 }
@@ -148,5 +149,52 @@ describe('Radio Infinite recommendation filtering (#077)', () => {
     expect(acceptedIds(queue, candidates)).toEqual(['c', 'a', 'b']);
     expect(queue.map((item) => item.id)).toEqual(['tail']);
     expect(candidates.map((item) => item.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  describe('duration eligibility (#086)', () => {
+    it('accepts tracks exactly at both duration boundaries', () => {
+      expect(acceptedIds([], [
+        song('minimum', { duration: 90 }),
+        song('maximum', { duration: 480 }),
+      ])).toEqual(['minimum', 'maximum']);
+    });
+
+    it('rejects tracks outside the permitted duration range', () => {
+      expect(acceptedIds([], [
+        song('short', { duration: 89 }),
+        song('valid', { duration: 180 }),
+        song('long', { duration: 481 }),
+      ])).toEqual(['valid']);
+    });
+
+    it('rejects missing, zero, negative and non-finite durations', () => {
+      expect(acceptedIds([], [
+        song('missing', { duration: undefined }),
+        song('zero', { duration: 0 }),
+        song('negative', { duration: -10 }),
+        song('nan', { duration: NaN }),
+        song('infinity', { duration: Infinity }),
+        song('valid', { duration: 180 }),
+      ])).toEqual(['valid']);
+    });
+
+    it('preserves order after rejecting tracks by duration', () => {
+      expect(acceptedIds([], [
+        song('short', { duration: 30 }),
+        song('first', { duration: 120 }),
+        song('long', { duration: 900 }),
+        song('second', { duration: 240 }),
+        song('third', { duration: 480 }),
+      ])).toEqual(['first', 'second', 'third']);
+    });
+
+    it('does not let a rejected duration affect artist adjacency', () => {
+      const queue = [song('tail', { artist: 'Pulp' })];
+      expect(acceptedIds(queue, [
+        song('short-blur', { artist: 'Blur', duration: 30 }),
+        song('pulp', { artist: 'Pulp', duration: 180 }),
+        song('blur', { artist: 'Blur', duration: 180 }),
+      ])).toEqual(['blur']);
+    });
   });
 });

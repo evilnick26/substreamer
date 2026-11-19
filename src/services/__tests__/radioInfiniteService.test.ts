@@ -36,7 +36,7 @@ jest.mock('../../store/playerStore', () => ({
 import { refillRadioInfinite } from '../radioInfiniteService';
 
 const song = (id: string, artist: string, title: string, album = 'Album'): Child => ({
-  id, artist, title, album, isDir: false,
+  id, artist, title, album, isDir: false, duration: 180,
 });
 const initial = () => [song('q1', 'Seed A', 'First'), song('q2', 'Seed B', 'Second')];
 

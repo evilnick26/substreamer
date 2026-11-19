@@ -55,7 +55,7 @@
         "POST_NOTIFICATIONS"
       ],
       "predictiveBackGestureEnabled": false,
-      "versionCode": 80000199,
+      "versionCode": 80000200,
       "package": "fi.sancti.client"
     },
     "web": {
