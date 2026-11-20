@@ -1310,13 +1310,13 @@ describe('MoreOptionsSheet — phone Now Playing audio output', () => {
 
 describe('NPS overflow cleanup', () => {
   const playerSources = ['player-phone-portrait', 'player-tablet-portrait', 'player-tablet-landscape', 'player-tablet-splitview'] as const;
-  it.each(playerSources)('hides redundant actions for %s online and offline', (source) => {
+  it.each(playerSources)('shows bookmarks but hides recommendations for %s online and offline', (source) => {
     const view = open(songEntity, source);
-    expect(screen.queryByText('Add bookmark')).toBeNull();
+    expect(screen.getByText('Add bookmark')).toBeTruthy();
     expect(screen.queryByText('Play More Like This')).toBeNull();
     mockOfflineMode = true;
     view.rerender(<MoreOptionsSheet />);
-    expect(screen.queryByText('Add bookmark')).toBeNull();
+    expect(screen.getByText('Add bookmark')).toBeTruthy();
     expect(screen.queryByText('Play More Like This')).toBeNull();
   });
   it.each(['default', 'playlist-detail'] as const)('retains recommendations in %s', (source) => {

@@ -12,6 +12,13 @@ jest.mock('../../components/CachedImage', () => ({ CachedImage: (props: object) 
   return <Image testID="cover" {...props} />;
 } }));
 
+jest.mock('../../components/ResumeBookmarksSection', () => ({
+  ResumeBookmarksSection: () => {
+    const { Text } = require('react-native');
+    return <Text testID="resume-bookmarks-section">Resume Listening</Text>;
+  },
+}));
+
 import React from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
@@ -46,6 +53,11 @@ beforeEach(async () => {
   albumListsStore.setState({ recentlyAdded: [] });
   await ensureNormalizedSchema(getDb()!);
   fetchAlbums.mockResolvedValue([album('old')]);
+});
+
+test('renders the existing bookmarks section on sancti.fi Home', () => {
+  const view = render(<HomeScreen />);
+  expect(view.getByTestId('resume-bookmarks-section')).toBeTruthy();
 });
 
 test('Updates link opens the external website', async () => {

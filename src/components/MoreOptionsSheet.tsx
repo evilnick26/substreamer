@@ -17,6 +17,7 @@ import { PlaybackSpeedSheet } from './PlaybackSpeedSheet';
 import { useRoutePickerStore } from './RoutePicker/useRoutePickerStore';
 import { TrackDetailsModal } from './TrackDetailsModal';
 import { CachedImage } from './CachedImage';
+import { useBookmarkAction } from '../hooks/useBookmarkAction';
 import { useConfirmAlbumRemoval } from '../hooks/useConfirmAlbumRemoval';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { StarRatingDisplay } from './StarRating';
@@ -317,6 +318,12 @@ export function MoreOptionsSheet() {
   const handleClose = useCallback(() => {
     hide();
   }, [hide]);
+
+  const handleAddBookmark = useBookmarkAction(
+    async () => {
+      await moreOptionsStore.getState().hideAndAwait();
+    },
+  );
 
   /* ---- Actions ---- */
 
@@ -676,6 +683,7 @@ export function MoreOptionsSheet() {
   // Play Next is song-only, and shows wherever Add to Queue does so both
   // "after current" and "at the end" sit side by side.
   const showPlayNext = !isPlayerSource && entity?.type === 'song';
+  const showAddBookmark = isPlayerSource && entity.type === 'song';
   const showPlayMoreLikeThis = !isPlayerSource && !offline && canPlayMoreLikeThis(entity);
   const showDetails = hasAlbumDetails(entity);
   const showTrackDetails = hasTrackDetails(entity);
@@ -849,6 +857,15 @@ export function MoreOptionsSheet() {
                   icon={<MaterialCommunityIcons name="playlist-plus" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
                   label={t('addToPlaylist')}
                   onPress={handleAddToPlaylist}
+                />
+              )}
+
+              {/* Save current playback queue and position. */}
+              {showAddBookmark && (
+                <MoreOptionsRow
+                  icon={<Ionicons name="bookmark-outline" size={22} color={colors.textPrimary} style={styles.optionIcon} />}
+                  label={t('addBookmark')}
+                  onPress={handleAddBookmark}
                 />
               )}
 

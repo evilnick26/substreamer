@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, Sc
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
+import { ResumeBookmarksSection } from '../components/ResumeBookmarksSection';
 import { useTheme } from '../hooks/useTheme';
 import { albumListsStore } from '../store/albumListsStore';
 import { connectivityStore } from '../store/connectivityStore';
@@ -111,6 +112,7 @@ export function HomeScreen() {
       >
         <Text style={styles.updatesText}>sancti.fi Updates ↗</Text>
       </Pressable>
+      <ResumeBookmarksSection />
       <Text style={[styles.heading, { color: colors.textPrimary }]}>{t('recentlyUploaded')}</Text>
       {offline ? (
         <Text style={[styles.notice, { color: colors.textSecondary }]}>{t('homeAlbumsOffline')}</Text>
