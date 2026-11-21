@@ -49,23 +49,31 @@ async function reapTable(
   }
 }
 
-let inFlight: Promise<void> | null = null;
+export type LibraryReapResult =
+  | { status: 'completed'; albums: number; songs: number }
+  | { status: 'already-completed'; albums: 0; songs: 0 }
+  | { status: 'skipped'; reason: 'no-database' | 'no-epoch' }
+  | { status: 'failed'; message: string };
+
+let inFlight: Promise<LibraryReapResult> | null = null;
 
 /**
  * Reap against the current epoch if one has been earned and not yet acted on. Safe to
  * call on every launch: it returns immediately when there is no epoch or the epoch is
  * already reaped, and a run already in flight is shared rather than started twice.
  */
-export function runLibraryReapIfNeeded(): Promise<void> {
+export function runLibraryReapIfNeeded(): Promise<LibraryReapResult> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     try {
       const db = getDb();
-      if (!db) return;
+      if (!db) return { status: 'skipped', reason: 'no-database' } as const;
       const epoch = syncStatusStore.getState().fullResyncEpoch;
       // No full resync has ever finished — nothing authorises a delete.
-      if (epoch === null) return;
-      if ((await kvStorage.getItem(STATE_KEY)) === String(epoch)) return;
+      if (epoch === null) return { status: 'skipped', reason: 'no-epoch' } as const;
+      if ((await kvStorage.getItem(STATE_KEY)) === String(epoch)) {
+        return { status: 'already-completed', albums: 0, songs: 0 } as const;
+      }
 
       const songs = await reapTable(reapStaleSongs, db, epoch);
       const albums = await reapTable(reapStaleAlbums, db, epoch);
@@ -73,10 +81,12 @@ export function runLibraryReapIfNeeded(): Promise<void> {
 
       // eslint-disable-next-line no-console
       console.log('[library-reap] done', { epoch, songs, albums });
+      return { status: 'completed', albums, songs } as const;
     } catch (e) {
       // Nothing is stamped, so the next launch retries the whole pass.
       // eslint-disable-next-line no-console
       console.warn('[library-reap] failed', errMessage(e));
+      return { status: 'failed', message: errMessage(e) } as const;
     } finally {
       inFlight = null;
     }
