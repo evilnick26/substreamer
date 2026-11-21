@@ -35,6 +35,14 @@ export type DetailSyncPhase =
  *  albums" banner and the "already fetched?" gate. */
 export type LibrarySyncPhase = 'idle' | 'fetching' | 'paused-offline' | 'paused-error';
 
+/** Session-only lifecycle of post-full-sync library reconciliation. */
+export type LibraryReconciliationPhase =
+  | 'idle'
+  | 'reconciling'
+  | 'removed'
+  | 'complete'
+  | 'error';
+
 /** Which transport the library sync is using, decided by a capability probe
  *  (`search3` empty-query supported?). `search3` = fast paged `search3`
  *  (albums via `albumOffset`, songs via `songOffset`, 10k chunks). `basic` =
@@ -146,6 +154,12 @@ export interface SyncStatusState extends LastKnownMarkers {
    *  100%-then-spinner window doesn't read as stuck. Not persisted. */
   songSyncFinalizing: boolean;
 
+  /** EPHEMERAL: never restore a transient reconciliation banner on startup. */
+  libraryReconciliationPhase: LibraryReconciliationPhase;
+  libraryReconciliationAlbumsRemoved: number;
+  libraryReconciliationSongsRemoved: number;
+  libraryReconciliationError: string | null;
+
   // --- Normalized-model migration (one-time blob→normalized upgrade) ---
   /** Whether the background blob→normalized migration is running now — drives the
    *  "Upgrading library…" banner/card progress. EPHEMERAL (recomputed each launch);
@@ -192,6 +206,13 @@ export interface SyncStatusState extends LastKnownMarkers {
   setDetailSyncCompleted: (completed: number) => void;
   /** Toggle the "Finalizing…" state (in-memory index rebuild after the fetch). */
   setSongSyncFinalizing: (finalizing: boolean) => void;
+  /** Reset counts and error whenever a new reconciliation begins. */
+  startLibraryReconciliation: () => void;
+  /** Report successful deletion counts; presentation controls later transitions. */
+  finishLibraryReconciliation: (albums: number, songs: number) => void;
+  failLibraryReconciliation: (message: string) => void;
+  setLibraryReconciliationPhase: (phase: LibraryReconciliationPhase) => void;
+  resetLibraryReconciliation: () => void;
   setLastKnownMarkers: (partial: Partial<LastKnownMarkers>) => void;
   setBannerDismissedAt: (at: number | null) => void;
   resetDetailSync: () => void;
@@ -277,6 +298,10 @@ export const syncStatusStore = create<SyncStatusState>()(
       songGapRepairAttempted: false,
       notFoundAlbumIds: [],
       songSyncFinalizing: false,
+      libraryReconciliationPhase: 'idle',
+      libraryReconciliationAlbumsRemoved: 0,
+      libraryReconciliationSongsRemoved: 0,
+      libraryReconciliationError: null,
 
       normalizedMigrationPhase: 'idle',
       normalizedMigrationDone: 0,
@@ -308,6 +333,30 @@ export const syncStatusStore = create<SyncStatusState>()(
         set({ detailSyncCompleted: get().detailSyncCompleted + 1 }),
       setDetailSyncCompleted: (completed) => set({ detailSyncCompleted: completed }),
       setSongSyncFinalizing: (finalizing) => set({ songSyncFinalizing: finalizing }),
+      startLibraryReconciliation: () => set({
+        libraryReconciliationPhase: 'reconciling',
+        libraryReconciliationAlbumsRemoved: 0,
+        libraryReconciliationSongsRemoved: 0,
+        libraryReconciliationError: null,
+        bannerDismissedAt: null,
+      }),
+      finishLibraryReconciliation: (albums, songs) => set({
+        libraryReconciliationPhase: albums + songs > 0 ? 'removed' : 'complete',
+        libraryReconciliationAlbumsRemoved: albums,
+        libraryReconciliationSongsRemoved: songs,
+        libraryReconciliationError: null,
+      }),
+      failLibraryReconciliation: (message) => set({
+        libraryReconciliationPhase: 'error',
+        libraryReconciliationError: message,
+      }),
+      setLibraryReconciliationPhase: (phase) => set({ libraryReconciliationPhase: phase }),
+      resetLibraryReconciliation: () => set({
+        libraryReconciliationPhase: 'idle',
+        libraryReconciliationAlbumsRemoved: 0,
+        libraryReconciliationSongsRemoved: 0,
+        libraryReconciliationError: null,
+      }),
       setLastKnownMarkers: (partial) => set(partial),
       setBannerDismissedAt: (at) => set({ bannerDismissedAt: at }),
       resetDetailSync: () =>

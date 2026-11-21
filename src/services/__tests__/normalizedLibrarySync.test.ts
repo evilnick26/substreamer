@@ -5,6 +5,7 @@ import { countSongs } from '../../db/repository/songs';
 import { getDb } from '../../store/persistence/db';
 import { syncStatusStore } from '../../store/syncStatusStore';
 import { runNormalizedLibrarySync, __setPageSizesForTest } from '../normalizedLibrarySync';
+import type { LibraryReapResult } from '../libraryReapService';
 
 // Fixed server pages: 5 albums, 10 songs across those 5 albums (2 each). Prefixed
 // `mock*` so jest permits referencing them inside the hoisted mock factory.
@@ -65,6 +66,16 @@ jest.mock('../subsonicService', () => ({
   getAllArtists: () => Promise.resolve([]),
   getAllPlaylists: () => Promise.resolve(mockPlaylists),
 }));
+// #93: the real reaper has its own SQL-backed suite. A full sync now awaits
+// reconciliation before playlist refresh; keep this orchestration suite's
+// reconciliation deterministic rather than depending on persistent KV state.
+const mockRunLibraryReap = jest.fn(() =>
+  Promise.resolve<LibraryReapResult>({ status: 'completed', albums: 0, songs: 0 }),
+);
+jest.mock('../libraryReapService', () => ({
+  runLibraryReapIfNeeded: () => mockRunLibraryReap(),
+}));
+
 jest.mock('../detailFetchService', () => ({
   fetchPlaylistDetail: (id: string) => mockFetchPlaylistDetail(id),
 }));
@@ -99,6 +110,10 @@ beforeEach(() => {
   mockFetchPlaylistDetail.mockReset();
   mockFetchPlaylistDetail.mockImplementation((id: string) =>
     Promise.resolve({ id, entry: [] } as unknown),
+  );
+  mockRunLibraryReap.mockReset();
+  mockRunLibraryReap.mockImplementation(() =>
+    Promise.resolve<LibraryReapResult>({ status: 'completed', albums: 0, songs: 0 }),
   );
   mockSyncCachedItemTracks.mockClear();
   mockSearchAlbumsPage.mockReset();
@@ -1047,3 +1062,143 @@ describe('escaping a pinned slow path', () => {
   });
 });
 
+
+
+describe('issue #93 reconciliation orchestration', () => {
+  it('reconciles after successful full enumeration and publishes deletion counts', async () => {
+    // The first call is the startup-reaper drain; the second is the new epoch.
+    mockRunLibraryReap
+      .mockResolvedValueOnce({ status: 'already-completed', albums: 0, songs: 0 })
+      .mockResolvedValueOnce({ status: 'completed', albums: 1, songs: 2 });
+
+    await runNormalizedLibrarySync({ full: true });
+
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+    const s = syncStatusStore.getState();
+    expect(s.librarySyncComplete).toBe(true);
+    expect(s.songSyncComplete).toBe(true);
+    expect(s.libraryReconciliationPhase).toBe('removed');
+    expect(s.libraryReconciliationAlbumsRemoved).toBe(1);
+    expect(s.libraryReconciliationSongsRemoved).toBe(2);
+  });
+
+  it('shows completion without a removal phase when no rows were removed', async () => {
+    await runNormalizedLibrarySync({ full: true });
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('complete');
+    expect(syncStatusStore.getState().libraryReconciliationAlbumsRemoved).toBe(0);
+    expect(syncStatusStore.getState().libraryReconciliationSongsRemoved).toBe(0);
+  });
+
+  it('preserves an explicit reconciliation failure rather than reporting success', async () => {
+    mockRunLibraryReap
+      .mockResolvedValueOnce({ status: 'already-completed', albums: 0, songs: 0 })
+      .mockResolvedValueOnce({ status: 'failed', message: 'simulated database failure' });
+
+    await runNormalizedLibrarySync({ full: true });
+
+    const s = syncStatusStore.getState();
+    expect(s.libraryReconciliationPhase).toBe('error');
+    expect(s.libraryReconciliationError).toContain('simulated database failure');
+    expect(s.lastSyncError).toContain('simulated database failure');
+  });
+
+  it('does not call the reaper for an incremental sync', async () => {
+    await runNormalizedLibrarySync({ reason: 'incremental-test' });
+    expect(mockRunLibraryReap).not.toHaveBeenCalled();
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('idle');
+  });
+
+  it('single-flights overlapping full sync requests while reconciliation is pending', async () => {
+    // Keep the second (post-enumeration) reaper pending. No real clock sleeps:
+    // the release function determines precisely when reconciliation may finish.
+    let release!: (value: LibraryReapResult) => void;
+    const pending = new Promise<LibraryReapResult>((resolve) => { release = resolve; });
+    mockRunLibraryReap
+      .mockResolvedValueOnce({ status: 'already-completed', albums: 0, songs: 0 })
+      .mockImplementationOnce(() => pending);
+
+    const first = runNormalizedLibrarySync({ full: true, reason: 'overlap-first' });
+    for (let i = 0; i < 500 && syncStatusStore.getState().libraryReconciliationPhase !== 'reconciling'; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('reconciling');
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+
+    // A second request must join the in-flight run, not enumerate/reap twice.
+    const second = runNormalizedLibrarySync({ full: true, reason: 'overlap-second' });
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+    release({ status: 'completed', albums: 1, songs: 2 });
+    await Promise.all([first, second]);
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('removed');
+    expect(syncStatusStore.getState().libraryReconciliationAlbumsRemoved).toBe(1);
+    expect(syncStatusStore.getState().libraryReconciliationSongsRemoved).toBe(2);
+  });
+
+  it('queues a restarted full sync behind an active Reaper before fetching new pages', async () => {
+    // First call drains the previous epoch; second is this full run's Reaper.
+    // Hold it open so a Restart can be requested at the dangerous boundary.
+    let release!: (value: LibraryReapResult) => void;
+    const pending = new Promise<LibraryReapResult>((resolve) => { release = resolve; });
+    mockRunLibraryReap
+      .mockResolvedValueOnce({ status: 'already-completed', albums: 0, songs: 0 })
+      .mockImplementationOnce(() => pending);
+
+    const first = runNormalizedLibrarySync({ full: true, reason: 'restart-gate-first' });
+    for (let i = 0; i < 500 && syncStatusStore.getState().libraryReconciliationPhase !== 'reconciling'; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('reconciling');
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+
+    // Mimic the generation bump in forceFullResync(). The new request must
+    // NOT join the old generation, nor begin enumerating while it reaps.
+    mockSearchAlbumsPage.mockClear();
+    mockSearchSongsPage.mockClear();
+    syncStatusStore.getState().bumpGeneration();
+    const restarted = runNormalizedLibrarySync({ full: true, reason: 'restart-gate-second' });
+
+    // Allow queued promise callbacks to run while the Reaper remains held.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockSearchAlbumsPage).not.toHaveBeenCalled();
+    expect(mockSearchSongsPage).not.toHaveBeenCalled();
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(2);
+
+    release({ status: 'completed', albums: 1, songs: 2 });
+    await Promise.all([first, restarted]);
+
+    // The replacement run only began after the old Reaper was released.
+    expect(mockSearchAlbumsPage).toHaveBeenCalled();
+    expect(mockSearchSongsPage).toHaveBeenCalled();
+    expect(mockRunLibraryReap).toHaveBeenCalledTimes(4);
+    expect(syncStatusStore.getState().librarySyncComplete).toBe(true);
+    expect(syncStatusStore.getState().songSyncComplete).toBe(true);
+  });
+
+  it('does not publish reconciliation results after cancellation during reaping', async () => {
+    let release!: (value: { status: 'completed'; albums: number; songs: number }) => void;
+    const pending = new Promise<{ status: 'completed'; albums: number; songs: number }>((resolve) => {
+      release = resolve;
+    });
+    mockRunLibraryReap
+      .mockResolvedValueOnce({ status: 'already-completed', albums: 0, songs: 0 })
+      .mockImplementationOnce(() => pending);
+
+    const run = runNormalizedLibrarySync({ full: true });
+    // Wait for the reconciliation phase, rather than assuming a fixed number of ticks.
+    for (let i = 0; i < 500 && syncStatusStore.getState().libraryReconciliationPhase !== 'reconciling'; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('reconciling');
+    const generation = syncStatusStore.getState().generation;
+    syncStatusStore.setState({ generation: generation + 1 });
+    release({ status: 'completed', albums: 9, songs: 99 });
+    await run;
+    expect(syncStatusStore.getState().libraryReconciliationPhase).not.toBe('removed');
+    expect(syncStatusStore.getState().libraryReconciliationAlbumsRemoved).toBe(0);
+    expect(syncStatusStore.getState().libraryReconciliationSongsRemoved).toBe(0);
+  });
+});

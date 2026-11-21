@@ -267,7 +267,9 @@ async function runDeferredStartup(getCancelled: () => boolean): Promise<void> {
   // Delete library rows the server no longer has, against the epoch the last completed
   // full resync earned. Idle-scheduled and chunked (the tables are the big ones), and it
   // runs once per epoch rather than once per launch. No epoch, no reap.
-  idleStage('libraryReap', () => runLibraryReapIfNeeded());
+  idleStage('libraryReap', async () => {
+      await runLibraryReapIfNeeded();
+    });
   if (getCancelled()) return;
 
   // Re-push the CarPlay / Android Auto browse snapshot now the library stores

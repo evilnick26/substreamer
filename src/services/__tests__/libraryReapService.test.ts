@@ -155,6 +155,60 @@ describe('runLibraryReapIfNeeded — the base case', () => {
   });
 });
 
+describe('runLibraryReapIfNeeded — concurrent sync writer', () => {
+  it('rechecks a stale song at DELETE time after a newer sync restamps it', async () => {
+    // Real SQLite, no mocked repository. Pause immediately BEFORE the old reaper's
+    // DELETE, after its SELECT has identified the candidate. This is the precise
+    // read/delete race: a replacement full sync may upsert the same ID meanwhile.
+    await seedLibrary();
+    earnEpoch();
+    const database = db();
+    const realRunAsync = database.runAsync.bind(database);
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((resolve) => { releaseDelete = resolve; });
+    let signalDelete!: () => void;
+    const deleteReached = new Promise<void>((resolve) => { signalDelete = resolve; });
+    let intercepted = false;
+    const spy = jest.spyOn(database, 'runAsync').mockImplementation(async (...args) => {
+      const sql = String(args[0]);
+      if (!intercepted && sql.startsWith('DELETE FROM songs WHERE id IN')) {
+        intercepted = true;
+        signalDelete();
+        await deleteGate;
+      }
+      return realRunAsync(...args);
+    });
+
+    try {
+      const oldReap = runLibraryReapIfNeeded();
+      await Promise.race([
+        deleteReached,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('reaper never reached song DELETE')), 5000)),
+      ]);
+
+      // Newer sync refreshes a previously stale row AFTER the old pass selected it.
+      // The DELETE must re-evaluate synced_at rather than trusting its stale ID list.
+      await at(E + 10_000, async () => {
+        await upsertAlbums(database, [album('gone')]);
+        await upsertSongs(database, [song('gone-s1', 'gone')]);
+      });
+      releaseDelete();
+      const outcome = await oldReap;
+
+      expect(intercepted).toBe(true);
+      expect(outcome.status).toBe('completed');
+      expect(songIds()).toContain('gone-s1');
+      expect(albumIds()).toContain('gone');
+      // The unrefreshed sibling is still genuinely stale and should disappear.
+      expect(songIds()).not.toContain('gone-s2');
+      expect(await kvStorage.getItem(STATE_KEY)).toBe(String(E));
+    } finally {
+      releaseDelete();
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('runLibraryReapIfNeeded — the exclusions', () => {
   it("spares a downloaded album's songs while reaping everything else", async () => {
     await seedLibrary();

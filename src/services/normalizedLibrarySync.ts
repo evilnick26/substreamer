@@ -53,6 +53,7 @@ import { fireAndForget } from '@/utils/fireAndForget';
 import { toEpoch } from '@/db/repository/mappers';
 import { fetchPlaylistDetail } from './detailFetchService';
 import { syncCachedItemTracks } from './musicCacheService';
+import { runLibraryReapIfNeeded } from './libraryReapService';
 
 import {
   ensureCoverArtAuth,
@@ -663,6 +664,13 @@ async function doNormalizedSync(
   const tStart = nowMs();
   try {
     if (full) {
+      // A boot-time recovery reap may already be walking the old epoch. Wait for
+      // it BEFORE writing new rows or resetting cursors; never race two DB walks.
+      // Its failure does not invalidate this fresh full enumeration: the new epoch
+      // will be reconciled after the enumeration succeeds.
+      await runLibraryReapIfNeeded();
+      if (genChanged() || isOffline()) return;
+      syncStatusStore.getState().resetLibraryReconciliation();
       // Deliberately NOT `resetNormalizedSchema`. Dropping the tables also destroys the
       // things the sync never rebuilds — playlist membership, artist bio/similar/top
       // songs — and album/playlist detail read only the normalized tables, so a
@@ -874,6 +882,33 @@ async function doNormalizedSync(
     if (epoch !== null) syncStatusStore.getState().recordFullResyncEpoch(epoch);
     const songMs = nowMs() - tSong0;
 
+    if (epoch !== null) {
+      // Only a full enumeration that reached BOTH completion markers gets here.
+      // Do not claim success while the old server-deleted rows still exist.
+      syncStatusStore.getState().startLibraryReconciliation();
+      const reap = await runLibraryReapIfNeeded();
+      // A newer sync/cancel owns the UI now; never publish this run's outcome.
+      if (genChanged()) return;
+      if (isOffline()) {
+        syncStatusStore.getState().resetLibraryReconciliation();
+        return;
+      }
+      if (reap.status === 'failed' || reap.status === 'skipped') {
+        const message = reap.status === 'failed'
+          ? reap.message
+          : `Reconciliation skipped: ${reap.reason}`;
+        syncStatusStore.getState().failLibraryReconciliation(message);
+        syncStatusStore.getState().setLastSyncError(message);
+        logLibrarySync(`reconciliation FAILED: ${message}`);
+        return;
+      }
+      syncStatusStore.getState().finishLibraryReconciliation(reap.albums, reap.songs);
+      if (reap.albums > 0 || reap.songs > 0) {
+        syncStatusStore.getState().bumpLibraryUpdated();
+      }
+      logLibrarySync(`reconciliation done albums=${reap.albums} songs=${reap.songs}`);
+    }
+
     // ── Artists + Playlists — lightweight lists, tacked onto the initial sync so the
     // user's first Artists/Playlists tab open is instant, not an on-demand fetch.
     if (!isOffline() && !genChanged()) {
@@ -926,6 +961,10 @@ async function doNormalizedSync(
     void flushLibrarySyncLog();
     // eslint-disable-next-line no-console
     console.warn('[normalized-sync] failed', e);
+    if (syncStatusStore.getState().libraryReconciliationPhase === 'reconciling') {
+      syncStatusStore.getState().failLibraryReconciliation(errText(e));
+      syncStatusStore.getState().setLastSyncError(errText(e));
+    }
     syncStatusStore.getState().setDetailSyncPhase('error');
     // A throw in the ALBUM phase never reaches `markLibrarySyncComplete`, so without this
     // `librarySyncPhase` stays 'fetching' — and it is persisted, so the "Fetching

@@ -110,3 +110,67 @@ describe('LibrarySyncBanner', () => {
     expect(getByText(/paused/i)).toBeTruthy();
   });
 });
+
+
+describe('issue #93 banner lifecycle', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    syncStatusStore.setState({
+      librarySyncPhase: 'idle', detailSyncPhase: 'idle',
+      libraryReconciliationPhase: 'idle',
+      libraryReconciliationAlbumsRemoved: 0,
+      libraryReconciliationSongsRemoved: 0,
+      libraryReconciliationError: null,
+      bannerDismissedAt: null,
+    });
+  });
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  it('shows reconciliation even for a tiny library and does not auto-complete early', () => {
+    setSyncState({ libraryReconciliationPhase: 'reconciling', detailSyncTotal: 2 });
+    const { getByText } = render(<LibrarySyncBanner />);
+    expect(getByText('Reconciling library…')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(10000));
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('reconciling');
+  });
+
+  it('shows removals for two seconds, then completion for two seconds, then hides', () => {
+    setSyncState({
+      libraryReconciliationPhase: 'removed',
+      libraryReconciliationAlbumsRemoved: 1,
+      libraryReconciliationSongsRemoved: 2,
+    });
+    const { getByText, queryByText } = render(<LibrarySyncBanner />);
+    expect(getByText('1 release and 2 songs removed')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(1999));
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('removed');
+    act(() => jest.advanceTimersByTime(1));
+    expect(getByText('Sync Complete')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(2000));
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('idle');
+    expect(queryByText('Sync Complete')).toBeNull();
+  });
+
+  it('never automatically dismisses a reconciliation error', () => {
+    setSyncState({
+      libraryReconciliationPhase: 'error',
+      libraryReconciliationError: 'database failure',
+      bannerDismissedAt: Date.now(),
+    });
+    const { getByText } = render(<LibrarySyncBanner />);
+    expect(getByText(/Library reconciliation failed/)).toBeTruthy();
+    act(() => jest.advanceTimersByTime(10000));
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('error');
+  });
+
+  it('cancels an old removal timer when a new reconciliation begins', () => {
+    setSyncState({ libraryReconciliationPhase: 'removed', libraryReconciliationAlbumsRemoved: 1 });
+    render(<LibrarySyncBanner />);
+    act(() => syncStatusStore.getState().startLibraryReconciliation());
+    act(() => jest.advanceTimersByTime(3000));
+    expect(syncStatusStore.getState().libraryReconciliationPhase).toBe('reconciling');
+  });
+});

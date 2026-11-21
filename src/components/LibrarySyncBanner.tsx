@@ -171,6 +171,25 @@ export const LibrarySyncBanner = memo(function LibrarySyncBanner() {
   const migTotal = syncStatusStore((s) => s.normalizedMigrationTotal);
   const finalizing = syncStatusStore((s) => s.songSyncFinalizing);
   const bannerDismissedAt = syncStatusStore((s) => s.bannerDismissedAt);
+  const reconciliationPhase = syncStatusStore((s) => s.libraryReconciliationPhase);
+  const removedAlbums = syncStatusStore((s) => s.libraryReconciliationAlbumsRemoved);
+  const removedSongs = syncStatusStore((s) => s.libraryReconciliationSongsRemoved);
+
+  // Presentation timers only: the DB operation has already completed. Cancel each
+  // timer when the phase changes (including a new sync or component unmount).
+  useEffect(() => {
+    if (reconciliationPhase !== 'removed' && reconciliationPhase !== 'complete') return;
+    const timer = setTimeout(() => {
+      const state = syncStatusStore.getState();
+      if (state.libraryReconciliationPhase !== reconciliationPhase) return;
+      if (reconciliationPhase === 'removed') {
+        state.setLibraryReconciliationPhase('complete');
+      } else {
+        state.resetLibraryReconciliation();
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [reconciliationPhase]);
 
   const suppressed = bannerDismissedAt != null;
   const tinyLibrary = total > 0 && total < MIN_TOTAL_TO_SHOW;
@@ -178,9 +197,23 @@ export const LibrarySyncBanner = memo(function LibrarySyncBanner() {
   // album-LIST fetch (the detail walk is gated on it) → the detail walk itself.
   const migrationVariant = getMigrationVariant(migPhase, migDone, migTotal, t);
   const listVariant = getListVariant(listPhase, listCount, t);
-  const variant =
-    migrationVariant ?? listVariant ?? (tinyLibrary ? null : getVariant(phase, completed, total, finalizing, t));
-  const visible = variant != null && !suppressed;
+  const reconciliationVariant: Variant | null = reconciliationPhase === 'reconciling'
+    ? { icon: 'sync', iconColor: ACCENT_BLUE, label: 'Reconciling library…', tappable: true }
+    : reconciliationPhase === 'removed'
+      ? {
+          icon: 'checkmark-circle', iconColor: ACCENT_BLUE,
+          label: `${removedAlbums} ${removedAlbums === 1 ? 'release' : 'releases'} and ${removedSongs} ${removedSongs === 1 ? 'song' : 'songs'} removed`,
+          tappable: false,
+        }
+      : reconciliationPhase === 'complete'
+        ? { icon: 'checkmark-circle', iconColor: ACCENT_BLUE, label: 'Sync Complete', tappable: false }
+        : reconciliationPhase === 'error'
+          ? { icon: 'alert-circle', iconColor: ERROR_RED, label: 'Library reconciliation failed — tap for details', tappable: true }
+          : null;
+  const variant = reconciliationVariant ?? migrationVariant ?? listVariant
+    ?? (tinyLibrary ? null : getVariant(phase, completed, total, finalizing, t));
+  // Reconciliation errors must remain visible even if an earlier banner was dismissed.
+  const visible = variant != null && (reconciliationPhase === 'error' || !suppressed);
 
   const prevVisible = useRef(visible);
 
@@ -235,6 +268,8 @@ export const LibrarySyncBanner = memo(function LibrarySyncBanner() {
   }, [router, tappable, isRetry]);
 
   const handleDismiss = useCallback(() => {
+    // A reconciliation error is persistent until the next full sync.
+    if (syncStatusStore.getState().libraryReconciliationPhase === 'error') return;
     syncStatusStore.getState().setBannerDismissedAt(Date.now());
   }, []);
 
@@ -252,6 +287,7 @@ export const LibrarySyncBanner = memo(function LibrarySyncBanner() {
             </Text>
             <Pressable
               onPress={handleDismiss}
+              disabled={reconciliationPhase === 'error'}
               hitSlop={8}
               style={styles.dismissHit}
               accessibilityLabel={t('dismiss')}

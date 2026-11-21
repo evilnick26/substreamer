@@ -57,6 +57,11 @@ export function LibrarySyncCard() {
   const librarySyncCursor = syncStatusStore((st) => st.librarySyncCursor);
   const songSyncFetched = syncStatusStore((st) => st.songSyncFetched);
   const lastSyncError = syncStatusStore((st) => st.lastSyncError);
+  const reconciliationPhase = syncStatusStore((st) => st.libraryReconciliationPhase);
+  const reconciliationError = syncStatusStore((st) => st.libraryReconciliationError);
+  const removedAlbums = syncStatusStore((st) => st.libraryReconciliationAlbumsRemoved);
+  const removedSongs = syncStatusStore((st) => st.libraryReconciliationSongsRemoved);
+  const reconciliationActive = reconciliationPhase === 'reconciling';
 
   // The transport actually in use, chosen by phase. `syncStrategy` is only what the
   // probe found; either phase can fall back at runtime, and `songSyncStrategy` is
@@ -73,7 +78,8 @@ export function LibrarySyncCard() {
   // usable during a long sync precisely because that data is left alone.
   const displayAlbums = librarySyncCursor;
   const displaySongs = songSyncFetched;
-  const fullyComplete = librarySyncComplete && songSyncComplete;
+  const fullyComplete = librarySyncComplete && songSyncComplete && !reconciliationActive
+    && reconciliationPhase !== 'error';
   // Started but neither running nor finished (e.g. paused, or interrupted).
   // A run that has made progress but is neither running nor finished. Uses the
   // cursors rather than a row count, which would read as "paused" on any install
@@ -83,9 +89,9 @@ export function LibrarySyncCard() {
   // there would be no Resume button and no explanation in exactly that case.
   const errorPaused = librarySyncPhase === 'paused-error' || songSyncPhase === 'paused-error';
   const isPaused =
-    errorPaused
-    || (!isSyncing && !fullyComplete && (librarySyncCursor > 0 || songSyncFetched > 0));
-  const showSync = !isSyncing && !isPaused;
+    !reconciliationActive && reconciliationPhase !== 'error' && (errorPaused
+    || (!isSyncing && !fullyComplete && (librarySyncCursor > 0 || songSyncFetched > 0)));
+  const showSync = !isSyncing && !isPaused && !reconciliationActive;
 
   const stageText =
     librarySyncPhase === 'fetching'
@@ -264,6 +270,30 @@ export function LibrarySyncCard() {
           </View>
         )}
 
+        {reconciliationPhase !== 'idle' && (
+          <View style={styles.statusRow} testID="sync-card-reconciliation">
+            {reconciliationActive && <ActivityIndicator size="small" color={colors.primary} />}
+            {!reconciliationActive && (
+              <Ionicons name={reconciliationPhase === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                size={16} color={colors.textSecondary} />
+            )}
+            <View style={styles.legacyLabelWrap}>
+              <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+                {reconciliationPhase === 'reconciling' ? 'Reconciling library…'
+                  : reconciliationPhase === 'removed'
+                    ? `${removedAlbums} ${removedAlbums === 1 ? 'release' : 'releases'} and ${removedSongs} ${removedSongs === 1 ? 'song' : 'songs'} removed`
+                    : reconciliationPhase === 'complete' ? 'Sync Complete'
+                      : 'Library reconciliation failed'}
+              </Text>
+              {reconciliationPhase === 'error' && reconciliationError && (
+                <Text style={[styles.legacyHint, { color: colors.textSecondary }]} numberOfLines={3}>
+                  {reconciliationError}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {reidDeferred && (
           <View style={styles.statusRow} testID="sync-card-reid-deferred">
             <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
@@ -285,7 +315,7 @@ export function LibrarySyncCard() {
           <Switch
             value={forceLegacySync}
             onValueChange={handleToggleLegacySync}
-            disabled={isSyncing || isPaused}
+            disabled={isSyncing || isPaused || reconciliationActive}
           />
         </View>
 
