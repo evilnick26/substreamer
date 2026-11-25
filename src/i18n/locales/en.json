@@ -207,7 +207,7 @@
   "songCoverArtAlbum": "Album cover for all tracks (default)",
   "songCoverArtPerTrack": "Per-track cover art",
   "listLength": "List length",
-  "listLengthHint": "Number of items fetched for dynamic lists and generated playlists",
+  "listLengthHint": "Target number of items for dynamic lists and generated playlists. Fewer items may be returned to maintain recommendation quality.",
   "listLength20": "20 items (default)",
   "listLength30": "30 items",
   "listLength50": "50 items",

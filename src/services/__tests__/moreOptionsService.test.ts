@@ -1,3 +1,5 @@
+import type { Child } from 'subsonic-api';
+
 jest.mock('../playerService', () => ({
   addToQueue: jest.fn().mockResolvedValue(undefined),
   playTrack: jest.fn().mockResolvedValue(undefined),
@@ -376,7 +378,7 @@ describe('playMoreLikeThis', () => {
     await playMoreLikeThis({ id: 's1' } as any);
 
     expect(mockOverlayShow).toHaveBeenCalledWith('Loading…');
-    expect(mockGetSimilarSongs).toHaveBeenCalledWith('s1', 20);
+    expect(mockGetSimilarSongs).toHaveBeenCalledWith('s1', 40);
     expect(mockPlayTrack).toHaveBeenCalledWith(tracks[0], tracks);
     expect(mockOverlayShowSuccess).toHaveBeenCalledWith('Playing similar songs');
     // No fallbacks needed — first call returned the full target
@@ -429,7 +431,7 @@ describe('playMoreLikeThis', () => {
       id: 's1', artist: 'X', artistId: 'a1', genre: 'Rock',
     } as any);
 
-    expect(mockGetSimilarSongs2).toHaveBeenCalledWith('a1', 20);
+    expect(mockGetSimilarSongs2).toHaveBeenCalledWith('a1', 40);
     const queueArg = mockPlayTrack.mock.calls[0][1];
     expect(queueArg).toHaveLength(20);
     expect(queueArg[0].id).toBe('t1');
@@ -469,7 +471,7 @@ describe('playMoreLikeThis', () => {
       id: 's1', artist: 'X', artistId: 'a1', genre: 'Rock',
     } as any);
 
-    expect(mockGetTopSongs).toHaveBeenCalledWith('X', 20);
+    expect(mockGetTopSongs).toHaveBeenCalledWith('X', 40);
     const queueArg = mockPlayTrack.mock.calls[0][1];
     expect(queueArg).toHaveLength(20);
     expect(queueArg[0].id).toBe('t1');
@@ -1124,4 +1126,272 @@ describe('handleRemoveSongDownload', () => {
     await handleRemoveSongDownload(song);
     expect(mockOverlayShowError).toHaveBeenCalledWith('Failed to load');
   });
+});
+
+describe('issue #091 — PMLT recommendation quality', () => {
+  const track = (
+    id: string,
+    artist: string,
+    title: string,
+    extra: Partial<Child> = {},
+  ): Child => ({
+    id,
+    artist,
+    title,
+    ...extra,
+  } as Child);
+
+  const source = track('seed', 'Artist A', 'Original', {
+    artistId: 'artist-a',
+    album: 'Album A',
+    genre: 'Rock',
+  });
+
+  beforeEach(() => {
+    mockGetSimilarSongs.mockResolvedValue([]);
+    mockGetSimilarSongs2.mockResolvedValue([]);
+    mockGetRandomSongsFiltered.mockResolvedValue([]);
+    mockGetTopSongs.mockResolvedValue([]);
+  });
+
+  test('deduplicates normalised artist and title, including the seed', async () => {
+    const first = track('1', 'Artist A', 'Another Song');
+    const second = track('2', 'Artist B', 'Different Song');
+    const third = track('3', 'Artist C', 'Another Song');
+
+    mockGetSimilarSongs.mockResolvedValue([
+      track('seed-copy', ' ARTIST A ', ' original '),
+      first,
+      second,
+      track('duplicate', ' artist  a ', ' ANOTHER  SONG '),
+      third,
+    ]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      first, [first, second, third],
+    );
+  });
+
+  test('first recommendation may share seed artist and album', async () => {
+    const first = track('1', 'Artist A', 'Another Song', {
+      album: 'Album A',
+    });
+
+    mockGetSimilarSongs.mockResolvedValue([first]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(first, [first]);
+  });
+
+  test('preserves live and remix qualifiers and different artists', async () => {
+    const tracks = [
+      track('1', 'Artist A', 'Song'),
+      track('2', 'Artist B', 'Song'),
+      track('3', 'Artist A', 'Song (Live)'),
+      track('4', 'Artist C', 'Other Song'),
+      track('5', 'Artist A', 'Song (Remix)'),
+    ];
+
+    mockGetSimilarSongs.mockResolvedValue(tracks);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(tracks[0], tracks);
+  });
+
+  test('compares adjacency against the last accepted track', async () => {
+    const first = track('1', 'Artist A', 'Song One');
+    const rejected = track('2', 'Artist A', 'Song Two');
+    const second = track('3', 'Artist B', 'Song Three');
+
+    mockGetSimilarSongs.mockResolvedValue([
+      first,
+      rejected,
+      second,
+      rejected,
+    ]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      first, [first, second, rejected],
+    );
+  });
+
+  test('rejects adjacent tracks from the same compilation', async () => {
+    const compilation = {
+      album: 'Compilation',
+      displayAlbumArtist: 'Various Artists',
+    };
+
+    const first = track('1', 'Artist B', 'Song One', compilation);
+    const rejected = track('2', 'Artist C', 'Song Two', compilation);
+    const second = track('3', 'Artist D', 'Song Three');
+
+    mockGetSimilarSongs.mockResolvedValue([
+      first, rejected, second,
+    ]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      first, [first, second],
+    );
+  });
+
+  test('enforces identity and adjacency across fallback boundaries', async () => {
+    const first = track('1', 'Artist B', 'Song One');
+    const second = track('2', 'Artist C', 'Song Two');
+    const third = track('3', 'Artist D', 'Song Three');
+    const fourth = track('4', 'Artist A', 'Song Four');
+
+    mockGetSimilarSongs.mockResolvedValue([first]);
+
+    mockGetSimilarSongs2.mockResolvedValue([
+      track('reject-1', 'Artist B', 'Adjacent Song'),
+      second,
+    ]);
+
+    mockGetRandomSongsFiltered.mockResolvedValue([
+      track('reject-2', 'Artist B', 'Song One'),
+      track('reject-3', 'Artist C', 'Adjacent Song'),
+      third,
+    ]);
+
+    mockGetTopSongs.mockResolvedValue([
+      fourth,
+      track('reject-4', 'Artist A', 'Adjacent Song'),
+    ]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      first, [first, second, third, fourth],
+    );
+
+    expect(mockGetSimilarSongs).toHaveBeenCalledWith('seed', 40);
+    expect(mockGetSimilarSongs2).toHaveBeenCalledWith('artist-a', 40);
+    expect(mockGetRandomSongsFiltered).toHaveBeenCalledWith({
+      size: 40,
+      genre: 'Rock',
+    });
+    expect(mockGetTopSongs).toHaveBeenCalledWith('Artist A', 40);
+  });
+
+  test('reconsiders an adjacency rejection in a later fallback', async () => {
+    const first = track('1', 'Artist A', 'Song One');
+    const later = track('2', 'Artist A', 'Song Two');
+    const separator = track('3', 'Artist B', 'Song Three');
+
+    mockGetSimilarSongs.mockResolvedValue([
+      first, later, separator,
+    ]);
+    mockGetSimilarSongs2.mockResolvedValue([later]);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      first, [first, separator, later],
+    );
+  });
+
+  test('does not inherit Radio Infinite duration restrictions', async () => {
+    const tracks = [
+      track('1', 'Artist A', 'Short Song', { duration: 30 }),
+      track('2', 'Artist B', 'Long Song', { duration: 900 }),
+      track('3', 'Artist C', 'Unknown Duration'),
+    ];
+
+    mockGetSimilarSongs.mockResolvedValue(tracks);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(tracks[0], tracks);
+  });
+
+  test('missing metadata does not cause false identity matches', async () => {
+    const tracks = [
+      { id: '1' } as Child,
+      { id: '2' } as Child,
+      { id: '3' } as Child,
+    ];
+
+    mockGetSimilarSongs.mockResolvedValue(tracks);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(tracks[0], tracks);
+  });
+
+  test('returns an underfilled queue rather than relaxing filters', async () => {
+    const first = track('1', 'Artist A', 'Song One');
+
+    mockGetSimilarSongs.mockResolvedValue([first]);
+
+    mockGetTopSongs.mockResolvedValue(
+      Array.from({ length: 40 }, (_, i) =>
+        track(`top-${i}`, 'Artist A', `Top Song ${i}`),
+      ),
+    );
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(first, [first]);
+  });
+
+  test('caps accepted recommendations at the configured target', async () => {
+    const tracks = Array.from({ length: 40 }, (_, i) =>
+      track(`track-${i}`, `Artist ${i}`, `Song ${i}`),
+    );
+
+    mockGetSimilarSongs.mockResolvedValue(tracks);
+
+    await playMoreLikeThis(source);
+
+    expect(mockPlayTrack).toHaveBeenCalledWith(
+      tracks[0], tracks.slice(0, 20),
+    );
+
+    expect(mockGetSimilarSongs2).not.toHaveBeenCalled();
+    expect(mockGetRandomSongsFiltered).not.toHaveBeenCalled();
+    expect(mockGetTopSongs).not.toHaveBeenCalled();
+  });
+});
+
+test('issue #091 — respects a non-default PMLT list length', async () => {
+  const { layoutPreferencesStore } = jest.requireMock(
+    '../../store/layoutPreferencesStore',
+  );
+
+  layoutPreferencesStore.getState.mockReturnValueOnce({
+    listLength: 30,
+  });
+
+  const source = {
+    id: 'seed',
+    artist: 'Seed Artist',
+    title: 'Seed Song',
+  } as Child;
+
+  const tracks = Array.from({ length: 60 }, (_, i) => ({
+    id: `track-${i}`,
+    artist: `Artist ${i}`,
+    title: `Song ${i}`,
+  } as Child));
+
+  mockGetSimilarSongs.mockResolvedValue(tracks);
+
+  await playMoreLikeThis(source);
+
+  expect(mockGetSimilarSongs).toHaveBeenCalledWith('seed', 60);
+  expect(mockPlayTrack).toHaveBeenCalledWith(
+    tracks[0], tracks.slice(0, 30),
+  );
+
+  expect(mockGetSimilarSongs2).not.toHaveBeenCalled();
+  expect(mockGetRandomSongsFiltered).not.toHaveBeenCalled();
+  expect(mockGetTopSongs).not.toHaveBeenCalled();
 });

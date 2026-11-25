@@ -5,6 +5,11 @@
  * Keeps star/queue logic in one place so row and card components stay thin.
  */
 
+import {
+  songKey,
+  hasAdjacentArtistOrAlbum,
+} from './recommendationFilters';
+
 import i18n from '../i18n/i18n';
 import { fetchArtistBase, fetchArtistTopSongs } from './detailFetchService';
 import { favoritesStore } from '../store/favoritesStore';
@@ -183,42 +188,63 @@ export async function removeItemFromQueue(index: number): Promise<void> {
  *   3. `getRandomSongsFiltered(genre)`— same-genre random
  *   4. `getTopSongs(artist)`          — same artist's top tracks
  *
- * Each layer is deduped against the running set (and the source song),
- * preserving layer order so the highest-signal tracks play first.
+ * Each layer is deduped by song ID and normalised artist/title
+ * against the running set and source song. Adjacent artist and album
+ * checks apply across all layers, preserving recommendation order.
+ * Request twice the target to allow for filtering; return fewer
+ * tracks if the available candidates cannot satisfy the target.
  */
 async function buildMoreLikeThisQueue(
   source: Child,
   target: number,
 ): Promise<Child[]> {
   const seen = new Set<string>([source.id]);
+  const seenSongs = new Set<string>();
+  const sourceIdentity = songKey(source);
+  if (sourceIdentity) seenSongs.add(sourceIdentity);
+
+  const requestSize = target * 2;
   const out: Child[] = [];
+
   const push = (tracks: readonly Child[] | null | undefined): void => {
     if (!tracks) return;
+
     for (const t of tracks) {
       if (out.length >= target) return;
       if (!t?.id || seen.has(t.id)) continue;
+
+      const identity = songKey(t);
+      if (identity && seenSongs.has(identity)) continue;
+
+      // PMLT creates a fresh queue. The source is excluded by
+      // identity, but is not part of the adjacency context.
+      const previous = out[out.length - 1];
+      if (previous && hasAdjacentArtistOrAlbum(t, previous)) {
+        continue;
+      }
+
       seen.add(t.id);
+      if (identity) seenSongs.add(identity);
       out.push(t);
     }
   };
 
-  push(await getSimilarSongs(source.id, target));
+  push(await getSimilarSongs(source.id, requestSize));
   if (out.length >= target) return out;
 
   if (source.artistId) {
-    push(await getSimilarSongs2(source.artistId, target));
+    push(await getSimilarSongs2(source.artistId, requestSize));
     if (out.length >= target) return out;
   }
 
   const genre = source.genre ?? source.genres?.[0];
   if (genre) {
-    // Request 2× target so dedup leaves us with plenty of fresh picks.
-    push(await getRandomSongsFiltered({ size: target * 2, genre }));
+    push(await getRandomSongsFiltered({ size: requestSize, genre }));
     if (out.length >= target) return out;
   }
 
   if (source.artist) {
-    push(await getTopSongs(source.artist, target));
+    push(await getTopSongs(source.artist, requestSize));
   }
 
   return out;
