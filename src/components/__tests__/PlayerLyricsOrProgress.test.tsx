@@ -108,7 +108,11 @@ test('line changes, blank timed entry, pause, offset and seek never change mode'
   lyricsStore.setState({ entries: { a: timed('Original') } });
   const view = render(<Screen id="a" />);
   act(() => playerStore.setState({ position: 80, playbackState: 'paused' }));
-  expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('');
+  // #094: the long instrumental gap clears all three lyric lines,
+  // but must never switch back to the progress bar.
+  expect(view.queryAllByText(/.+/)).toHaveLength(0);
+  expect(view.getByTestId('inline-lyrics')).toBeTruthy();
+  expect(view.queryByTestId('progress')).toBeNull();
   act(() => playerStore.setState({ position: 121 }));
   expect(view.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Last');
   act(() => playerStore.setState({ position: 0 }));
@@ -195,9 +199,12 @@ test('quiet introduction, anticipation, current and restart stay in the same lyr
   for (const position of [41.999, 42, 45, 80, 0, 42]) {
     act(() => playerStore.setState({ position }));
     checkPanel();
-    if (position < 42) expect(view.queryByText('First')).toBeNull();
-    else expect(view.getByTestId(position < 45 ? 'inline-lyrics-next' : 'inline-lyrics-current')
-      .props.accessibilityLabel).toBe('First');
+    if (position < 42 || position === 80) {
+      expect(view.queryByText('First')).toBeNull();
+    } else {
+      expect(view.getByTestId(position < 45 ? 'inline-lyrics-next' : 'inline-lyrics-current')
+        .props.accessibilityLabel).toBe('First');
+    }
   }
   expect(getLyricsForTrack).not.toHaveBeenCalled();
 });
