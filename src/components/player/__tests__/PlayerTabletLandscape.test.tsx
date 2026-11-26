@@ -322,7 +322,7 @@ describe('PlayerTabletLandscape lyrics gate', () => {
 test('whole progress component is replaced for genuine cached lyrics and restored by OFF', () => {
   Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
     synced: true, source: 'structured', offsetMs: 0,
-    lines: [{ startMs: 0, text: 'Original, Casing!' }],
+    lines: [{ startMs: 30000, text: 'Original, Casing!' }],
   } } });
   tabletLayoutStore.setState({ playerExpanded: true });
   const view = render(<PlayerTabletLandscape expandProgress={expandProgress} />);

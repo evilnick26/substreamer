@@ -732,7 +732,7 @@ describe('PlayerPhonePortrait', () => {
 test('whole progress component is replaced for genuine cached lyrics and restored by OFF', () => {
   Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
     synced: true, source: 'structured', offsetMs: 0,
-    lines: [{ startMs: 0, text: 'Original, Casing!' }],
+    lines: [{ startMs: 30000, text: 'Original, Casing!' }],
   } } });
   const view = render(<PlayerPhonePortrait />);
   expect(view.queryByTestId('progress-bar')).toBeNull();
@@ -746,7 +746,7 @@ test('whole progress component is replaced for genuine cached lyrics and restore
 test('tablet portrait shares cached lyrics with its full view and restores progress when OFF', () => {
   Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
     synced: true, source: 'structured', offsetMs: 0,
-    lines: [{ startMs: 0, text: 'Tablet, Original!' }],
+    lines: [{ startMs: 30000, text: 'Tablet, Original!' }],
   } } });
   const view = render(<PlayerTabletPortrait />);
   expect(view.queryByTestId('progress-bar')).toBeNull();
@@ -761,7 +761,7 @@ test('inline lyrics preserves sanctifi phone ordering, local version and album/a
   getAlbumVersion.mockResolvedValue('Local Edition');
   Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
     synced: true, source: 'structured', offsetMs: 0,
-    lines: [{ startMs: 0, text: 'Synced, Original!' }],
+    lines: [{ startMs: 30000, text: 'Synced, Original!' }],
   } } });
   const push = jest.fn();
   jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ back: jest.fn(), push });
@@ -812,7 +812,7 @@ describe('phone landscape presentation in the existing shell', () => {
 test('rotation preserves portrait synced lyrics but landscape always retains seeking without inline lyrics', () => {
   Object.assign(lyricsStore.getState(), { entries: { 'track-1': {
     synced: true, source: 'structured', offsetMs: 0,
-    lines: [{ startMs: 0, text: 'Portrait lyrics only' }],
+    lines: [{ startMs: 30000, text: 'Portrait lyrics only' }],
   } } });
   const screen = render(<PlayerPhonePortrait />);
   expect(screen.getByTestId('inline-lyrics-current').props.accessibilityLabel).toBe('Portrait lyrics only');
