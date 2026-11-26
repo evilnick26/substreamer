@@ -105,7 +105,7 @@ jest.mock('../../store/offlineModeStore', () => ({
   },
 }));
 
-jest.mock('../radioInfiniteService', () => ({
+jest.mock('../radioInfiniteDispatcher', () => ({
   requestRadioInfiniteRefill: jest.fn(),
 }));
 
@@ -740,7 +740,7 @@ describe('Radio Infinite offline fallback — regression', () => {
     mockSetOfflineMode(true);
     await drain();
     mockTP.setRepeatMode.mockClear();
-    const { requestRadioInfiniteRefill } = require('../radioInfiniteService');
+    const { requestRadioInfiniteRefill } = require('../radioInfiniteDispatcher');
     (requestRadioInfiniteRefill as jest.Mock).mockClear();
     mockSetOfflineMode(false);
     await drain();

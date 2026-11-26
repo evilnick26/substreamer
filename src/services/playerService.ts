@@ -30,7 +30,7 @@ import { sleepTimerStore } from '../store/sleepTimerStore';
 import { shuffleArray } from '../utils/arrayHelpers';
 import { addCompletedScrobble, sendNowPlaying } from './scrobbleService';
 import { registerPlayerPlayStatListener } from './playStatsService';
-import { requestRadioInfiniteRefill } from './radioInfiniteService';
+import { requestRadioInfiniteRefill } from './radioInfiniteDispatcher';
 import { syncProxyUpstreams } from './sslTrustService';
 import { getLocalTrackUri, waitForTrackMapsReady } from './musicCacheService';
 import {
@@ -242,17 +242,11 @@ export async function initPlayer(): Promise<void> {
     activeScrobbleDone = false;
     lastMilestoneValue = 0;
     refreshTrackSource();
-    // Dynamic import avoids a static cycle: radioInfiniteService uses addToQueue.
-    // Do not load the controller for ordinary or offline playback.
     if (
       playbackSettingsStore.getState().repeatMode === 'radio' &&
       !offlineModeStore.getState().offlineMode
     ) {
-      void import('./radioInfiniteService').then(({ requestRadioInfiniteRefill }) => {
-        requestRadioInfiniteRefill();
-      }).catch((error: unknown) => {
-        console.warn('[RadioInfinite] Controller unavailable:', error);
-      });
+      requestRadioInfiniteRefill();
     }
   });
 
@@ -340,9 +334,7 @@ export async function initPlayer(): Promise<void> {
   // sleep-timer display countdown. On foreground: resume the countdown. ---
   AppState.addEventListener('change', (next) => {
     if (next === 'active') {
-      void import('./radioInfiniteService').then(({ requestRadioInfiniteRefill }) => {
-        requestRadioInfiniteRefill();
-      });
+      requestRadioInfiniteRefill();
       // Resume the sleep-timer display countdown if one is armed.
       const st = sleepTimerStore.getState();
       if (st.endTime != null && !st.endOfTrack) {

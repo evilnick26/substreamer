@@ -19,6 +19,10 @@ import { errMessage } from '../utils/errorMessage';
 import { installHeadlessMediaService } from './headlessMediaService';
 import { LOOKAHEAD_MAX_CACHE_MB } from '../store/playbackSettingsStore';
 import { ensureNowPlayingPlaceholderUri } from './nowPlayingPlaceholder';
+import { registerRadioInfiniteRefillHandler } from './radioInfiniteDispatcher';
+import { requestRadioInfiniteRefill } from './radioInfiniteService';
+
+registerRadioInfiniteRefillHandler(requestRadioInfiniteRefill);
 
 // The lookahead-cache disk budget AND eviction policy are fixed here at
 // configure() — Android's Media3 SimpleCache is built at the right size (it
