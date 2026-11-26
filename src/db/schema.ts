@@ -945,6 +945,8 @@ export const queueSnapshots = sqliteTable('queue_snapshots', {
   positionSec: real('position_sec'),
   /** Denormalized `COUNT(*)` of the songs, so the bookmark list needs no join. */
   trackCount: integer('track_count').notNull(),
+  radioPrimarySeedId: text('radio_primary_seed_id'),
+  radioRemainingRefills: integer('radio_remaining_refills'),
 });
 
 /**

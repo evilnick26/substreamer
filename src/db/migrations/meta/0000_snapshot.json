@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3657e6ab-6655-4842-b310-30c953943b53",
+  "id": "f61325e6-b07e-44c1-9937-77b47f50b3c5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "album_artists": {
@@ -6714,6 +6714,20 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "radio_primary_seed_id": {
+          "name": "radio_primary_seed_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "radio_remaining_refills": {
+          "name": "radio_remaining_refills",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         }
       },

@@ -97,6 +97,141 @@ describe('ensureNormalizedSchema', () => {
     expect(songCredit?.artist_id).toBe('upgrade-artist');
   });
 
+  it('adds Radio Infinite seed columns without losing existing queues or bookmarks', () => {
+    const db = getDb()!;
+    ensureNormalizedSchema(db);
+
+    const snapshotIds = ['live', 'upgrade-bookmark'];
+
+    try {
+      db.runSync(
+        'DELETE FROM queue_snapshots WHERE id IN (?, ?);',
+        snapshotIds,
+      );
+
+      db.execSync(
+        'ALTER TABLE queue_snapshots DROP COLUMN radio_primary_seed_id;',
+      );
+      db.execSync(
+        'ALTER TABLE queue_snapshots DROP COLUMN radio_remaining_refills;',
+      );
+
+      const columnsBefore = db
+        .getAllSync<{ name: string }>('PRAGMA table_info(queue_snapshots);')
+        .map((row) => row.name);
+
+      expect(columnsBefore).not.toContain('radio_primary_seed_id');
+      expect(columnsBefore).not.toContain('radio_remaining_refills');
+
+      db.runSync(
+        'INSERT INTO queue_snapshots ' +
+          '(id, kind, name, created_at, current_index, position_sec, track_count) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?);',
+        ['live', 'live', null, 100, 0, 42, 1],
+      );
+
+      db.runSync(
+        'INSERT INTO queue_snapshots ' +
+          '(id, kind, name, created_at, current_index, position_sec, track_count) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?);',
+        ['upgrade-bookmark', 'bookmark', 'Saved queue', 200, 0, 12, 1],
+      );
+
+      db.runSync(
+        'INSERT INTO queue_snapshot_songs (snapshot_id, pos, song_id, title) ' +
+          'VALUES (?, ?, ?, ?);',
+        ['live', 0, 'live-song', 'Live Song'],
+      );
+
+      db.runSync(
+        'INSERT INTO queue_snapshot_songs (snapshot_id, pos, song_id, title) ' +
+          'VALUES (?, ?, ?, ?);',
+        ['upgrade-bookmark', 0, 'saved-song', 'Saved Song'],
+      );
+
+      const parentsBefore = db.getAllSync<Record<string, unknown>>(
+        'SELECT * FROM queue_snapshots WHERE id IN (?, ?) ORDER BY id;',
+        snapshotIds,
+      );
+
+      const songsBefore = db.getAllSync(
+        'SELECT * FROM queue_snapshot_songs WHERE snapshot_id IN (?, ?) ' +
+          'ORDER BY snapshot_id, pos;',
+        snapshotIds,
+      );
+
+      ensureNormalizedSchema(db);
+      ensureNormalizedSchema(db);
+
+      const columnsAfter = db.getAllSync<{
+        name: string;
+        type: string;
+        notnull: number;
+      }>('PRAGMA table_info(queue_snapshots);');
+
+      expect(columnsAfter).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'radio_primary_seed_id',
+            type: 'TEXT',
+            notnull: 0,
+          }),
+          expect.objectContaining({
+            name: 'radio_remaining_refills',
+            type: 'INTEGER',
+            notnull: 0,
+          }),
+        ]),
+      );
+
+      expect(
+        db.getAllSync(
+          'SELECT * FROM queue_snapshots WHERE id IN (?, ?) ORDER BY id;',
+          snapshotIds,
+        ),
+      ).toEqual(
+        parentsBefore.map((row) => ({
+          ...row,
+          radio_primary_seed_id: null,
+          radio_remaining_refills: null,
+        })),
+      );
+
+      expect(
+        db.getAllSync(
+          'SELECT * FROM queue_snapshot_songs WHERE snapshot_id IN (?, ?) ' +
+            'ORDER BY snapshot_id, pos;',
+          snapshotIds,
+        ),
+      ).toEqual(songsBefore);
+
+      db.runSync(
+        'UPDATE queue_snapshots SET radio_primary_seed_id = ?, ' +
+          'radio_remaining_refills = ? WHERE id = ?;',
+        ['live-song', 3, 'live'],
+      );
+
+      ensureNormalizedSchema(db);
+
+      expect(
+        db.getFirstSync(
+          'SELECT radio_primary_seed_id, radio_remaining_refills ' +
+            'FROM queue_snapshots WHERE id = ?;',
+          ['live'],
+        ),
+      ).toEqual({
+        radio_primary_seed_id: 'live-song',
+        radio_remaining_refills: 3,
+      });
+    } finally {
+      ensureNormalizedSchema(db);
+      db.runSync(
+        'DELETE FROM queue_snapshots WHERE id IN (?, ?);',
+        snapshotIds,
+      );
+    }
+  });
+
   it('creates the keyset + favorites indexes on songs', () => {
     const db = getDb();
     ensureNormalizedSchema(db!);

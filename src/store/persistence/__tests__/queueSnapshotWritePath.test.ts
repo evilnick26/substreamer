@@ -17,6 +17,9 @@ import {
   SNAPSHOT_LIVE_ID,
   updateSnapshotIndex,
   upsertSnapshot,
+  updateLiveRadioSeed,
+  writeLiveSnapshot,
+  writeBookmarkSnapshots,
   type QueueSnapshotMeta,
 } from '../queueSnapshotTable';
 
@@ -437,5 +440,115 @@ describe('no DB handle', () => {
     await expect(deleteSnapshot(SNAPSHOT_LIVE_ID)).resolves.toBeUndefined();
     await expect(listBookmarks()).resolves.toEqual([]);
     expect(readSnapshotSync(SNAPSHOT_LIVE_ID)).toBeNull();
+  });
+});
+
+
+describe('Radio Infinite live snapshots', () => {
+  const seed = { primarySeedId: 'primary', remainingRefills: 4 };
+  const nextSeed = { primarySeedId: 'next-primary', remainingRefills: 2 };
+
+  it('writes the queue, cursor and seed together', async () => {
+    await writeLiveSnapshot(
+      { ...liveMeta, currentIndex: 1, positionSec: 25 },
+      queueOf(3),
+      seed,
+    );
+
+    const snapshot = readSnapshotSync(SNAPSHOT_LIVE_ID);
+    expect(snapshot).toMatchObject({
+      currentIndex: 1,
+      positionSec: 25,
+      trackCount: 3,
+      radioSeed: seed,
+    });
+    expect(snapshot?.tracks.map((t) => t.id)).toEqual(
+      queueOf(3).map((t) => t.id),
+    );
+  });
+
+  it('rolls back the entire snapshot when a song insertion fails', async () => {
+    await writeLiveSnapshot(liveMeta, queueOf(3), seed);
+    const before = readSnapshotSync(SNAPSHOT_LIVE_ID);
+
+    realDb.execSync(
+      "CREATE TEMP TRIGGER reject_live_song BEFORE INSERT ON queue_snapshot_songs " +
+        "WHEN NEW.song_id = 'reject-me' " +
+        "BEGIN SELECT RAISE(ABORT, 'test insertion failure'); END;",
+    );
+
+    try {
+      await writeLiveSnapshot(
+        { ...liveMeta, currentIndex: 1, positionSec: 50 },
+        [song('new-song'), song('reject-me')],
+        nextSeed,
+      );
+
+      expect(readSnapshotSync(SNAPSHOT_LIVE_ID)).toEqual(before);
+      expect(countRows('queue_snapshot_songs', SNAPSHOT_LIVE_ID)).toBe(3);
+    } finally {
+      realDb.execSync('DROP TRIGGER IF EXISTS reject_live_song;');
+    }
+  });
+
+  it('clears seed metadata when replacing the live snapshot without a seed', async () => {
+    await writeLiveSnapshot(liveMeta, queueOf(3), seed);
+    await writeLiveSnapshot(liveMeta, queueOf(2), null);
+
+    expect(readSnapshotSync(SNAPSHOT_LIVE_ID)).toMatchObject({
+      radioSeed: null,
+      trackCount: 2,
+    });
+  });
+
+  it('does not transfer live seed metadata into bookmarks', async () => {
+    await writeLiveSnapshot(liveMeta, queueOf(3), seed);
+
+    await writeBookmarkSnapshots(
+      [{
+        id: 'bm-radio',
+        name: 'Saved queue',
+        createdAt: 1,
+        currentIndex: 0,
+        positionSec: 0,
+        tracks: queueOf(2),
+      }],
+      { replaceExisting: true },
+    );
+
+    expect(readSnapshotSync('bm-radio')?.radioSeed).toBeUndefined();
+    expect(
+      realDb.getFirstSync(
+        'SELECT radio_primary_seed_id, radio_remaining_refills FROM queue_snapshots WHERE id = ?;',
+        ['bm-radio'],
+      ),
+    ).toEqual({
+      radio_primary_seed_id: null,
+      radio_remaining_refills: null,
+    });
+
+    await updateLiveRadioSeed(nextSeed);
+
+    expect(readSnapshotSync(SNAPSHOT_LIVE_ID)?.radioSeed).toEqual(nextSeed);
+    expect(readSnapshotSync('bm-radio')?.tracks).toHaveLength(2);
+
+    await deleteSnapshot(SNAPSHOT_LIVE_ID);
+
+    expect(readSnapshotSync('bm-radio')?.tracks).toHaveLength(2);
+  });
+
+  it('does not create an orphan snapshot during a seed-only update', async () => {
+    await updateLiveRadioSeed(seed);
+    expect(readSnapshotSync(SNAPSHOT_LIVE_ID)).toBeNull();
+  });
+
+  it('degrades gracefully when the database is unavailable', async () => {
+    __setDbForTests(null);
+
+    await expect(
+      writeLiveSnapshot(liveMeta, queueOf(2), seed),
+    ).resolves.toBeUndefined();
+
+    await expect(updateLiveRadioSeed(seed)).resolves.toBeUndefined();
   });
 });

@@ -29,6 +29,7 @@ import {
 } from '../../db/childSnapshot';
 
 import type { Child } from 'subsonic-api';
+import type { RadioInfiniteSeed } from '../../services/radioInfiniteSeed';
 
 /** The single live-queue row's id. Bookmarks carry their own UUIDs. */
 export const SNAPSHOT_LIVE_ID = 'live';
@@ -51,6 +52,7 @@ export interface QueueSnapshotMeta {
 /** A snapshot with its songs rebuilt into real `Child` objects. */
 export interface QueueSnapshot extends QueueSnapshotMeta {
   tracks: Child[];
+  radioSeed?: RadioInfiniteSeed | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +153,56 @@ export async function replaceSnapshotTracks(
   }
 }
 
+/** Write the live queue and its musical context as one atomic snapshot. */
+export async function writeLiveSnapshot(
+  meta: Omit<QueueSnapshotMeta, 'trackCount'>,
+  tracks: readonly Child[],
+  radioSeed: RadioInfiniteSeed | null,
+): Promise<void> {
+  const db = getDb();
+  if (db === null) return;
+
+  try {
+    await db.runAtomicBatchAsync([
+      [SNAPSHOT_UPSERT_SQL, snapshotUpsertParams(meta)],
+      ...snapshotTrackCommands(SNAPSHOT_LIVE_ID, tracks),
+      [
+        'UPDATE queue_snapshots SET radio_primary_seed_id = ?, radio_remaining_refills = ? WHERE id = ?;',
+        [
+          radioSeed?.primarySeedId ?? null,
+          radioSeed?.remainingRefills ?? null,
+          SNAPSHOT_LIVE_ID,
+        ],
+      ],
+    ]);
+  } catch {
+    /* dropped */
+  }
+}
+
+/** Update musical context without rewriting the queue's songs. */
+export async function updateLiveRadioSeed(
+  radioSeed: RadioInfiniteSeed | null,
+): Promise<void> {
+  const db = getDb();
+  if (db === null) return;
+
+  try {
+    await db.runAtomicBatchAsync([
+      [
+        'UPDATE queue_snapshots SET radio_primary_seed_id = ?, radio_remaining_refills = ? WHERE id = ?;',
+        [
+          radioSeed?.primarySeedId ?? null,
+          radioSeed?.remainingRefills ?? null,
+          SNAPSHOT_LIVE_ID,
+        ],
+      ],
+    ]);
+  } catch {
+    /* dropped */
+  }
+}
+
 /** A bookmark as {@link writeBookmarkSnapshots} takes it. `kind` and `track_count`
  *  are the table's own, so they are not part of the input. */
 export interface BookmarkSnapshotInput {
@@ -206,10 +258,16 @@ export async function updateSnapshotIndex(
   const db = getDb();
   if (db === null) return;
   try {
-    await db.runAsync(
+    const command: BatchCommand = [
       'UPDATE queue_snapshots SET current_index = ?, position_sec = ? WHERE id = ?;',
       [currentIndex, positionSec, snapshotId],
-    );
+    ];
+
+    if (snapshotId === SNAPSHOT_LIVE_ID) {
+      await db.runAtomicBatchAsync([command]);
+    } else {
+      await db.runAsync(command[0], command[1]);
+    }
   } catch {
     /* dropped */
   }
@@ -220,7 +278,16 @@ export async function deleteSnapshot(snapshotId: string): Promise<void> {
   const db = getDb();
   if (db === null) return;
   try {
-    await db.runAsync('DELETE FROM queue_snapshots WHERE id = ?;', [snapshotId]);
+    const command: BatchCommand = [
+      'DELETE FROM queue_snapshots WHERE id = ?;',
+      [snapshotId],
+    ];
+
+    if (snapshotId === SNAPSHOT_LIVE_ID) {
+      await db.runAtomicBatchAsync([command]);
+    } else {
+      await db.runAsync(command[0], command[1]);
+    }
   } catch {
     /* dropped */
   }
@@ -238,6 +305,8 @@ interface SnapshotRow {
   current_index: number;
   position_sec: number | null;
   track_count: number;
+  radio_primary_seed_id: string | null;
+  radio_remaining_refills: number | null;
 }
 
 const metaFromRow = (r: SnapshotRow): QueueSnapshotMeta => ({
@@ -251,7 +320,7 @@ const metaFromRow = (r: SnapshotRow): QueueSnapshotMeta => ({
 });
 
 const META_SELECT =
-  'id, kind, name, created_at, current_index, position_sec, track_count FROM queue_snapshots';
+  'id, kind, name, created_at, current_index, position_sec, track_count, radio_primary_seed_id, radio_remaining_refills FROM queue_snapshots';
 
 /** The array tables key a song by `(snapshot_id, song_pos)`; the shared reader groups
  *  on those two columns. ONE query per table whatever the snapshot count — a per-song
@@ -291,7 +360,20 @@ export function readSnapshotSync(snapshotId: string): QueueSnapshot | null {
         arrays.get(childSnapshotArrayKey([snapshotId, raw.pos as number])) ?? NO_ARRAYS,
       ),
     );
-    return { ...metaFromRow(meta), tracks };
+    const snapshot: QueueSnapshot = { ...metaFromRow(meta), tracks };
+
+    if (snapshotId === SNAPSHOT_LIVE_ID) {
+      snapshot.radioSeed =
+        meta.radio_primary_seed_id !== null &&
+        meta.radio_remaining_refills !== null
+          ? {
+              primarySeedId: meta.radio_primary_seed_id,
+              remainingRefills: meta.radio_remaining_refills,
+            }
+          : null;
+    }
+
+    return snapshot;
   } catch {
     return null;
   }

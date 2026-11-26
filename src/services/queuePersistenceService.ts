@@ -12,12 +12,16 @@
 import {
   deleteSnapshot,
   readSnapshotSync,
-  replaceSnapshotTracks,
   updateSnapshotIndex,
-  upsertSnapshot,
+  updateLiveRadioSeed,
+  writeLiveSnapshot,
   SNAPSHOT_LIVE_ID,
 } from '../store/persistence/queueSnapshotTable';
 import { type Child } from './subsonicService';
+import {
+  isValidRadioInfiniteSeed,
+  type RadioInfiniteSeed,
+} from './radioInfiniteSeed';
 
 /** Throttle window for resume-position writes. */
 const PERSIST_INTERVAL_MS = 10_000;
@@ -47,6 +51,7 @@ interface PersistedPosition {
 /* ------------------------------------------------------------------ */
 
 let liveQueue: Child[] = [];
+let liveRadioSeed: RadioInfiniteSeed | null = null;
 let liveIndex = 0;
 let livePosition = 0;
 let livePositionTrackId: string | null = null;
@@ -66,6 +71,9 @@ function ensureLoaded(): void {
   const snapshot = readSnapshotSync(SNAPSHOT_LIVE_ID);
   if (snapshot === null || snapshot.tracks.length === 0) return;
   liveQueue = snapshot.tracks;
+  liveRadioSeed = isValidRadioInfiniteSeed(snapshot.radioSeed)
+    ? snapshot.radioSeed
+    : null;
   liveIndex = Math.min(Math.max(0, snapshot.currentIndex), snapshot.tracks.length - 1);
   livePosition = snapshot.positionSec ?? 0;
   livePositionTrackId = liveQueue[liveIndex]?.id ?? null;
@@ -95,7 +103,7 @@ function clearQueueTimer(): void {
 }
 
 /** Write the parent row then the songs — the songs FK to the parent, so the upsert
- *  has to land first. Each op swallows its own failures. */
+ *  has to land first. Both are written in the same atomic batch. */
 function flushQueueWrite(): void {
   clearQueueTimer();
   if (!queueDirty) return;
@@ -109,10 +117,7 @@ function flushQueueWrite(): void {
     currentIndex: liveIndex,
     positionSec: livePosition,
   };
-  void (async () => {
-    await upsertSnapshot(meta);
-    await replaceSnapshotTracks(SNAPSHOT_LIVE_ID, tracks);
-  })();
+  void writeLiveSnapshot(meta, tracks, liveRadioSeed);
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +128,9 @@ function flushQueueWrite(): void {
  *  every song row, so it is debounced; readers see the new queue immediately. */
 export function persistQueue(queue: Child[], currentTrackIndex: number): void {
   setCursor(queue, currentTrackIndex);
+  if (queue.length === 0) {
+    liveRadioSeed = null;
+  }
   queueDirty = true;
   clearQueueTimer();
   queueTimer = setTimeout(flushQueueWrite, QUEUE_DEBOUNCE_MS);
@@ -138,6 +146,19 @@ export function persistCurrentIndex(currentTrackIndex: number): void {
   setCursor(liveQueue, currentTrackIndex);
   if (queueDirty) return;
   void updateSnapshotIndex(SNAPSHOT_LIVE_ID, liveIndex, livePosition);
+}
+
+/** Persist musical context without rewriting unchanged song rows. */
+export function persistRadioSeed(seed: RadioInfiniteSeed | null): void {
+  ensureLoaded();
+  liveRadioSeed =
+    liveQueue.length > 0 && isValidRadioInfiniteSeed(seed)
+      ? { ...seed }
+      : null;
+
+  if (!queueDirty) {
+    void updateLiveRadioSeed(liveRadioSeed);
+  }
 }
 
 /** Force the pending queue change out now (e.g. on app background). */
@@ -192,6 +213,7 @@ export function clearPersistedQueue(): void {
   queueDirty = false;
   liveLoaded = true;
   liveQueue = [];
+  liveRadioSeed = null;
   liveIndex = 0;
   livePosition = 0;
   livePositionTrackId = null;
@@ -212,6 +234,12 @@ export function getPersistedQueue(): PersistedQueue | null {
   ensureLoaded();
   if (liveQueue.length === 0) return null;
   return { queue: liveQueue, currentTrackIndex: liveIndex };
+}
+
+/** The musical context associated with the restored live queue. */
+export function getPersistedRadioSeed(): RadioInfiniteSeed | null {
+  ensureLoaded();
+  return liveRadioSeed === null ? null : { ...liveRadioSeed };
 }
 
 /** The resume position and the track it was measured on. */

@@ -22,9 +22,11 @@ import {
   flushPosition,
   getPersistedPosition,
   getPersistedQueue,
+  getPersistedRadioSeed,
   persistCurrentIndex,
   persistPositionIfDue,
   persistQueue,
+  persistRadioSeed,
 } from '../queuePersistenceService';
 
 const handle = getDb();
@@ -160,11 +162,13 @@ afterAll(() => {
   jest.useRealTimers();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   __setDbForTests(realDb);
+  await drain();
   // Resets the module: the pending write + its timer, the position throttle, and the
   // stored row. ON DELETE CASCADE clears the songs and their five array tables.
   clearPersistedQueue();
+  await drain();
   realDb.runSync('DELETE FROM queue_snapshots;');
 });
 
@@ -577,5 +581,251 @@ describe('no DB handle', () => {
 
     clearPersistedQueue();
     expect(getPersistedQueue()).toBeNull();
+  });
+});
+
+
+describe('Radio Infinite seed persistence', () => {
+  const seed = { primarySeedId: 'primary', remainingRefills: 4 };
+  const nextSeed = { primarySeedId: 'next-primary', remainingRefills: 2 };
+
+  it.each([1, 2, 3, 4, 5])(
+    'restores the exact primary and remaining lifespan of %i',
+    async (remainingRefills) => {
+      const saved = { ...seed, remainingRefills };
+      persistQueue(queueOf(3), 1);
+      persistRadioSeed(saved);
+      await flushDebounce();
+
+      const fresh = coldStart();
+      expect(fresh.getPersistedRadioSeed()).toEqual(saved);
+      expect(fresh.getPersistedQueue()?.currentTrackIndex).toBe(1);
+    },
+  );
+
+  it('restores ordinary playback without a primary seed', async () => {
+    persistQueue(queueOf(3), 0);
+    await flushDebounce();
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedQueue()?.queue).toHaveLength(3);
+    expect(fresh.getPersistedRadioSeed()).toBeNull();
+  });
+
+  it('returns no seed when no queue is stored', () => {
+    expect(coldStart().getPersistedRadioSeed()).toBeNull();
+  });
+
+  it('retains a primary that is no longer present in the queue', async () => {
+    persistQueue([song('primary'), song('other')], 0);
+    persistRadioSeed(seed);
+    await flushDebounce();
+
+    persistQueue([song('other')], 0);
+    await flushDebounce();
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedQueue()?.queue.map((t) => t.id)).toEqual(['other']);
+    expect(fresh.getPersistedRadioSeed()).toEqual(seed);
+  });
+
+  it.each([
+    [null, 3],
+    ['primary', null],
+    ['', 3],
+    ['   ', 3],
+    ['primary', 0],
+    ['primary', 6],
+    ['primary', 2.5],
+    ['primary', 'invalid'],
+  ])('rejects malformed stored seed metadata (%s, %s)', async (id, count) => {
+    persistQueue(queueOf(2), 0);
+    await flushDebounce();
+
+    realDb.runSync(
+      'UPDATE queue_snapshots SET radio_primary_seed_id = ?, radio_remaining_refills = ? WHERE id = ?;',
+      [id, count, 'live'],
+    );
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedRadioSeed()).toBeNull();
+    expect(fresh.getPersistedQueue()?.queue).toHaveLength(2);
+  });
+
+  it('updates the seed using one statement without rewriting songs', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    await flushDebounce();
+
+    const songsBefore = realDb.getAllSync(
+      'SELECT * FROM queue_snapshot_songs ORDER BY pos;',
+    );
+    const { db, sql } = countingDb();
+    __setDbForTests(db);
+
+    persistRadioSeed(nextSeed);
+    await drain();
+
+    expect(sql).toHaveLength(1);
+    expect(sql[0]).toContain('UPDATE queue_snapshots');
+    expect(sql[0]).not.toContain('queue_snapshot_songs');
+    expect(coldStart().getPersistedRadioSeed()).toEqual(nextSeed);
+    expect(
+      realDb.getAllSync('SELECT * FROM queue_snapshot_songs ORDER BY pos;'),
+    ).toEqual(songsBefore);
+  });
+
+  it('folds the latest seed into a pending queue write', async () => {
+    const { db, sql } = countingDb();
+    __setDbForTests(db);
+
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    persistRadioSeed(nextSeed);
+
+    expect(sql).toHaveLength(0);
+    expect(getPersistedRadioSeed()).toEqual(nextSeed);
+
+    await flushDebounce();
+
+    expect(coldStart().getPersistedRadioSeed()).toEqual(nextSeed);
+  });
+
+  it('clears the seed without clearing the queue', async () => {
+    persistQueue(queueOf(3), 1);
+    persistRadioSeed(seed);
+    await flushDebounce();
+
+    persistRadioSeed(null);
+    await drain();
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedRadioSeed()).toBeNull();
+    expect(fresh.getPersistedQueue()?.queue).toHaveLength(3);
+    expect(fresh.getPersistedQueue()?.currentTrackIndex).toBe(1);
+  });
+
+  it('does not retain a seed without a queue', async () => {
+    persistRadioSeed(seed);
+    await drain();
+
+    expect(getPersistedRadioSeed()).toBeNull();
+    expect(countOf('queue_snapshots')).toBe(0);
+  });
+
+  it('discards the previous seed when the queue becomes empty', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    await flushDebounce();
+
+    persistQueue([], 0);
+
+    expect(getPersistedRadioSeed()).toBeNull();
+
+    await flushDebounce();
+
+    expect(coldStart().getPersistedRadioSeed()).toBeNull();
+
+    persistQueue(queueOf(2), 0);
+    await flushDebounce();
+
+    expect(coldStart().getPersistedRadioSeed()).toBeNull();
+  });
+
+  it('does not expose mutable internal seed state', () => {
+    const input = { ...seed };
+    persistQueue(queueOf(2), 0);
+    persistRadioSeed(input);
+
+    input.remainingRefills = 1;
+    expect(getPersistedRadioSeed()).toEqual(seed);
+
+    const returned = getPersistedRadioSeed()!;
+    const mutable = returned as { remainingRefills: number };
+    mutable.remainingRefills = 1;
+
+    expect(getPersistedRadioSeed()).toEqual(seed);
+    clearPersistedQueue();
+  });
+
+  it('preserves a seed update submitted after a full snapshot write', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    flushPersistedQueue();
+
+    // Deliberately submit without waiting for the snapshot batch.
+    persistRadioSeed(nextSeed);
+    await drain();
+
+    expect(coldStart().getPersistedRadioSeed()).toEqual(nextSeed);
+  });
+
+  it('preserves cursor and position updates submitted after a snapshot', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    flushPersistedQueue();
+
+    persistCurrentIndex(2);
+    flushPosition(37, 's-02');
+    await drain();
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedQueue()?.currentTrackIndex).toBe(2);
+    expect(fresh.getPersistedPosition()).toEqual({
+      position: 37,
+      trackId: 's-02',
+    });
+    expect(fresh.getPersistedRadioSeed()).toEqual(seed);
+  });
+
+  it('does not resurrect a queue cleared after a snapshot was submitted', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    flushPersistedQueue();
+
+    clearPersistedQueue();
+    await drain();
+
+    expect(countOf('queue_snapshots')).toBe(0);
+    expect(countOf('queue_snapshot_songs')).toBe(0);
+    expect(getPersistedRadioSeed()).toBeNull();
+    expect(coldStart().getPersistedRadioSeed()).toBeNull();
+    expect(coldStart().getPersistedQueue()).toBeNull();
+  });
+
+  it('retains only the new session after overlapping write, clear and replacement', async () => {
+    persistQueue(queueOf(3), 0);
+    persistRadioSeed(seed);
+    flushPersistedQueue();
+
+    clearPersistedQueue();
+
+    persistQueue([song('replacement')], 0);
+    persistRadioSeed(nextSeed);
+    flushPersistedQueue();
+
+    await drain();
+
+    const fresh = coldStart();
+    expect(fresh.getPersistedQueue()?.queue.map((t) => t.id)).toEqual([
+      'replacement',
+    ]);
+    expect(fresh.getPersistedRadioSeed()).toEqual(nextSeed);
+    expect(countOf('queue_snapshots')).toBe(1);
+    expect(countOf('queue_snapshot_songs')).toBe(1);
+  });
+
+  it('retains seed state in memory when the database is unavailable', async () => {
+    __setDbForTests(null);
+
+    persistQueue(queueOf(2), 0);
+    persistRadioSeed(seed);
+    await flushDebounce();
+
+    persistRadioSeed(nextSeed);
+    expect(getPersistedRadioSeed()).toEqual(nextSeed);
+
+    clearPersistedQueue();
+    expect(getPersistedRadioSeed()).toBeNull();
   });
 });

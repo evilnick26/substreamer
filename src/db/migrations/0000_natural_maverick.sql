@@ -994,7 +994,9 @@ CREATE TABLE `queue_snapshots` (
 	`created_at` integer NOT NULL,
 	`current_index` integer NOT NULL,
 	`position_sec` real,
-	`track_count` integer NOT NULL
+	`track_count` integer NOT NULL,
+	`radio_primary_seed_id` text,
+	`radio_remaining_refills` integer
 );
 --> statement-breakpoint
 CREATE TABLE `scrobble_album_artists` (
