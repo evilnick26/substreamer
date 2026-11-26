@@ -198,3 +198,130 @@ describe('Radio Infinite recommendation filtering (#077)', () => {
     });
   });
 });
+
+describe('configurable duration eligibility (#95)', () => {
+  it('honours custom inclusive duration boundaries', () => {
+    const candidates = [
+      song('too-short', { duration: 119 }),
+      song('minimum', { duration: 120 }),
+      song('middle', { duration: 240 }),
+      song('maximum', { duration: 360 }),
+      song('too-long', { duration: 361 }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 120,
+      maxDuration: 360,
+    }).map(s => s.id)).toEqual([
+      'minimum', 'middle', 'maximum',
+    ]);
+  });
+
+  it('supports equal minimum and maximum boundaries', () => {
+    const candidates = [
+      song('short', { duration: 179 }),
+      song('exact', { duration: 180 }),
+      song('long', { duration: 181 }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 180,
+      maxDuration: 180,
+    }).map(s => s.id)).toEqual(['exact']);
+  });
+
+  it('supports no minimum duration restriction', () => {
+    const candidates = [
+      song('very-short', { duration: 1 }),
+      song('short', { duration: 15 }),
+      song('normal', { duration: 180 }),
+      song('long', { duration: 481 }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 0,
+      maxDuration: 480,
+    }).map(s => s.id)).toEqual([
+      'very-short', 'short', 'normal',
+    ]);
+  });
+
+  it('supports no maximum duration restriction', () => {
+    const candidates = [
+      song('short', { duration: 89 }),
+      song('normal', { duration: 180 }),
+      song('long', { duration: 1200 }),
+      song('epic', { duration: 5400 }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 90,
+      maxDuration: null,
+    }).map(s => s.id)).toEqual([
+      'normal', 'long', 'epic',
+    ]);
+  });
+
+  it('rejects invalid durations even with both limits unrestricted', () => {
+    const candidates = [
+      song('missing', { duration: undefined }),
+      song('zero', { duration: 0 }),
+      song('negative', { duration: -1 }),
+      song('nan', { duration: NaN }),
+      song('infinite', { duration: Infinity }),
+      song('negative-infinite', { duration: -Infinity }),
+      song('short', { duration: 1 }),
+      song('long', { duration: 5400 }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 0,
+      maxDuration: null,
+    }).map(s => s.id)).toEqual(['short', 'long']);
+  });
+
+  it('preserves deduplication and adjacency without duration restrictions', () => {
+    const queue = [song('tail', {
+      artist: 'Pulp',
+      title: 'Common People',
+    })];
+
+    const candidates = [
+      song('tail'),
+      song('duplicate', {
+        artist: 'Pulp',
+        title: 'Common People',
+      }),
+      song('adjacent', {
+        artist: 'Pulp',
+        duration: 15,
+      }),
+      song('short', {
+        artist: 'Blur',
+        duration: 15,
+      }),
+      song('long', {
+        artist: 'Suede',
+        duration: 5400,
+      }),
+    ];
+
+    expect(filterRadioInfiniteRecommendations(queue, candidates, {
+      minDuration: 0,
+      maxDuration: null,
+    }).map(s => s.id)).toEqual(['short', 'long']);
+  });
+
+  it('retains the ten-track cap with unrestricted durations', () => {
+    const candidates = Array.from({ length: 20 }, (_, i) =>
+      song(`candidate-${i}`, { duration: i + 1 }),
+    );
+
+    expect(filterRadioInfiniteRecommendations([], candidates, {
+      minDuration: 0,
+      maxDuration: null,
+    }).map(s => s.id)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `candidate-${i}`),
+    );
+  });
+});

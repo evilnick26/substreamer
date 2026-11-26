@@ -3,6 +3,11 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { kvStorage } from './persistence';
+import {
+  DEFAULT_RADIO_MIN_DURATION,
+  DEFAULT_RADIO_MAX_DURATION,
+  isValidRadioDurationPolicy,
+} from '../services/radioInfiniteDuration';
 import { type StreamFormat, type MaxBitRate } from '../types/audio';
 
 export type { StreamFormat, MaxBitRate } from '../types/audio';
@@ -144,6 +149,10 @@ export interface PlaybackSettingsState {
   repeatMode: RepeatModeSetting;
   /** Repeat mode used when Radio Infinite is interrupted by Offline Mode. */
   radioOfflineFallback: 'all' | 'off';
+  /** Minimum RI recommendation duration in seconds; 0 = unrestricted. */
+  radioMinDuration: number;
+  /** Maximum RI recommendation duration in seconds; null = unrestricted. */
+  radioMaxDuration: number | null;
   /** Transient epoch: invalidates asynchronous work across repeat-mode transitions. */
   repeatGeneration: number;
   /** Playback speed multiplier (1 = normal). */
@@ -191,6 +200,9 @@ export interface PlaybackSettingsState {
   setEstimateContentLength: (enabled: boolean) => void;
   setRepeatMode: (mode: RepeatModeSetting) => void;
   setRadioOfflineFallback: (mode: 'all' | 'off') => void;
+  setRadioMinDuration: (seconds: number) => void;
+  setRadioMaxDuration: (seconds: number | null) => void;
+  resetRadioDurationLimits: () => void;
   setPlaybackRate: (rate: PlaybackRate) => void;
   setPitchCorrection: (mode: PitchCorrection) => void;
   setDownloadMaxBitRate: (bitRate: MaxBitRate) => void;
@@ -237,6 +249,8 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
       estimateContentLength: Platform.OS === 'android',
       repeatMode: 'off',
       radioOfflineFallback: 'all',
+      radioMinDuration: DEFAULT_RADIO_MIN_DURATION,
+      radioMaxDuration: DEFAULT_RADIO_MAX_DURATION,
       repeatGeneration: 0,
       playbackRate: 1,
       pitchCorrection: 'none',
@@ -265,6 +279,20 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
           : state.repeatGeneration + 1,
       })),
       setRadioOfflineFallback: (radioOfflineFallback) => set({ radioOfflineFallback }),
+      setRadioMinDuration: (radioMinDuration) => set((state) =>
+        isValidRadioDurationPolicy(radioMinDuration, state.radioMaxDuration)
+          ? { radioMinDuration }
+          : state,
+      ),
+      setRadioMaxDuration: (radioMaxDuration) => set((state) =>
+        isValidRadioDurationPolicy(state.radioMinDuration, radioMaxDuration)
+          ? { radioMaxDuration }
+          : state,
+      ),
+      resetRadioDurationLimits: () => set({
+        radioMinDuration: DEFAULT_RADIO_MIN_DURATION,
+        radioMaxDuration: DEFAULT_RADIO_MAX_DURATION,
+      }),
       setPlaybackRate: (playbackRate) => set({ playbackRate }),
       setPitchCorrection: (pitchCorrection) => set({ pitchCorrection }),
       setDownloadMaxBitRate: (downloadMaxBitRate) => set({ downloadMaxBitRate }),
@@ -287,12 +315,28 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
       version: 1,
       migrate: migratePlaybackSettings,
       storage: createJSONStorage(() => kvStorage),
+      merge: (persisted, current) => {
+        const merged = {
+          ...current,
+          ...(persisted as Partial<PlaybackSettingsState>),
+        };
+        if (!isValidRadioDurationPolicy(
+          merged.radioMinDuration,
+          merged.radioMaxDuration,
+        )) {
+          merged.radioMinDuration = DEFAULT_RADIO_MIN_DURATION;
+          merged.radioMaxDuration = DEFAULT_RADIO_MAX_DURATION;
+        }
+        return merged;
+      },
       partialize: (state) => ({
         maxBitRate: state.maxBitRate,
         streamFormat: state.streamFormat,
         estimateContentLength: state.estimateContentLength,
         repeatMode: state.repeatMode,
         radioOfflineFallback: state.radioOfflineFallback,
+        radioMinDuration: state.radioMinDuration,
+        radioMaxDuration: state.radioMaxDuration,
         playbackRate: state.playbackRate,
         pitchCorrection: state.pitchCorrection,
         downloadMaxBitRate: state.downloadMaxBitRate,

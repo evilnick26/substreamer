@@ -5,8 +5,11 @@ import {
   hasAdjacentArtistOrAlbum,
 } from './recommendationFilters';
 
-const MIN_RADIO_DURATION_SECONDS = 90;
-const MAX_RADIO_DURATION_SECONDS = 480;
+import {
+  DEFAULT_RADIO_DURATION_POLICY,
+  isRadioDurationEligible,
+  type RadioDurationPolicy,
+} from './radioInfiniteDuration';
 
 /**
  * Filter Radio Infinite recommendations without reordering them.
@@ -15,6 +18,7 @@ const MAX_RADIO_DURATION_SECONDS = 480;
 export function filterRadioInfiniteRecommendations(
   queue: readonly Child[],
   candidates: readonly Child[],
+  durationPolicy: Readonly<RadioDurationPolicy> = DEFAULT_RADIO_DURATION_POLICY,
 ): Child[] {
   const ids = new Set(queue.map((song) => song.id));
   const songs = new Set(
@@ -26,14 +30,7 @@ export function filterRadioInfiniteRecommendations(
   let previous = queue[queue.length - 1];
 
   for (const candidate of candidates) {
-    const duration = candidate.duration;
-
-    if (
-      duration == null ||
-      !Number.isFinite(duration) ||
-      duration < MIN_RADIO_DURATION_SECONDS ||
-      duration > MAX_RADIO_DURATION_SECONDS
-    ) {
+    if (!isRadioDurationEligible(candidate.duration, durationPolicy)) {
       continue;
     }
 

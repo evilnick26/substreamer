@@ -22,6 +22,10 @@ import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { applyLookaheadCacheConfig, applyPlaybackMode, applyReplayGain, updateRemoteCapabilities } from '../services/playerService';
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
+import {
+  DEFAULT_RADIO_MIN_DURATION,
+  DEFAULT_RADIO_MAX_DURATION,
+} from '../services/radioInfiniteDuration';
 import { settingsStyles } from '../styles/settingsStyles';
 
 export function SettingsPlaybackScreen() {
@@ -49,6 +53,8 @@ export function SettingsPlaybackScreen() {
   const crossfadeDurationMs = playbackSettingsStore((s) => s.crossfadeDurationMs);
   const replayGainMode = playbackSettingsStore((s) => s.replayGainMode);
   const radioOfflineFallback = playbackSettingsStore((s) => s.radioOfflineFallback);
+  const radioMinDuration = playbackSettingsStore((s) => s.radioMinDuration);
+  const radioMaxDuration = playbackSettingsStore((s) => s.radioMaxDuration);
 
   const isDefault =
     maxBitRate === null &&
@@ -66,7 +72,9 @@ export function SettingsPlaybackScreen() {
     playbackMode === 'gapless' &&
     crossfadeDurationMs === 5000 &&
     replayGainMode === 'off' &&
-    radioOfflineFallback === 'all';
+    radioOfflineFallback === 'all' &&
+    radioMinDuration === DEFAULT_RADIO_MIN_DURATION &&
+    radioMaxDuration === DEFAULT_RADIO_MAX_DURATION;
 
   const handleResetDefaults = useCallback(() => {
     confirm({
@@ -92,6 +100,7 @@ export function SettingsPlaybackScreen() {
         s.setCrossfadeDurationMs(5000);
         s.setReplayGainMode('off');
         s.setRadioOfflineFallback('all');
+        s.resetRadioDurationLimits();
         updateRemoteCapabilities();
         void applyLookaheadCacheConfig();
         void applyPlaybackMode();

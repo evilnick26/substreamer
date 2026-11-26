@@ -1,6 +1,7 @@
 jest.mock('../persistence/kvStorage', () => require('../persistence/__mocks__/kvStorage'));
 
 import { FORMAT_PRESETS, migratePlaybackSettings, playbackSettingsStore } from '../playbackSettingsStore';
+import { kvStorageSync } from '../persistence/kvStorage';
 
 beforeEach(() => {
   playbackSettingsStore.setState({
@@ -9,6 +10,8 @@ beforeEach(() => {
     estimateContentLength: false,
     repeatMode: 'off',
     radioOfflineFallback: 'all',
+    radioMinDuration: 90,
+    radioMaxDuration: 480,
     playbackRate: 1,
     downloadMaxBitRate: 320,
     downloadFormat: 'mp3',
@@ -152,6 +155,135 @@ describe('playbackSettingsStore', () => {
 
     it('passes through a null/invalid blob unchanged', () => {
       expect(migratePlaybackSettings(null, 0)).toBeNull();
+    });
+  });
+
+  describe('Radio Infinite duration settings (#95)', () => {
+    const key = 'substreamer-playback-settings';
+
+    const limits = () => {
+      const state = playbackSettingsStore.getState();
+      return [state.radioMinDuration, state.radioMaxDuration];
+    };
+
+    it('defaults to 90–480 seconds', () => {
+      const state = playbackSettingsStore.getInitialState();
+      expect(state.radioMinDuration).toBe(90);
+      expect(state.radioMaxDuration).toBe(480);
+    });
+
+    it('accepts valid changes to both boundaries', () => {
+      playbackSettingsStore.getState().setRadioMinDuration(30);
+      playbackSettingsStore.getState().setRadioMaxDuration(900);
+      expect(limits()).toEqual([30, 900]);
+    });
+
+    it('rejects a maximum below the current minimum', () => {
+      playbackSettingsStore.getState().setRadioMaxDuration(60);
+      expect(limits()).toEqual([90, 480]);
+    });
+
+    it('rejects a minimum above the current maximum', () => {
+      playbackSettingsStore.getState().setRadioMaxDuration(120);
+      playbackSettingsStore.getState().setRadioMinDuration(180);
+      expect(limits()).toEqual([90, 120]);
+    });
+
+    it('accepts a minimum equal to the maximum', () => {
+      playbackSettingsStore.getState().setRadioMaxDuration(120);
+      playbackSettingsStore.getState().setRadioMinDuration(120);
+      expect(limits()).toEqual([120, 120]);
+    });
+
+    it('accepts a maximum equal to the minimum', () => {
+      playbackSettingsStore.getState().setRadioMinDuration(180);
+      playbackSettingsStore.getState().setRadioMaxDuration(180);
+      expect(limits()).toEqual([180, 180]);
+    });
+
+    it.each([-1, NaN, Infinity, -Infinity, 1.5])(
+      'rejects invalid minimum %s',
+      (value) => {
+        playbackSettingsStore.getState().setRadioMinDuration(value);
+        expect(limits()).toEqual([90, 480]);
+      },
+    );
+
+    it.each([0, -1, NaN, Infinity, -Infinity, 90.5])(
+      'rejects invalid maximum %s',
+      (value) => {
+        playbackSettingsStore.getState().setRadioMaxDuration(value);
+        expect(limits()).toEqual([90, 480]);
+      },
+    );
+
+    it('supports unrestricted duration limits', () => {
+      playbackSettingsStore.getState().setRadioMinDuration(0);
+      playbackSettingsStore.getState().setRadioMaxDuration(null);
+      expect(limits()).toEqual([0, null]);
+    });
+
+    it('resets both limits atomically', () => {
+      playbackSettingsStore.getState().setRadioMaxDuration(null);
+      playbackSettingsStore.getState().setRadioMinDuration(600);
+      playbackSettingsStore.getState().resetRadioDurationLimits();
+      expect(limits()).toEqual([90, 480]);
+    });
+
+    it('persists custom values and the unlimited sentinel', async () => {
+      playbackSettingsStore.getState().setRadioMinDuration(30);
+      playbackSettingsStore.getState().setRadioMaxDuration(null);
+
+      const saved = await kvStorageSync.getItem(key);
+      expect(saved).not.toBeNull();
+      expect(JSON.parse(saved!).state).toMatchObject({
+        radioMinDuration: 30,
+        radioMaxDuration: null,
+      });
+
+      playbackSettingsStore.getState().resetRadioDurationLimits();
+      await kvStorageSync.setItem(key, saved!);
+      await playbackSettingsStore.persist.rehydrate();
+
+      expect(limits()).toEqual([30, null]);
+    });
+
+    it('uses defaults when hydrating an older settings blob', async () => {
+      playbackSettingsStore.setState(
+        playbackSettingsStore.getInitialState(),
+        true,
+      );
+      await kvStorageSync.setItem(key, JSON.stringify({
+        version: 1,
+        state: { radioOfflineFallback: 'off' },
+      }));
+
+      await playbackSettingsStore.persist.rehydrate();
+
+      expect(limits()).toEqual([90, 480]);
+      expect(playbackSettingsStore.getState().radioOfflineFallback).toBe('off');
+    });
+
+    it.each([
+      [300, 120],
+      [-1, 480],
+      [90, 0],
+      ['90', 480],
+      [90, '480'],
+    ])('repairs invalid persisted limits %s / %s', async (min, max) => {
+      await kvStorageSync.setItem(key, JSON.stringify({
+        version: 1,
+        state: {
+          radioMinDuration: min,
+          radioMaxDuration: max,
+          radioOfflineFallback: 'off',
+        },
+      }));
+
+      await playbackSettingsStore.persist.rehydrate();
+
+      expect(limits()).toEqual([90, 480]);
+      expect(playbackSettingsStore.getState().radioOfflineFallback).toBe('off');
     });
   });
 

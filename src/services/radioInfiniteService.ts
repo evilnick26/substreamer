@@ -88,7 +88,17 @@ export async function refillRadioInfinite(): Promise<number> {
 
     // IDs were cheaply deduplicated before getSong(); now apply the metadata
     // rules against the queue and within this batch, preserving bridge order.
-    const eligible = filterRadioInfiniteRecommendations(originalQueue, resolved);
+    const { radioMinDuration, radioMaxDuration } =
+      playbackSettingsStore.getState();
+
+    const eligible = filterRadioInfiniteRecommendations(
+      originalQueue,
+      resolved,
+      {
+        minDuration: radioMinDuration,
+        maxDuration: radioMaxDuration,
+      },
+    );
     if (!eligible.length) return 0;
 
     const beforeAppend = playerStore.getState().queue.length;

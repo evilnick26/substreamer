@@ -7,6 +7,8 @@ let mockQueue: Child[] = [];
 let mockIndex = 0;
 let mockMode = 'radio';
 let mockGeneration = 0;
+let mockMinDuration = 90;
+let mockMaxDuration: number | null = 480;
 let mockOffline = false;
 let mockAuth = {
   isLoggedIn: true,
@@ -27,7 +29,14 @@ jest.mock('../subsonicService', () => ({ getApi: () => ({ getSong: mockGetSong }
 jest.mock('../../store/authStore', () => ({ authStore: { getState: () => mockAuth } }));
 jest.mock('../../store/offlineModeStore', () => ({ offlineModeStore: { getState: () => ({ offlineMode: mockOffline }) } }));
 jest.mock('../../store/playbackSettingsStore', () => ({
-  playbackSettingsStore: { getState: () => ({ repeatMode: mockMode, repeatGeneration: mockGeneration }) },
+  playbackSettingsStore: {
+    getState: () => ({
+      repeatMode: mockMode,
+      repeatGeneration: mockGeneration,
+      radioMinDuration: mockMinDuration,
+      radioMaxDuration: mockMaxDuration,
+    }),
+  },
 }));
 jest.mock('../../store/playerStore', () => ({
   playerStore: { getState: () => ({ queue: mockQueue, currentTrackIndex: mockIndex }) },
@@ -57,6 +66,8 @@ beforeEach(() => {
   mockIndex = 1;
   mockMode = 'radio';
   mockGeneration = 0;
+  mockMinDuration = 90;
+  mockMaxDuration = 480;
   mockOffline = false;
   mockAuth = {
     isLoggedIn: true, username: 'tester', password: 'secret',
@@ -198,4 +209,114 @@ test('serialises concurrent refills', async () => {
   release();
   await expect(first).resolves.toBe(2);
   expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+});
+
+describe('configurable duration policy integration (#95)', () => {
+  test('applies configured duration boundaries before appending', async () => {
+    mockMinDuration = 120;
+    mockMaxDuration = 360;
+
+    const durations: Record<string, number> = {
+      short: 119,
+      minimum: 120,
+      maximum: 360,
+      long: 361,
+    };
+
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        song_ids: ['short', 'minimum', 'maximum', 'long'],
+      }),
+    })) as unknown as typeof fetch;
+
+    mockGetSong.mockImplementation(async ({ id }: { id: string }) => ({
+      status: 'ok',
+      song: {
+        ...song(id, `Artist ${id}`, `Title ${id}`),
+        duration: durations[id],
+      },
+    }));
+
+    await expect(refillRadioInfinite()).resolves.toBe(2);
+
+    expect(mockAddToQueue).toHaveBeenCalledTimes(1);
+    expect(mockAddToQueue.mock.calls[0][0].map((s: Child) => s.id))
+      .toEqual(['minimum', 'maximum']);
+  });
+
+  test('supports unrestricted duration settings', async () => {
+    mockMinDuration = 0;
+    mockMaxDuration = null;
+
+    mockGetSong.mockImplementation(async ({ id }: { id: string }) => ({
+      status: 'ok',
+      song: {
+        ...song(id, `Artist ${id}`, `Title ${id}`),
+        duration: id === 'a' ? 15 : 5400,
+      },
+    }));
+
+    await expect(refillRadioInfinite()).resolves.toBe(2);
+
+    expect(mockQueue.map(s => s.id))
+      .toEqual(['q1', 'q2', 'a', 'b']);
+  });
+
+  test('uses updated duration settings during an in-flight refill', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+
+    globalThis.fetch = jest.fn(async () => {
+      await pending;
+      return {
+        ok: true,
+        json: async () => ({ song_ids: ['a', 'b'] }),
+      };
+    }) as unknown as typeof fetch;
+
+    mockGetSong.mockImplementation(async ({ id }: { id: string }) => ({
+      status: 'ok',
+      song: {
+        ...song(id, `Artist ${id}`, `Title ${id}`),
+        duration: id === 'a' ? 60 : 180,
+      },
+    }));
+
+    const request = refillRadioInfinite();
+
+    // Change the policy while the recommendation request is pending.
+    mockMinDuration = 30;
+    mockMaxDuration = 120;
+
+    release();
+
+    await expect(request).resolves.toBe(1);
+
+    expect(mockQueue.map(s => s.id))
+      .toEqual(['q1', 'q2', 'a']);
+  });
+
+  test('does not remove existing tracks outside the configured limits', async () => {
+    mockMinDuration = 240;
+    mockMaxDuration = 360;
+
+    mockGetSong.mockImplementation(async ({ id }: { id: string }) => ({
+      status: 'ok',
+      song: {
+        ...song(id, `Artist ${id}`, `Title ${id}`),
+        duration: 300,
+      },
+    }));
+
+    await expect(refillRadioInfinite()).resolves.toBe(2);
+
+    expect(mockQueue.map(s => s.id))
+      .toEqual(['q1', 'q2', 'a', 'b']);
+
+    expect(mockQueue[0].duration).toBe(180);
+    expect(mockQueue[1].duration).toBe(180);
+  });
 });
