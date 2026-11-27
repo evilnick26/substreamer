@@ -325,3 +325,36 @@ describe('configurable duration eligibility (#95)', () => {
     );
   });
 });
+
+describe('Radio Infinite filter diagnostics', () => {
+  it('reports the actual rejection reason without changing acceptance', () => {
+    const queue = [song('existing')];
+    const candidates = [
+      song('short', { duration: 30 }),
+      song('existing'),
+      song('copy', {
+        artist: 'Artist existing',
+        title: 'Title existing',
+      }),
+      song('adjacent', { artist: 'Artist existing' }),
+      song('valid'),
+    ];
+    const onReject = jest.fn();
+
+    const accepted = filterRadioInfiniteRecommendations(
+      queue,
+      candidates,
+      { minDuration: 90, maxDuration: 480 },
+      onReject,
+    );
+
+    expect(accepted.map(track => track.id)).toEqual(['valid']);
+    expect(onReject.mock.calls.map(([track, reason]) => [track.id, reason]))
+      .toEqual([
+        ['short', 'duration'],
+        ['existing', 'duplicate-id'],
+        ['copy', 'duplicate-song'],
+        ['adjacent', 'adjacency'],
+      ]);
+  });
+});

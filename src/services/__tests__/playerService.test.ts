@@ -1690,6 +1690,14 @@ describe('Radio Infinite unsuccessful server failover', () => {
   });
 });
 
+function radioAppendDiagnosticEvents(event: string) {
+  const prefix = `APPEND ${event} `;
+  return require('../radioInfiniteLogger').logRadioInfinite.mock.calls
+    .map(([line]: [string]) => line)
+    .filter((line: string) => line.startsWith(prefix))
+    .map((line: string) => JSON.parse(line.slice(prefix.length)));
+}
+
 describe('Radio Infinite guarded append', () => {
   const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
   const { persistRadioSeed } = require('../queuePersistenceService');
@@ -1750,6 +1758,20 @@ describe('Radio Infinite guarded append', () => {
       ],
       expect.any(Number),
     );
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([
+      expect.objectContaining({
+        count: 3,
+        accounted: true,
+        rotated: false,
+        before: expect.objectContaining({
+          seed: { primarySeedId: 'primary', remainingRefills: 3 },
+        }),
+        after: expect.objectContaining({
+          seed: { primarySeedId: 'primary', remainingRefills: 2 },
+        }),
+      }),
+    ]);
   });
 
   it('rotates to the first actually appended playable recommendation', async () => {
@@ -1775,6 +1797,26 @@ describe('Radio Infinite guarded append', () => {
     expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
     expect(seed.remainingRefills).toBeLessThanOrEqual(5);
     expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+
+    expect(radioAppendDiagnosticEvents('playability')).toEqual([
+      expect.objectContaining({
+        requestedIds: ['unplayable', 'playable', 'later'],
+        playableIds: ['playable', 'later'],
+      }),
+    ]);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([
+      expect.objectContaining({
+        count: 2,
+        accounted: true,
+        rotated: true,
+        tracks: [
+          expect.objectContaining({ id: 'playable' }),
+          expect.objectContaining({ id: 'later' }),
+        ],
+        after: expect.objectContaining({ seed }),
+      }),
+    ]);
   });
 
   it('does not consume lifespan for an empty recommendation batch', async () => {
@@ -1785,6 +1827,11 @@ describe('Radio Infinite guarded append', () => {
     expect(mockTP.addToQueue).not.toHaveBeenCalled();
     expect(persistRadioSeed).not.toHaveBeenCalled();
     expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([]);
+    expect(radioAppendDiagnosticEvents('skipped')).toEqual([
+      expect.objectContaining({ reason: 'initial-guard' }),
+    ]);
   });
 
   it('does not consume lifespan when no recommendations are playable', async () => {
@@ -1797,6 +1844,14 @@ describe('Radio Infinite guarded append', () => {
     expect(mockTP.addToQueue).not.toHaveBeenCalled();
     expect(persistRadioSeed).not.toHaveBeenCalled();
     expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([]);
+    expect(radioAppendDiagnosticEvents('playability')).toEqual([
+      expect.objectContaining({
+        requestedIds: ['unplayable'],
+        playableIds: [],
+      }),
+    ]);
   });
 
   it('rejects an already stale recommendation context', async () => {
@@ -1812,6 +1867,11 @@ describe('Radio Infinite guarded append', () => {
 
     expect(mockTP.addToQueue).not.toHaveBeenCalled();
     expect(persistRadioSeed).not.toHaveBeenCalled();
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([]);
+    expect(radioAppendDiagnosticEvents('skipped')).toEqual([
+      expect.objectContaining({ reason: 'initial-guard' }),
+    ]);
   });
 
   it('never starts playback when the queue is empty', async () => {
@@ -1838,6 +1898,13 @@ describe('Radio Infinite guarded append', () => {
     expect(persistRadioSeed).not.toHaveBeenCalled();
     expect(mockPersistQueue).not.toHaveBeenCalled();
     expect(dispatcher.canRefillRadioInfinite()).toBe(false);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([]);
+    expect(radioAppendDiagnosticEvents('failed')).toEqual([
+      expect.objectContaining({
+        reason: 'queue-mutation-or-publication',
+      }),
+    ]);
   });
 
   it('suppresses further appends until a successful full replacement', async () => {
@@ -1993,6 +2060,15 @@ describe('Radio Infinite native append races', () => {
 
     expect(persistRadioSeed).toHaveBeenCalledTimes(1);
     expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([
+      expect.objectContaining({
+        count: 1,
+        accounted: false,
+        rotated: false,
+        tracks: [expect.objectContaining({ id: 'recommendation' })],
+      }),
+    ]);
   });
 
   it('finishes an active native append before clearing the queue', async () => {
@@ -2018,6 +2094,14 @@ describe('Radio Infinite native append races', () => {
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
     expect(persistRadioSeed).not.toHaveBeenCalled();
     expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+
+    expect(radioAppendDiagnosticEvents('completed')).toEqual([
+      expect.objectContaining({
+        count: 1,
+        accounted: false,
+        rotated: false,
+      }),
+    ]);
   });
 
   it('discards recommendations when the queue changes during preparation', async () => {

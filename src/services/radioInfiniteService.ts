@@ -11,6 +11,7 @@ import {
   radioInfiniteSeedSession,
 } from './radioInfiniteSeed';
 import { filterRadioInfiniteRecommendations } from './radioInfiniteFilter';
+import { logRadioInfinite } from './radioInfiniteLogger';
 import { getApi } from './subsonicService';
 import { authStore } from '../store/authStore';
 import { offlineModeStore } from '../store/offlineModeStore';
@@ -19,6 +20,7 @@ import { playerStore } from '../store/playerStore';
 
 const ENDPOINT = 'https://radinf.sancti.fi/radio/recommendations';
 let inFlight = false;
+let refillSequence = 0;
 
 export async function refillRadioInfinite(): Promise<number> {
   if (inFlight || !canRefillRadioInfinite()) return 0;
@@ -74,8 +76,25 @@ export async function refillRadioInfinite(): Promise<number> {
     );
   };
 
+  const refillId = `${Date.now()}-${++refillSequence}`;
+  const log = (event: string, details: Record<string, unknown>): void => {
+    logRadioInfinite(`REFILL ${event} ${JSON.stringify({ refillId, ...details })}`);
+  };
+
+  let phase = 'authentication';
+  let outcome = 'failed';
+  let appendedCount = 0;
+
   inFlight = true;
   try {
+    log('started', {
+      seed,
+      seedGeneration,
+      seedIds,
+      queueRevision,
+      queueLength: originalQueue.length,
+      upcoming: originalQueue.length - index - 1,
+    });
     const salt = Array.from(await ExpoCrypto.getRandomBytesAsync(16))
       .map((byte) => byte.toString(16).padStart(2, '0')).join('');
     const token = await ExpoCrypto.digestStringAsync(
@@ -84,12 +103,17 @@ export async function refillRadioInfinite(): Promise<number> {
       { encoding: ExpoCrypto.CryptoEncoding.HEX },
     );
 
+    phase = 'bridge-request';
     const response = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: auth.username, token, salt, seed_ids: seedIds }),
     });
-    if (!response.ok) throw new Error(`Radio bridge returned HTTP ${response.status}.`);
+    if (!response.ok) {
+      log('bridge-http-error', { status: response.status });
+      throw new Error(`Radio bridge returned HTTP ${response.status}.`);
+    }
+    phase = 'bridge-response';
     const payload: unknown = await response.json();
     if (!payload || typeof payload !== 'object' || !('song_ids' in payload) ||
         !Array.isArray(payload.song_ids) ||
@@ -97,22 +121,38 @@ export async function refillRadioInfinite(): Promise<number> {
       throw new Error('Radio bridge returned an invalid song list.');
     }
     const ids = payload.song_ids as string[];
-    if (!ids.length) throw new Error('Radio bridge returned no recommendations.');
+    log('bridge-received', { count: ids.length, ids });
+    if (!ids.length) {
+      outcome = 'empty-response';
+      throw new Error('Radio bridge returned no recommendations.');
+    }
 
     // Avoid adding recommendations already present in this queue, or repeated in this batch.
     const existingIds = new Set(originalQueue.map((song) => song.id));
     const distinctIds = [...new Set(ids)];
     const uniqueIds = distinctIds.filter((id) => !existingIds.has(id));
-    if (!uniqueIds.length) return 0;
+    log('prefiltered', {
+      duplicateBridgeCount: ids.length - distinctIds.length,
+      alreadyQueuedIds: distinctIds.filter((id) => existingIds.has(id)),
+      remainingIds: uniqueIds,
+    });
+    if (!uniqueIds.length) {
+      outcome = 'all-prefiltered';
+      return 0;
+    }
+
+    phase = 'metadata-resolution';
     const resolved = await Promise.all(uniqueIds.map(async (id) => {
       const result = await api.getSong({ id });
       if (result.status === 'failed' || result.status === 'fail' || !result.song || result.song.id !== id) {
+        log('metadata-resolution-failed', { id });
         throw new Error(`Could not resolve recommended song ${id}.`);
       }
       return result.song;
     }));
 
     if (!isContextCurrent()) {
+      outcome = 'stale-context';
       throw new Error('Playback queue or session changed; recommendations discarded.');
     }
 
@@ -121,6 +161,8 @@ export async function refillRadioInfinite(): Promise<number> {
     const { radioMinDuration, radioMaxDuration } =
       playbackSettingsStore.getState();
 
+    phase = 'filtering';
+    let rejectedCount = 0;
     const eligible = filterRadioInfiniteRecommendations(
       originalQueue,
       resolved,
@@ -128,18 +170,45 @@ export async function refillRadioInfinite(): Promise<number> {
         minDuration: radioMinDuration,
         maxDuration: radioMaxDuration,
       },
+      (candidate, reason) => {
+        rejectedCount += 1;
+        log('candidate-rejected', {
+          id: candidate.id,
+          artist: candidate.artist,
+          title: candidate.title,
+          duration: candidate.duration,
+          reason,
+        });
+      },
     );
-    if (!eligible.length) return 0;
+    log('filtered', {
+      resolvedCount: resolved.length,
+      rejectedCount,
+      acceptedCount: eligible.length,
+      unexaminedCount: resolved.length - rejectedCount - eligible.length,
+      acceptedIds: eligible.map((track) => track.id),
+      minDuration: radioMinDuration,
+      maxDuration: radioMaxDuration,
+    });
+    if (!eligible.length) {
+      outcome = 'all-filtered';
+      return 0;
+    }
 
+    phase = 'queue-append';
     const appended = await appendRadioInfiniteRecommendations(
       eligible,
       seedGeneration,
       isContextCurrent,
+      refillId,
     );
 
-    return appended.length;
+    appendedCount = appended.length;
+    outcome = appendedCount > 0 ? 'appended' : 'nothing-appended';
+    return appendedCount;
   } finally {
     inFlight = false;
+    log('finished', { outcome, phase, appendedCount });
     // Reassess only when the request's context was superseded.
     if (hasContextChanged()) {
       requestRadioInfiniteRefill();

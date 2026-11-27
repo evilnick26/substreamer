@@ -11,6 +11,12 @@ import {
   type RadioDurationPolicy,
 } from './radioInfiniteDuration';
 
+export type RadioFilterRejection =
+  | 'duration'
+  | 'duplicate-id'
+  | 'duplicate-song'
+  | 'adjacency';
+
 /**
  * Filter Radio Infinite recommendations without reordering them.
  * Compare adjacency with the queue tail or last accepted recommendation.
@@ -19,6 +25,7 @@ export function filterRadioInfiniteRecommendations(
   queue: readonly Child[],
   candidates: readonly Child[],
   durationPolicy: Readonly<RadioDurationPolicy> = DEFAULT_RADIO_DURATION_POLICY,
+  onReject?: (candidate: Child, reason: RadioFilterRejection) => void,
 ): Child[] {
   const ids = new Set(queue.map((song) => song.id));
   const songs = new Set(
@@ -31,15 +38,23 @@ export function filterRadioInfiniteRecommendations(
 
   for (const candidate of candidates) {
     if (!isRadioDurationEligible(candidate.duration, durationPolicy)) {
+      onReject?.(candidate, 'duration');
       continue;
     }
 
     const identity = songKey(candidate);
 
-    if (ids.has(candidate.id)) continue;
-    if (identity && songs.has(identity)) continue;
+    if (ids.has(candidate.id)) {
+      onReject?.(candidate, 'duplicate-id');
+      continue;
+    }
+    if (identity && songs.has(identity)) {
+      onReject?.(candidate, 'duplicate-song');
+      continue;
+    }
 
     if (previous && hasAdjacentArtistOrAlbum(candidate, previous)) {
+      onReject?.(candidate, 'adjacency');
       continue;
     }
 

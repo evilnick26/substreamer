@@ -24,6 +24,9 @@ jest.mock('expo-crypto', () => ({
   CryptoDigestAlgorithm: { MD5: 'MD5' },
   CryptoEncoding: { HEX: 'hex' },
 }));
+jest.mock('../radioInfiniteLogger', () => ({
+  logRadioInfinite: jest.fn(),
+}));
 jest.mock('../playerService', () => ({
   appendRadioInfiniteRecommendations: (...args: unknown[]) =>
     mockAppendRecommendations(...args),
@@ -46,6 +49,7 @@ jest.mock('../../store/playerStore', () => ({
 }));
 
 import { refillRadioInfinite } from '../radioInfiniteService';
+import { logRadioInfinite } from '../radioInfiniteLogger';
 import { radioInfiniteSeedSession } from '../radioInfiniteSeed';
 
 const song = (id: string, artist: string, title: string, album = 'Album'): Child => ({
@@ -66,6 +70,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  (logRadioInfinite as jest.Mock).mockClear();
   mockQueue = initial();
   mockIndex = 1;
 
@@ -564,5 +569,164 @@ describe('Radio Infinite request context protection', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(mockAppendRecommendations).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Radio Infinite refill diagnostics', () => {
+  function events(event: string) {
+    const prefix = `REFILL ${event} `;
+    return (logRadioInfinite as jest.Mock).mock.calls
+      .map(([line]: [string]) => line)
+      .filter((line: string) => line.startsWith(prefix))
+      .map((line: string) => JSON.parse(line.slice(prefix.length)));
+  }
+
+  test('correlates request, filtering, append and final outcome', async () => {
+    await expect(refillRadioInfinite()).resolves.toBe(2);
+
+    const [started] = events('started');
+    expect(started.seedIds).toEqual(['q2', 'q1']);
+    expect(started.seed.remainingRefills).toBe(3);
+
+    expect(events('bridge-received')[0]).toMatchObject({
+      refillId: started.refillId,
+      count: 2,
+      ids: ['a', 'b'],
+    });
+
+    expect(events('filtered')[0]).toMatchObject({
+      refillId: started.refillId,
+      acceptedCount: 2,
+      rejectedCount: 0,
+      unexaminedCount: 0,
+    });
+
+    expect(mockAppendRecommendations.mock.calls[0][3])
+      .toBe(started.refillId);
+
+    expect(events('finished')[0]).toMatchObject({
+      refillId: started.refillId,
+      outcome: 'appended',
+      appendedCount: 2,
+    });
+  });
+
+  test('records prefiltering and metadata rejection separately', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ song_ids: ['q1', 'a', 'a', 'b'] }),
+    });
+
+    mockGetSong.mockImplementation(async ({ id }: { id: string }) => ({
+      status: 'ok',
+      song: {
+        ...song(id, `Artist ${id}`, `Title ${id}`),
+        duration: id === 'a' ? 30 : 180,
+      },
+    }));
+
+    await expect(refillRadioInfinite()).resolves.toBe(1);
+
+    expect(events('prefiltered')[0]).toMatchObject({
+      duplicateBridgeCount: 1,
+      alreadyQueuedIds: ['q1'],
+      remainingIds: ['a', 'b'],
+    });
+
+    expect(events('candidate-rejected')[0]).toMatchObject({
+      id: 'a',
+      reason: 'duration',
+      duration: 30,
+    });
+
+    expect(events('filtered')[0]).toMatchObject({
+      rejectedCount: 1,
+      acceptedCount: 1,
+      unexaminedCount: 0,
+    });
+  });
+
+  test('distinguishes the cap from rejected recommendations', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        song_ids: Array.from({ length: 20 }, (_, i) => `candidate-${i}`),
+      }),
+    });
+
+    await expect(refillRadioInfinite()).resolves.toBe(10);
+
+    expect(events('filtered')[0]).toMatchObject({
+      resolvedCount: 20,
+      acceptedCount: 10,
+      rejectedCount: 0,
+      unexaminedCount: 10,
+    });
+  });
+
+  test('records HTTP failure without exposing authentication', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+    });
+
+    await expect(refillRadioInfinite()).rejects.toThrow('HTTP 503');
+
+    expect(events('bridge-http-error')[0].status).toBe(503);
+    expect(events('finished')[0]).toMatchObject({
+      outcome: 'failed',
+      phase: 'bridge-request',
+      appendedCount: 0,
+    });
+
+    const output = JSON.stringify((logRadioInfinite as jest.Mock).mock.calls);
+    for (const secret of ['tester', 'secret', 'test-token', 'music.example.test']) {
+      expect(output).not.toContain(secret);
+    }
+  });
+
+  test('records metadata resolution failure without raw errors', async () => {
+    mockGetSong.mockResolvedValueOnce({
+      status: 'failed',
+      song: undefined,
+    });
+
+    await expect(refillRadioInfinite()).rejects.toThrow(
+      'Could not resolve recommended song a',
+    );
+
+    expect(events('metadata-resolution-failed')[0]).toMatchObject({
+      id: 'a',
+    });
+
+    expect(events('finished')[0]).toMatchObject({
+      outcome: 'failed',
+      phase: 'metadata-resolution',
+      appendedCount: 0,
+    });
+  });
+
+  test('records an empty bridge response', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ song_ids: [] }),
+    });
+
+    await expect(refillRadioInfinite()).rejects.toThrow('no recommendations');
+    expect(events('finished')[0]).toMatchObject({
+      outcome: 'empty-response',
+      appendedCount: 0,
+    });
+  });
+
+  test('records zero actual additions without claiming success', async () => {
+    mockAppendRecommendations.mockResolvedValueOnce([]);
+
+    await expect(refillRadioInfinite()).resolves.toBe(0);
+
+    expect(events('finished')[0]).toMatchObject({
+      outcome: 'nothing-appended',
+      appendedCount: 0,
+    });
   });
 });

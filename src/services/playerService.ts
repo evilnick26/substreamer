@@ -1120,12 +1120,17 @@ export async function appendRadioInfiniteRecommendations(
   tracks: Child[],
   seedGeneration: number,
   isContextCurrent: () => boolean,
+  refillId?: string,
 ): Promise<Child[]> {
+  const log = (event: string, details: Record<string, unknown>): void => {
+    logRadioInfinite(`APPEND ${event} ${JSON.stringify({ refillId, ...details })}`);
+  };
   if (
     tracks.length === 0 ||
     !canRefillRadioInfinite() ||
     !isContextCurrent()
   ) {
+    log('skipped', { reason: 'initial-guard' });
     return [];
   }
 
@@ -1135,10 +1140,16 @@ export async function appendRadioInfiniteRecommendations(
 
   const { rnTracks, filteredQueue: playable } = await buildPlayableQueue(tracks);
 
+  log('playability', {
+    requestedIds: tracks.map((track) => track.id),
+    playableIds: playable.map((track) => track.id),
+  });
+
   if (rnTracks.length === 0) return [];
 
   const appended = await runRadioAppend(async () => {
     if (currentChildQueue.length === 0 || !isContextCurrent()) {
+      log('skipped', { reason: 'final-guard' });
       return [];
     }
 
@@ -1153,21 +1164,42 @@ export async function appendRadioInfiniteRecommendations(
       playerStore.getState().setQueue(currentChildQueue);
       persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
 
-      if (
-        radioInfiniteSeedSession.completeRefill(
-          seedGeneration,
-          playable.map((child) => child.id),
-        )
-      ) {
-        persistRadioSeed(radioInfiniteSeedSession.getSnapshot().seed);
+      const before = radioInfiniteSeedSession.getSnapshot();
+      const accounted = radioInfiniteSeedSession.completeRefill(
+        seedGeneration,
+        playable.map((child) => child.id),
+      );
+      const after = radioInfiniteSeedSession.getSnapshot();
+
+      if (accounted) {
+        persistRadioSeed(after.seed);
       }
+
+      log('completed', {
+        count: playable.length,
+        tracks: playable.map((child) => ({
+          id: child.id,
+          artist: child.artist,
+          title: child.title,
+        })),
+        accounted,
+        requestedGeneration: seedGeneration,
+        before,
+        after,
+        rotated: accounted && before.seed?.remainingRefills === 1,
+      });
 
       return playable;
     } catch (error) {
       markRadioQueueUncertain();
+      log('failed', { reason: 'queue-mutation-or-publication' });
       throw error;
     }
   });
+
+  if (appended == null) {
+    log('skipped', { reason: 'append-lock-unavailable' });
+  }
 
   return appended ?? [];
 }
