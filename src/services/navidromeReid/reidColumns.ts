@@ -65,6 +65,9 @@ export const NEVER_REKEY: Readonly<Record<string, string>> = {
   'queue_snapshot_songs.music_brainz_id': 'MusicBrainz id',
   'mbid_overrides.mbid': 'MusicBrainz id (the KEY of this row is re-keyed, the value never)',
 
+  // Radio Infinite context belongs only to the discarded live queue.
+  'queue_snapshots.radio_primary_seed_id': 'live queue is deleted before re-keying',
+
   // Local synthetic keys. Same shape family, no relationship to the server.
   'queue_snapshots.id': 'bookmark id — Crypto.randomUUID(), a dashed UUID',
   'queue_snapshot_songs.snapshot_id': 'FK to the bookmark id',

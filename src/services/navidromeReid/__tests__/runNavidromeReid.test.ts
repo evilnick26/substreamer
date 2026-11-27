@@ -195,6 +195,14 @@ describe('the pass ordering', () => {
     expect(idx('clearImageQueue')).toBeLessThan(idx('rekeyPlainColumns'));
   });
 
+  it('discards live playback context before re-keying entity IDs', async () => {
+    await runNavidromeReidIfNeeded();
+
+    expect(idx('clearLiveQueue')).toBeGreaterThan(-1);
+    expect(idx('rekeyPlainColumns')).toBeGreaterThan(-1);
+    expect(idx('clearLiveQueue')).toBeLessThan(idx('rekeyPlainColumns'));
+  });
+
   it('moves files only after the database is re-keyed', async () => {
     await runNavidromeReidIfNeeded();
     expect(idx('rekeyPlainColumns')).toBeLessThan(idx('moveDownloadedFiles'));
@@ -242,6 +250,9 @@ describe('the pass refuses to write when it should', () => {
     await runNavidromeReidIfNeeded();
 
     expect(mockCalls).toContain('clearLiveQueue');
+    expect(mockCalls).toContain('rekeyPlainColumns');
+    expect(mockCalls.indexOf('clearLiveQueue'))
+      .toBeLessThan(mockCalls.indexOf('rekeyPlainColumns'));
     expect(mockCalls).toContain('clearDownloadQueue');
     expect(mockCalls).toContain('clearImageQueue');
     expect(mockCalls).toContain('rekeyEmbeddedIds');
