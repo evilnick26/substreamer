@@ -61,6 +61,10 @@ jest.mock('../../store/serverInfoStore', () => ({
   serverInfoStore: { getState: jest.fn(() => ({ extensions: [] })) },
 }));
 
+jest.mock('../radioInfiniteLogger', () => ({
+  logRadioInfinite: jest.fn(),
+}));
+
 jest.mock('../scrobbleService', () => ({
   addCompletedScrobble: jest.fn(),
   sendNowPlaying: jest.fn(),
@@ -1231,6 +1235,11 @@ describe('Radio Infinite primary seed on repeat-mode transitions', () => {
     expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
     expect(seed.remainingRefills).toBeLessThanOrEqual(5);
     expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY established {"reason":"radio-enabled"',
+      ));
   });
 
   it('waits for a playback selection when Radio is enabled with no current track', async () => {
@@ -1238,6 +1247,11 @@ describe('Radio Infinite primary seed on repeat-mode transitions', () => {
     await cycleRepeatMode();
 
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY cleared {"reason":"radio-enabled-without-track"',
+      ));
   });
 
   it('clears the Primary when Radio is disabled', async () => {
@@ -1248,6 +1262,11 @@ describe('Radio Infinite primary seed on repeat-mode transitions', () => {
 
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
     expect(persistRadioSeed).toHaveBeenLastCalledWith(null);
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY cleared {"reason":"radio-disabled"',
+      ));
   });
 
   it('establishes a fresh Primary when Radio is re-enabled', async () => {
@@ -1343,6 +1362,11 @@ describe('Radio Infinite primary seed during playback selection', () => {
     expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
     expect(seed.remainingRefills).toBeLessThanOrEqual(5);
     expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        `"seed":${JSON.stringify(seed)}`,
+      ));
   });
 
   it('replaces the previous Primary on a new playback selection', async () => {
@@ -1382,6 +1406,11 @@ describe('Radio Infinite primary seed during playback selection', () => {
     expect(
       radioInfiniteSeedSession.getSnapshot().seed.primarySeedId,
     ).toBe('new-primary');
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY context-invalidated {"reason":"playback-selection"',
+      ));
   });
 
   it('suppresses track-change replenishment during native queue replacement', async () => {
@@ -1456,6 +1485,16 @@ describe('Radio Infinite primary seed during playback selection', () => {
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
     expect(isRadioQueueTransitionActive()).toBe(false);
     expect(mockClearPersistedQueue).toHaveBeenCalled();
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY context-invalidated {"reason":"queue-clear"',
+      ));
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY cleared {"reason":"queue-cleared"',
+      ));
   });
 
   it('does not establish a Primary during ordinary non-Radio playback', async () => {
@@ -1465,6 +1504,11 @@ describe('Radio Infinite primary seed during playback selection', () => {
 
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
     expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .not.toHaveBeenCalledWith(
+        expect.stringContaining('PRIMARY established'),
+      );
   });
 });
 

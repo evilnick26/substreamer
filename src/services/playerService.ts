@@ -44,6 +44,7 @@ import {
   requestRadioInfiniteRefill,
 } from './radioInfiniteDispatcher';
 import { radioInfiniteSeedSession } from './radioInfiniteSeed';
+import { logRadioInfinite } from './radioInfiniteLogger';
 import { syncProxyUpstreams } from './sslTrustService';
 import { getLocalTrackUri, waitForTrackMapsReady } from './musicCacheService';
 import {
@@ -127,14 +128,68 @@ async function mutateNativeQueue(
 
 let radioOfflineFallbackInitialized = false;
 
-function clearRadioPrimarySeed(): void {
+type RadioSeedClearReason =
+  | 'radio-disabled'
+  | 'radio-enabled-without-track'
+  | 'non-radio-restoration'
+  | 'non-radio-selection'
+  | 'queue-cleared';
+
+type RadioSeedEstablishReason =
+  | 'radio-enabled'
+  | 'playback-selection'
+  | 'hydration-fallback';
+
+function clearRadioPrimarySeed(
+  reason: RadioSeedClearReason,
+  persist = true,
+): void {
+  const previous = radioInfiniteSeedSession.getSnapshot();
   radioInfiniteSeedSession.clear();
-  persistRadioSeed(null);
+  if (persist) persistRadioSeed(null);
+
+  if (previous.seed !== null || reason === 'radio-enabled-without-track') {
+    logRadioInfinite(`PRIMARY cleared ${JSON.stringify({
+      reason,
+      previousSeed: previous.seed,
+      generation: radioInfiniteSeedSession.getSnapshot().generation,
+    })}`);
+  }
 }
 
-function establishRadioPrimarySeed(trackId: string): void {
-  radioInfiniteSeedSession.reset(trackId);
-  persistRadioSeed(radioInfiniteSeedSession.getSnapshot().seed);
+function establishRadioPrimarySeed(
+  track: Child,
+  reason: RadioSeedEstablishReason,
+): void {
+  const previous = radioInfiniteSeedSession.getSnapshot();
+  radioInfiniteSeedSession.reset(track.id);
+  const current = radioInfiniteSeedSession.getSnapshot();
+  persistRadioSeed(current.seed);
+
+  logRadioInfinite(`PRIMARY established ${JSON.stringify({
+    reason,
+    previousSeed: previous.seed,
+    seed: current.seed,
+    generation: current.generation,
+    artist: track.artist,
+    title: track.title,
+  })}`);
+}
+
+function invalidateRadioPrimaryContext(
+  reason: 'playback-selection' | 'queue-clear',
+): void {
+  const previous = radioInfiniteSeedSession.getSnapshot();
+  radioInfiniteSeedSession.invalidate();
+
+  if (previous.seed !== null) {
+    logRadioInfinite(`PRIMARY context-invalidated ${JSON.stringify({
+      reason,
+      seed: previous.seed,
+      previousGeneration: previous.generation,
+      generation: radioInfiniteSeedSession.getSnapshot().generation,
+    })}`);
+  }
 }
 
 /**
@@ -168,7 +223,7 @@ function initializeRadioOfflineFallback(): void {
     if (state.repeatMode === prev.repeatMode) return;
 
     if (state.repeatMode !== 'radio') {
-      if (prev.repeatMode === 'radio') clearRadioPrimarySeed();
+      if (prev.repeatMode === 'radio') clearRadioPrimarySeed('radio-disabled');
       return;
     }
 
@@ -181,9 +236,9 @@ function initializeRadioOfflineFallback(): void {
 
     const currentTrack = playerStore.getState().currentTrack;
     if (currentTrack) {
-      establishRadioPrimarySeed(currentTrack.id);
+      establishRadioPrimarySeed(currentTrack, 'radio-enabled');
     } else {
-      clearRadioPrimarySeed();
+      clearRadioPrimarySeed('radio-enabled-without-track');
     }
   });
   reconcile();
@@ -504,9 +559,15 @@ function restorePersistedQueue(): boolean {
     const clampedIndex = Math.min(currentTrackIndex, queue.length - 1);
 
     if (playbackSettingsStore.getState().repeatMode === 'radio') {
-      radioInfiniteSeedSession.restore(getPersistedRadioSeed());
+      const restored = radioInfiniteSeedSession.restore(getPersistedRadioSeed());
+      const current = radioInfiniteSeedSession.getSnapshot();
+
+      logRadioInfinite(`PRIMARY ${restored ? 'restored' : 'restore-unavailable'} ${JSON.stringify({
+        seed: current.seed,
+        generation: current.generation,
+      })}`);
     } else {
-      clearRadioPrimarySeed();
+      clearRadioPrimarySeed('non-radio-restoration');
     }
 
     currentChildQueue = queue;
@@ -599,7 +660,7 @@ async function hydrateRestoredQueue(): Promise<void> {
       playbackSettingsStore.getState().repeatMode === 'radio' &&
       radioInfiniteSeedSession.getSnapshot().seed === null
     ) {
-      establishRadioPrimarySeed(filteredQueue[startIndex].id);
+      establishRadioPrimarySeed(filteredQueue[startIndex], 'hydration-fallback');
     }
 
     markRadioQueueSynchronized();
@@ -645,7 +706,7 @@ export async function playTrack(
   sourcePlaylistId?: string | null,
 ): Promise<void> {
   beginRadioQueueTransition();
-  radioInfiniteSeedSession.invalidate();
+  invalidateRadioPrimaryContext('playback-selection');
   let playbackStarted = false;
 
   try {
@@ -685,9 +746,9 @@ export async function playTrack(
 
     persistQueue(filteredQueue, startIndex);
     if (playbackSettingsStore.getState().repeatMode === 'radio') {
-      establishRadioPrimarySeed(filteredQueue[startIndex].id);
+      establishRadioPrimarySeed(filteredQueue[startIndex], 'playback-selection');
     } else {
-      clearRadioPrimarySeed();
+      clearRadioPrimarySeed('non-radio-selection');
     }
 
     markRadioQueueSynchronized();
@@ -924,7 +985,7 @@ async function clearPlayerStateInternal(): Promise<void> {
   currentChildQueue = [];
   trackPlaylistMap.clear();
 
-  radioInfiniteSeedSession.clear();
+  clearRadioPrimarySeed('queue-cleared', false);
 
   try {
     await replaceNativeQueue(() => tp.clearQueue());
@@ -947,7 +1008,7 @@ async function clearPlayerStateInternal(): Promise<void> {
 /** Stop playback, clear the queue, and reset all player state to defaults. */
 export async function clearQueue(): Promise<void> {
   beginRadioQueueTransition();
-  radioInfiniteSeedSession.invalidate();
+  invalidateRadioPrimaryContext('queue-clear');
 
   try {
     await waitForRadioAppend();

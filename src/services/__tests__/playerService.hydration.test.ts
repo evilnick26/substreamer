@@ -95,6 +95,10 @@ jest.mock('../../store/serverInfoStore', () => ({
   serverInfoStore: { getState: jest.fn(() => ({ extensions: [] })) },
 }));
 
+jest.mock('../radioInfiniteLogger', () => ({
+  logRadioInfinite: jest.fn(),
+}));
+
 jest.mock('../scrobbleService', () => ({ addCompletedScrobble: jest.fn(), sendNowPlaying: jest.fn() }));
 jest.mock('../imageCacheService', () => ({
   resolveDisplayImages: jest.fn(async (subjects: unknown[]) =>
@@ -335,6 +339,11 @@ describe('Radio Infinite musical context restoration', () => {
 
     expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual(seed);
     expect(isRadioQueueTransitionActive()).toBe(false);
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        `PRIMARY restored {"seed":${JSON.stringify(seed)}`,
+      ));
   });
 
   it('establishes a Primary from the restored current song for an older queue', async () => {
@@ -352,6 +361,14 @@ describe('Radio Infinite musical context restoration', () => {
     expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
     expect(seed.remainingRefills).toBeLessThanOrEqual(5);
     expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining('PRIMARY restore-unavailable'));
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .toHaveBeenCalledWith(expect.stringContaining(
+        'PRIMARY established {"reason":"hydration-fallback"',
+      ));
   });
 
   it('establishes the fallback Primary even when resume seek fails', async () => {
@@ -432,6 +449,11 @@ describe('Radio Infinite musical context restoration', () => {
     await drainHydration();
 
     expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+
+    expect(require('../radioInfiniteLogger').logRadioInfinite)
+      .not.toHaveBeenCalledWith(
+        expect.stringContaining('PRIMARY restored'),
+      );
   });
 });
 
