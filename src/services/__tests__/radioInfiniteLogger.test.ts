@@ -5,13 +5,9 @@ let mockWriteFails = false;
 let mockMoveFails = false;
 let mockFlagReadFails = false;
 
-jest.mock('expo-file-system', () => ({
-  Paths: {
-    document: '/mock/document',
-    cache: '/mock/cache',
-  },
-  File: class {
-    private name: string;
+jest.mock('expo-file-system', () => {
+  class MockFile {
+    name: string;
 
     constructor(_directory: string, name: string) {
       this.name = name;
@@ -41,7 +37,11 @@ jest.mock('expo-file-system', () => ({
       return new Uint8Array(content);
     }
 
-    create() {
+    create(options?: { overwrite?: boolean }) {
+      if (mockFiles.has(this.name) && !options?.overwrite) {
+        throw new Error('File already exists');
+      }
+
       mockFiles.set(this.name, Buffer.alloc(0));
     }
 
@@ -70,8 +70,24 @@ jest.mock('expo-file-system', () => ({
       mockFiles.delete(this.name);
       this.name = destination.name;
     }
-  },
-}));
+  }
+
+  return {
+    Paths: {
+      document: '/mock/document',
+      cache: {
+        list: () => Array.from(mockFiles.keys())
+          .filter((name) => ![
+            'radio-infinite-diagnostics-enabled',
+            'radio-infinite-diagnostics.log',
+            'radio-infinite-diagnostics.old.log',
+          ].includes(name))
+          .map((name) => new MockFile('/mock/cache', name)),
+      },
+    },
+    File: MockFile,
+  };
+});
 
 import {
   RADIO_INFINITE_DIAG_FLAG_FILE as FLAG,
@@ -81,13 +97,14 @@ import {
   logRadioInfinite,
   flushRadioInfiniteLog,
   clearRadioInfiniteLog,
-  RADIO_INFINITE_DIAG_EXPORT_FILE as EXPORT,
   setRadioInfiniteLoggingEnabled,
   getRadioInfiniteLogStatus,
   exportRadioInfiniteLog,
 } from '../radioInfiniteLogger';
 
 const MAX_BYTES = 512 * 1024;
+const EXPORT = 'RI-diagnostics-2026-11-27_18-42-15.log';
+const LEGACY_EXPORT = 'radio-infinite-diagnostics-export.log';
 
 function enableLogging() {
   mockFiles.set(FLAG, Buffer.alloc(0));
@@ -111,6 +128,15 @@ beforeEach(async () => {
   mockWriteFails = false;
   mockMoveFails = false;
   mockFlagReadFails = false;
+
+  jest.useFakeTimers({
+    doNotFake: ['setImmediate'],
+  });
+  jest.setSystemTime(new Date(2026, 10, 27, 18, 42, 15));
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('Radio Infinite diagnostic logger', () => {
@@ -442,13 +468,66 @@ describe('Radio Infinite diagnostic storage management', () => {
     expect(contents(LOG)).toContain('after export');
   });
 
-  it('replaces the previous export rather than appending to it', async () => {
+  it('uses a suffix when the export filename already exists', async () => {
     mockFiles.set(LOG, Buffer.from('current\n'));
     mockFiles.set(EXPORT, Buffer.from('obsolete export\n'));
 
+    const next = 'RI-diagnostics-2026-11-27_18-42-15-1.log';
+
+    await expect(exportRadioInfiniteLog()).resolves.toBe(
+      `file:///mock/${next}`,
+    );
+
+    expect(contents(next)).toBe('current\n');
+    expect(mockFiles.has(EXPORT)).toBe(false);
+  });
+
+  it('uses the new export time and removes the previous snapshot', async () => {
+    mockFiles.set(LOG, Buffer.from('current\n'));
+
     await exportRadioInfiniteLog();
 
+    jest.setSystemTime(new Date(2026, 10, 27, 18, 42, 16));
+
+    const next = 'RI-diagnostics-2026-11-27_18-42-16.log';
+
+    await expect(exportRadioInfiniteLog()).resolves.toBe(
+      `file:///mock/${next}`,
+    );
+
+    expect(contents(next)).toBe('current\n');
+    expect(mockFiles.has(EXPORT)).toBe(false);
+  });
+
+  it('removes legacy exports but preserves unrelated cache files', async () => {
+    mockFiles.set(LOG, Buffer.from('current\n'));
+    mockFiles.set(LEGACY_EXPORT, Buffer.from('legacy'));
+    mockFiles.set('unrelated.log', Buffer.from('keep'));
+    mockFiles.set('RI-diagnostics-not-an-export.log', Buffer.from('keep'));
+
+    await exportRadioInfiniteLog();
+
+    expect(mockFiles.has(LEGACY_EXPORT)).toBe(false);
+    expect(contents('unrelated.log')).toBe('keep');
+    expect(contents('RI-diagnostics-not-an-export.log')).toBe('keep');
     expect(contents(EXPORT)).toBe('current\n');
+  });
+
+  it('skips multiple occupied export filenames', async () => {
+    mockFiles.set(LOG, Buffer.from('current\n'));
+    mockFiles.set(EXPORT, Buffer.from('previous'));
+    mockFiles.set(
+      'RI-diagnostics-2026-11-27_18-42-15-1.log',
+      Buffer.from('previous'),
+    );
+
+    const next = 'RI-diagnostics-2026-11-27_18-42-15-2.log';
+
+    await expect(exportRadioInfiniteLog()).resolves.toBe(
+      `file:///mock/${next}`,
+    );
+
+    expect(contents(next)).toBe('current\n');
   });
 
   it('removes obsolete exports when no retained logs exist', async () => {

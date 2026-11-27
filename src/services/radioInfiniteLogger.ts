@@ -7,8 +7,54 @@ export const RADIO_INFINITE_DIAG_LOG_FILE =
 export const RADIO_INFINITE_DIAG_OLD_LOG_FILE =
   'radio-infinite-diagnostics.old.log';
 
-export const RADIO_INFINITE_DIAG_EXPORT_FILE =
+const LEGACY_EXPORT_FILE =
   'radio-infinite-diagnostics-export.log';
+
+const EXPORT_FILENAME_PATTERN =
+  /^RI-diagnostics-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?\.log$/;
+
+function createExportFile(): File {
+  const now = new Date();
+  const pad = (value: number): string =>
+    String(value).padStart(2, '0');
+
+  const date = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+  ].join('-');
+
+  const time = [
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join('-');
+
+  const base = `RI-diagnostics-${date}_${time}`;
+  let file = new File(Paths.cache, `${base}.log`);
+  let suffix = 1;
+
+  while (file.exists) {
+    file = new File(Paths.cache, `${base}-${suffix++}.log`);
+  }
+
+  return file;
+}
+
+function clearTemporaryExports(keepUri?: string): void {
+  for (const entry of Paths.cache.list()) {
+    if (
+      entry instanceof File &&
+      entry.uri !== keepUri &&
+      (
+        entry.name === LEGACY_EXPORT_FILE ||
+        EXPORT_FILENAME_PATTERN.test(entry.name)
+      )
+    ) {
+      entry.delete();
+    }
+  }
+}
 
 const MAX_LOG_BYTES = 512 * 1024;
 
@@ -151,17 +197,15 @@ Promise<string | null> {
       RADIO_INFINITE_DIAG_LOG_FILE,
     );
 
-    const exported = new File(
-      Paths.cache,
-      RADIO_INFINITE_DIAG_EXPORT_FILE,
-    );
+    if (!oldLog.exists && !activeLog.exists) {
+      clearTemporaryExports();
+      return;
+    }
 
-    if (exported.exists) exported.delete();
-
-    if (!oldLog.exists && !activeLog.exists) return;
+    const exported = createExportFile();
 
     try {
-      exported.create();
+      exported.create({ overwrite: false });
 
       for (const file of [oldLog, activeLog]) {
         if (file.exists) {
@@ -172,7 +216,10 @@ Promise<string | null> {
       uri = exported.uri;
     } catch {
       if (exported.exists) exported.delete();
+      return;
     }
+
+    clearTemporaryExports(uri);
   });
 
   return uri;
@@ -183,11 +230,12 @@ export function clearRadioInfiniteLog(): Promise<void> {
     const files = [
       new File(Paths.document, RADIO_INFINITE_DIAG_LOG_FILE),
       new File(Paths.document, RADIO_INFINITE_DIAG_OLD_LOG_FILE),
-      new File(Paths.cache, RADIO_INFINITE_DIAG_EXPORT_FILE),
     ];
 
     for (const file of files) {
       if (file.exists) file.delete();
     }
+
+    clearTemporaryExports();
   });
 }
