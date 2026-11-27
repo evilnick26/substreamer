@@ -106,6 +106,7 @@ jest.mock('../../store/offlineModeStore', () => ({
 }));
 
 jest.mock('../radioInfiniteDispatcher', () => ({
+  ...jest.requireActual('../radioInfiniteDispatcher'),
   requestRadioInfiniteRefill: jest.fn(),
 }));
 
@@ -118,6 +119,8 @@ const mockGetPersistedQueue = jest.fn().mockReturnValue(null);
 const mockGetPersistedPosition = jest.fn().mockReturnValue(null);
 
 jest.mock('../queuePersistenceService', () => ({
+  persistRadioSeed: jest.fn(),
+  getPersistedRadioSeed: jest.fn(() => null),
   persistQueue: (...args: unknown[]) => mockPersistQueue(...args),
   persistCurrentIndex: (...args: unknown[]) => mockPersistCurrentIndex(...args),
   persistPositionIfDue: jest.fn(),
@@ -280,6 +283,43 @@ describe('restorePersistedQueueAfterBoot — live car-session adoption', () => {
     expect(mockTP.play).not.toHaveBeenCalled();
     expect(mockTP.seekTo).not.toHaveBeenCalled();
     expect(mockSetCurrentTrack).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), 0);
+  });
+
+  it('preserves the live Radio Infinite Primary and lifespan during adoption', async () => {
+    const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+    const { getPersistedRadioSeed } = require('../queuePersistenceService');
+
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const carQueue = [makeChild('c1'), makeChild('c2')];
+    await playTrack(carQueue[0], carQueue);
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    radioInfiniteSeedSession.completeRefill(generation, ['recommendation']);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockTP.getState.mockReturnValue('playing');
+    mockTP.getCurrentTrackIndex.mockReturnValue(1);
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('OLD')],
+      currentTrackIndex: 0,
+    });
+
+    getPersistedRadioSeed.mockClear();
+    mockTP.setQueue.mockClear();
+    mockTP.play.mockClear();
+
+    restorePersistedQueueAfterBoot();
+
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(getPersistedRadioSeed).not.toHaveBeenCalled();
+    expect(mockTP.setQueue).not.toHaveBeenCalled();
+    expect(mockTP.play).not.toHaveBeenCalled();
+    expect(mockSetCurrentTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c2' }),
+      1,
+    );
   });
 
   it('adopts a PAUSED car session without restarting', async () => {
@@ -1153,5 +1193,439 @@ describe('equalizer wrappers', () => {
     expect(equalizerSettingsStore.getState().presetName).toBe('Mine');
     await deleteEqualizerPreset('Mine');
     expect(mockEq.deleteCustomPreset).toHaveBeenCalledWith('Mine');
+  });
+});
+
+describe('Radio Infinite primary seed on repeat-mode transitions', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { persistRadioSeed } = require('../queuePersistenceService');
+  const { playerStore } = require('../../store/playerStore');
+
+  beforeEach(() => {
+    radioInfiniteSeedSession.clear();
+  });
+
+  it('captures the currently playing song when Radio is enabled', async () => {
+    const queue = [
+      makeChild('first'),
+      makeChild('current'),
+      makeChild('tail'),
+    ];
+
+    await playTrack(queue[1], queue);
+
+    playerStore.getState.mockReturnValue({
+      ...defaultPlayerState(),
+      currentTrack: queue[1],
+      currentTrackIndex: 1,
+      queue,
+    });
+
+    playbackSettingsStore.setState({ repeatMode: 'one' });
+    await cycleRepeatMode();
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('current');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+  });
+
+  it('waits for a playback selection when Radio is enabled with no current track', async () => {
+    playbackSettingsStore.setState({ repeatMode: 'one' });
+    await cycleRepeatMode();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+  });
+
+  it('clears the Primary when Radio is disabled', async () => {
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+    radioInfiniteSeedSession.reset('old-primary');
+
+    await cycleRepeatMode();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(null);
+  });
+
+  it('establishes a fresh Primary when Radio is re-enabled', async () => {
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+    radioInfiniteSeedSession.reset('old-primary');
+
+    await cycleRepeatMode();
+
+    playerStore.getState.mockReturnValue({
+      ...defaultPlayerState(),
+      currentTrack: makeChild('new-primary'),
+      currentTrackIndex: 0,
+      queue: [makeChild('new-primary')],
+    });
+
+    playbackSettingsStore.setState({ repeatMode: 'one' });
+    await cycleRepeatMode();
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed.primarySeedId,
+    ).toBe('new-primary');
+  });
+
+  it('clears the Primary when Offline Mode forces a fallback', () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    radioInfiniteSeedSession.reset('old-primary');
+
+    mockSetOfflineMode(true);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(null);
+  });
+
+  it('does not establish a Primary when Radio is rejected offline', () => {
+    playerStore.getState.mockReturnValue({
+      ...defaultPlayerState(),
+      currentTrack: makeChild('current'),
+      currentTrackIndex: 0,
+      queue: [makeChild('current')],
+    });
+
+    mockSetOfflineMode(true);
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(persistRadioSeed).not.toHaveBeenCalledWith(
+      expect.objectContaining({ primarySeedId: 'current' }),
+    );
+  });
+
+  it('does not replace an existing Primary during settings hydration', () => {
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'persisted-primary',
+      remainingRefills: 2,
+    });
+
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual({
+      primarySeedId: 'persisted-primary',
+      remainingRefills: 2,
+    });
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+  });
+});
+
+describe('Radio Infinite primary seed during playback selection', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { persistRadioSeed } = require('../queuePersistenceService');
+  const {
+    isRadioQueueTransitionActive,
+    requestRadioInfiniteRefill,
+  } = require('../radioInfiniteDispatcher');
+
+  beforeEach(() => {
+    radioInfiniteSeedSession.clear();
+    playbackSettingsStore.getState().setRepeatMode('radio');
+    jest.clearAllMocks();
+  });
+
+  it('uses the selected album track rather than the queue tail', async () => {
+    const queue = [
+      makeChild('first'),
+      makeChild('selected'),
+      makeChild('last'),
+    ];
+
+    await playTrack(queue[1], queue);
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('selected');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+  });
+
+  it('replaces the previous Primary on a new playback selection', async () => {
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'old-primary',
+      remainingRefills: 1,
+    });
+
+    await playTrack(makeChild('new-primary'), [makeChild('new-primary')]);
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('new-primary');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+  });
+
+  it('invalidates outstanding refill accounting before native queue replacement', async () => {
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'old-primary',
+      remainingRefills: 1,
+    });
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+
+    mockTP.setQueue.mockImplementationOnce(async () => {
+      expect(isRadioQueueTransitionActive()).toBe(true);
+
+      expect(
+        radioInfiniteSeedSession.completeRefill(generation, ['stale']),
+      ).toBe(false);
+    });
+
+    await playTrack(makeChild('new-primary'), [makeChild('new-primary')]);
+
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed.primarySeedId,
+    ).toBe('new-primary');
+  });
+
+  it('suppresses track-change replenishment during native queue replacement', async () => {
+    const track = makeChild('selected');
+
+    mockTP.setQueue.mockImplementationOnce(async () => {
+      expect(isRadioQueueTransitionActive()).toBe(true);
+
+      emit('trackChange', { id: track.id }, 0, 'queue-replaced');
+
+      expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+    });
+
+    await playTrack(track, [track]);
+
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(requestRadioInfiniteRefill).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the previous musical context if native queue replacement rejects', async () => {
+    const previous = {
+      primarySeedId: 'old-primary',
+      remainingRefills: 2,
+    };
+
+    radioInfiniteSeedSession.restore(previous);
+    mockTP.setQueue.mockRejectedValueOnce(new Error('Queue replacement failed'));
+
+    await playTrack(makeChild('new-primary'), [makeChild('new-primary')]);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual(previous);
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+  });
+
+  it('retains the new Primary if playback fails after queue replacement', async () => {
+    mockTP.play.mockRejectedValueOnce(new Error('Playback failed'));
+
+    await playTrack(makeChild('new-primary'), [makeChild('new-primary')]);
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed.primarySeedId,
+    ).toBe('new-primary');
+
+    expect(isRadioQueueTransitionActive()).toBe(false);
+  });
+
+  it('preserves the Primary and lifespan during ordinary queue navigation', async () => {
+    const queue = [makeChild('first'), makeChild('second')];
+    await playTrack(queue[0], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    await skipToNext();
+    await skipToPrevious();
+    await skipToTrack(1);
+
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+  });
+
+  it('discards musical context when the queue is cleared', async () => {
+    await playTrack(makeChild('primary'), [makeChild('primary')]);
+
+    await clearQueue();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(mockClearPersistedQueue).toHaveBeenCalled();
+  });
+
+  it('does not establish a Primary during ordinary non-Radio playback', async () => {
+    playbackSettingsStore.getState().setRepeatMode('off');
+
+    await playTrack(makeChild('ordinary'), [makeChild('ordinary')]);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+  });
+});
+
+describe('Radio Infinite playable-track fallback', () => {
+  it('uses the actual playable starting song when the selected song is unavailable', async () => {
+    const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const unavailable = makeChild('unavailable');
+    const playable = makeChild('playable');
+
+    (getStreamUrl as jest.Mock).mockImplementation((id: string) =>
+      id === 'unavailable'
+        ? null
+        : 'https://example.com/stream.mp3',
+    );
+
+    await playTrack(unavailable, [unavailable, playable]);
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    const [tracks, startIndex] = mockTP.setQueue.mock.calls[0];
+
+    expect(tracks.map((track: { id: string }) => track.id)).toEqual([
+      'playable',
+    ]);
+    expect(startIndex).toBe(0);
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed?.primarySeedId,
+    ).toBe('playable');
+  });
+});
+
+describe('Radio Infinite queue clearing failure', () => {
+  it('discards musical context and persisted state even when native clearing fails', async () => {
+    const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+    const {
+      isRadioQueueTransitionActive,
+    } = require('../radioInfiniteDispatcher');
+
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const track = makeChild('primary');
+    await playTrack(track, [track]);
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed?.primarySeedId,
+    ).toBe('primary');
+
+    mockClearPersistedQueue.mockClear();
+    mockSetQueue.mockClear();
+    mockSetCurrentTrack.mockClear();
+
+    mockTP.clearQueue.mockRejectedValueOnce(
+      new Error('Native queue clearing failed'),
+    );
+
+    await expect(clearQueue()).rejects.toThrow(
+      'Native queue clearing failed',
+    );
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(mockClearPersistedQueue).toHaveBeenCalledTimes(1);
+    expect(mockSetQueue).toHaveBeenCalledWith([]);
+    expect(mockSetCurrentTrack).toHaveBeenCalledWith(null);
+    expect(isRadioQueueTransitionActive()).toBe(false);
+  });
+});
+
+describe('Radio Infinite musical context preservation', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { requestRadioInfiniteRefill } = require('../radioInfiniteDispatcher');
+  const { playerStore } = require('../../store/playerStore');
+
+  beforeEach(() => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+  });
+
+  it('requests replenishment on ordinary track advancement without replacing the Primary', async () => {
+    const queue = [makeChild('primary'), makeChild('next')];
+    await playTrack(queue[0], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+    requestRadioInfiniteRefill.mockClear();
+
+    emit('trackChange', { id: 'next' }, 1, 'auto-advance');
+
+    expect(requestRadioInfiniteRefill).toHaveBeenCalledTimes(1);
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+  });
+
+  it('preserves the Primary and remaining lifespan during server failover', async () => {
+    const queue = [makeChild('primary'), makeChild('current')];
+    await playTrack(queue[0], queue);
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    radioInfiniteSeedSession.completeRefill(generation, ['recommendation']);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    (playerStore.getState as jest.Mock).mockReturnValue({
+      ...playerStore.getState(),
+      queue,
+      currentTrack: queue[1],
+      currentTrackIndex: 1,
+      position: 42,
+      playbackState: 'playing',
+    });
+
+    mockTP.setQueue.mockClear();
+
+    await rebuildQueueForServerSwitch();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+    expect(mockTP.setQueue.mock.calls[0][1]).toBe(1);
+    expect(mockTP.seekTo).toHaveBeenCalledWith(42);
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+  });
+
+  it('establishes the selected playlist song as Primary and preserves playlist provenance', async () => {
+    const queue = [
+      makeChild('first'),
+      makeChild('selected'),
+      makeChild('last'),
+    ];
+
+    await playTrack(queue[1], queue, 'playlist-123');
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed?.primarySeedId,
+    ).toBe('selected');
+
+    emit('trackChange', { id: 'last' }, 2, 'auto-advance');
+
+    expect(sendNowPlaying).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'last' }),
+      'playlist-123',
+    );
+
+    expect(
+      radioInfiniteSeedSession.getSnapshot().seed?.primarySeedId,
+    ).toBe('selected');
+  });
+});
+
+describe('Radio Infinite unsuccessful server failover', () => {
+  it('preserves musical context when no tracks can be resolved against the new server', async () => {
+    const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const queue = [makeChild('primary'), makeChild('next')];
+    await playTrack(queue[0], queue);
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    radioInfiniteSeedSession.completeRefill(generation, ['recommendation']);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockTP.setQueue.mockClear();
+
+    (getStreamUrl as jest.Mock).mockReturnValue(null);
+
+    await rebuildQueueForServerSwitch();
+
+    expect(mockTP.setQueue).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
   });
 });

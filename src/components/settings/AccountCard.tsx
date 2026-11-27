@@ -82,7 +82,11 @@ export function AccountCard() {
     // showing the overlay never lands and logout looks like it did nothing.
     await new Promise((resolve) => setTimeout(resolve, 0));
     try {
-      clearQueue();
+      try {
+        await clearQueue();
+      } catch (error) {
+        console.warn('[Logout] Queue clearing failed:', error);
+      }
       stopPolling();
       clearApiCache();
       // Clear the NATIVE trust store + stop the proxy BEFORE resetting JS state /

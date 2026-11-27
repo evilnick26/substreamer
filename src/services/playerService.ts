@@ -30,7 +30,13 @@ import { sleepTimerStore } from '../store/sleepTimerStore';
 import { shuffleArray } from '../utils/arrayHelpers';
 import { addCompletedScrobble, sendNowPlaying } from './scrobbleService';
 import { registerPlayerPlayStatListener } from './playStatsService';
-import { requestRadioInfiniteRefill } from './radioInfiniteDispatcher';
+import {
+  beginRadioQueueTransition,
+  endRadioQueueTransition,
+  isRadioQueueTransitionActive,
+  requestRadioInfiniteRefill,
+} from './radioInfiniteDispatcher';
+import { radioInfiniteSeedSession } from './radioInfiniteSeed';
 import { syncProxyUpstreams } from './sslTrustService';
 import { getLocalTrackUri, waitForTrackMapsReady } from './musicCacheService';
 import {
@@ -41,6 +47,8 @@ import {
   clearPersistedQueue,
   getPersistedQueue,
   getPersistedPosition,
+  getPersistedRadioSeed,
+  persistRadioSeed,
 } from './queuePersistenceService';
 import {
   ensureCoverArtAuth,
@@ -88,6 +96,16 @@ function applyNativeRepeatMode(mode: RepeatModeSetting): Promise<void> {
 
 let radioOfflineFallbackInitialized = false;
 
+function clearRadioPrimarySeed(): void {
+  radioInfiniteSeedSession.clear();
+  persistRadioSeed(null);
+}
+
+function establishRadioPrimarySeed(trackId: string): void {
+  radioInfiniteSeedSession.reset(trackId);
+  persistRadioSeed(radioInfiniteSeedSession.getSnapshot().seed);
+}
+
 /**
  * Radio Infinite requires a network connection. Keep the semantic mode and
  * native repeat mode in sync across manual/automatic Offline Mode changes,
@@ -116,7 +134,26 @@ function initializeRadioOfflineFallback(): void {
     if (state.offlineMode && !prev.offlineMode) reconcile();
   });
   playbackSettingsStore.subscribe((state, prev) => {
-    if (state.repeatMode !== prev.repeatMode && state.repeatMode === 'radio') reconcile();
+    if (state.repeatMode === prev.repeatMode) return;
+
+    if (state.repeatMode !== 'radio') {
+      if (prev.repeatMode === 'radio') clearRadioPrimarySeed();
+      return;
+    }
+
+    reconcile();
+
+    if (playbackSettingsStore.getState().repeatMode !== 'radio') return;
+
+    // Hydration restores the mode without advancing the generation.
+    if (state.repeatGeneration === prev.repeatGeneration) return;
+
+    const currentTrack = playerStore.getState().currentTrack;
+    if (currentTrack) {
+      establishRadioPrimarySeed(currentTrack.id);
+    } else {
+      clearRadioPrimarySeed();
+    }
   });
   reconcile();
 }
@@ -233,7 +270,13 @@ export async function initPlayer(): Promise<void> {
       playerStore.getState().setCurrentTrack(child, index ?? null);
       if (child) sendNowPlaying(child, trackPlaylistMap.get(child.id));
       // The queue is unchanged here — only the cursor moved, so this is one UPDATE.
-      if (index != null && index >= 0) persistCurrentIndex(index);
+      if (
+        index != null &&
+        index >= 0 &&
+        !isRadioQueueTransitionActive()
+      ) {
+        persistCurrentIndex(index);
+      }
     } else {
       playerStore.getState().setCurrentTrack(null, null);
     }
@@ -244,7 +287,8 @@ export async function initPlayer(): Promise<void> {
     refreshTrackSource();
     if (
       playbackSettingsStore.getState().repeatMode === 'radio' &&
-      !offlineModeStore.getState().offlineMode
+      !offlineModeStore.getState().offlineMode &&
+      !isRadioQueueTransitionActive()
     ) {
       requestRadioInfiniteRefill();
     }
@@ -405,8 +449,10 @@ export function restorePersistedQueueAfterBoot(): void {
   }
   const needsHydration = restorePersistedQueue();
   if (needsHydration) {
+    beginRadioQueueTransition();
     hydrationPromise = hydrateRestoredQueue().finally(() => {
       hydrationPromise = null;
+      endRadioQueueTransition();
     });
   }
 }
@@ -425,6 +471,12 @@ function restorePersistedQueue(): boolean {
     const { queue, currentTrackIndex } = persisted;
     if (queue.length === 0) return false;
     const clampedIndex = Math.min(currentTrackIndex, queue.length - 1);
+
+    if (playbackSettingsStore.getState().repeatMode === 'radio') {
+      radioInfiniteSeedSession.restore(getPersistedRadioSeed());
+    } else {
+      clearRadioPrimarySeed();
+    }
 
     currentChildQueue = queue;
     playerStore.getState().setQueue(queue);
@@ -513,7 +565,18 @@ async function hydrateRestoredQueue(): Promise<void> {
       await tp.seekTo(resume.position);
     }
 
-    if (pruned) persistQueue(filteredQueue, startIndex);
+    if (pruned) {
+      persistQueue(filteredQueue, startIndex);
+    } else {
+      persistCurrentIndex(startIndex);
+    }
+
+    if (
+      playbackSettingsStore.getState().repeatMode === 'radio' &&
+      radioInfiniteSeedSession.getSnapshot().seed === null
+    ) {
+      establishRadioPrimarySeed(filteredQueue[startIndex].id);
+    }
   } catch (e) {
     console.warn('[Player] Queue hydration failed:', e);
     throw e;
@@ -547,12 +610,15 @@ export async function playTrack(
   queue: Child[],
   sourcePlaylistId?: string | null,
 ): Promise<void> {
-  await awaitHydration();
-  maybePromptFireBackgroundPlayback();
-  pendingResumePosition = null;
-  playerStore.getState().setQueueLoading(true);
+  beginRadioQueueTransition();
+  radioInfiniteSeedSession.invalidate();
+  let playbackStarted = false;
 
   try {
+    await awaitHydration();
+    maybePromptFireBackgroundPlayback();
+    pendingResumePosition = null;
+    playerStore.getState().setQueueLoading(true);
     // Populate the track-URI map first so a tap right after cold launch doesn't
     // downgrade a downloaded song to a server URL.
     await waitForTrackMapsReady();
@@ -581,12 +647,29 @@ export async function playTrack(
     if (startIndex === -1) startIndex = 0;
 
     await tp.setQueue(rnTracks, startIndex);
-    await tp.play();
+
     persistQueue(filteredQueue, startIndex);
+    if (playbackSettingsStore.getState().repeatMode === 'radio') {
+      establishRadioPrimarySeed(filteredQueue[startIndex].id);
+    } else {
+      clearRadioPrimarySeed();
+    }
+
+    await tp.play();
+    playbackStarted = true;
   } catch {
     playbackToastStore.getState().fail();
   } finally {
     playerStore.getState().setQueueLoading(false);
+    endRadioQueueTransition();
+
+    if (
+      playbackStarted &&
+      !isRadioQueueTransitionActive() &&
+      playbackSettingsStore.getState().repeatMode === 'radio'
+    ) {
+      requestRadioInfiniteRefill();
+    }
   }
 }
 
@@ -804,23 +887,35 @@ async function clearPlayerStateInternal(): Promise<void> {
   currentChildQueue = [];
   trackPlaylistMap.clear();
 
-  await tp.clearQueue();
-  clearPersistedQueue();
+  radioInfiniteSeedSession.clear();
 
-  const store = playerStore.getState();
-  store.setCurrentTrack(null);
-  store.setQueue([]);
-  store.setPlaybackState('idle');
-  store.setProgress(0, 0, 0);
-  store.setError(null);
-  store.setRetrying(false);
-  store.clearQueueFormats();
+  try {
+    await tp.clearQueue();
+  } finally {
+    clearPersistedQueue();
+
+    const store = playerStore.getState();
+    store.setCurrentTrack(null);
+    store.setQueue([]);
+    store.setPlaybackState('idle');
+    store.setProgress(0, 0, 0);
+    store.setError(null);
+    store.setRetrying(false);
+    store.clearQueueFormats();
+  }
 }
 
 /** Stop playback, clear the queue, and reset all player state to defaults. */
 export async function clearQueue(): Promise<void> {
-  await awaitHydration();
-  await clearPlayerStateInternal();
+  beginRadioQueueTransition();
+  radioInfiniteSeedSession.invalidate();
+
+  try {
+    await awaitHydration();
+    await clearPlayerStateInternal();
+  } finally {
+    endRadioQueueTransition();
+  }
 }
 
 /**
@@ -1013,8 +1108,13 @@ export async function cycleRepeatMode(): Promise<void> {
   // Read the effective value rather than applying a stale requested mode.
   playbackSettingsStore.getState().setRepeatMode(next);
   const effective = playbackSettingsStore.getState().repeatMode;
+  const generation = playbackSettingsStore.getState().repeatGeneration;
   await applyNativeRepeatMode(effective);
-  if (effective === 'radio') {
+  if (
+    effective === 'radio' &&
+    playbackSettingsStore.getState().repeatMode === 'radio' &&
+    playbackSettingsStore.getState().repeatGeneration === generation
+  ) {
     requestRadioInfiniteRefill();
   }
 }

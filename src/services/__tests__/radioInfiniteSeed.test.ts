@@ -280,3 +280,30 @@ describe('Radio Infinite seed session', () => {
     });
   });
 });
+
+describe('Radio Infinite generation invalidation', () => {
+  it('invalidates outstanding requests without discarding musical context', () => {
+    const { RadioInfiniteSeedSession } = require('../radioInfiniteSeed');
+    const session = new RadioInfiniteSeedSession();
+
+    session.restore({
+      primarySeedId: 'primary',
+      remainingRefills: 2,
+    });
+
+    const previous = session.getSnapshot();
+
+    session.invalidate();
+
+    const current = session.getSnapshot();
+
+    expect(current.seed).toEqual(previous.seed);
+    expect(current.generation).toBe(previous.generation + 1);
+
+    expect(
+      session.completeRefill(previous.generation, ['stale']),
+    ).toBe(false);
+
+    expect(session.getSnapshot()).toEqual(current);
+  });
+});

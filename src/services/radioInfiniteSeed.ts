@@ -75,9 +75,13 @@ export class RadioInfiniteSeedSession {
     this.generation += 1;
   }
 
+  invalidate(): void {
+    this.generation += 1;
+  }
+
   clear(): void {
     this.seed = null;
-    this.generation += 1;
+    this.invalidate();
   }
 
   restore(value: unknown): boolean {

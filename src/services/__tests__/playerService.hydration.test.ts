@@ -134,6 +134,8 @@ jest.mock('../subsonicService', () => ({
 const mockGetPersistedQueue = jest.fn().mockReturnValue(null);
 const mockGetPersistedPosition = jest.fn().mockReturnValue(null);
 jest.mock('../queuePersistenceService', () => ({
+  persistRadioSeed: jest.fn(),
+  getPersistedRadioSeed: jest.fn(() => null),
   persistQueue: jest.fn(),
   persistCurrentIndex: jest.fn(),
   persistPositionIfDue: jest.fn(),
@@ -290,5 +292,179 @@ describe('hydration guard', () => {
     await playPromise;
     expect(mockTP.setQueue).toHaveBeenCalledTimes(2);
     expect(mockTP.play).toHaveBeenCalled();
+  });
+});
+
+describe('Radio Infinite musical context restoration', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { playbackSettingsStore } = require('../../store/playbackSettingsStore');
+  const {
+    getPersistedRadioSeed,
+    persistRadioSeed,
+  } = require('../queuePersistenceService');
+  const {
+    isRadioQueueTransitionActive,
+  } = require('../radioInfiniteDispatcher');
+
+  beforeEach(() => {
+    radioInfiniteSeedSession.clear();
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+    getPersistedRadioSeed.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    playbackSettingsStore.getState().setRepeatMode('off');
+    getPersistedRadioSeed.mockReturnValue(null);
+  });
+
+  it('restores the exact persisted Primary and remaining lifespan', async () => {
+    const seed = {
+      primarySeedId: 'original-primary',
+      remainingRefills: 2,
+    };
+
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('first'), makeChild('current')],
+      currentTrackIndex: 1,
+    });
+
+    getPersistedRadioSeed.mockReturnValue(seed);
+
+    restorePersistedQueueAfterBoot();
+    await drainHydration();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual(seed);
+    expect(isRadioQueueTransitionActive()).toBe(false);
+  });
+
+  it('establishes a Primary from the restored current song for an older queue', async () => {
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('first'), makeChild('current')],
+      currentTrackIndex: 1,
+    });
+
+    restorePersistedQueueAfterBoot();
+    await drainHydration();
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('current');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+  });
+
+  it('does not establish a Primary when no queue exists', () => {
+    mockGetPersistedQueue.mockReturnValue(null);
+
+    restorePersistedQueueAfterBoot();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(isRadioQueueTransitionActive()).toBe(false);
+  });
+
+  it('does not restore a persisted Primary outside Radio mode', async () => {
+    playbackSettingsStore.getState().setRepeatMode('off');
+
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('current')],
+      currentTrackIndex: 0,
+    });
+
+    getPersistedRadioSeed.mockReturnValue({
+      primarySeedId: 'old-primary',
+      remainingRefills: 2,
+    });
+
+    restorePersistedQueueAfterBoot();
+    await drainHydration();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+  });
+});
+
+describe('Radio Infinite partial queue restoration', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { playbackSettingsStore } = require('../../store/playbackSettingsStore');
+  const { getStreamUrl } = require('../subsonicService');
+  const {
+    getPersistedRadioSeed,
+    persistRadioSeed,
+    persistQueue,
+  } = require('../queuePersistenceService');
+  const {
+    isRadioQueueTransitionActive,
+  } = require('../radioInfiniteDispatcher');
+
+  beforeEach(() => {
+    radioInfiniteSeedSession.clear();
+    playbackSettingsStore.setState({ repeatMode: 'radio' });
+    getPersistedRadioSeed.mockReturnValue(null);
+
+    getStreamUrl.mockImplementation((id: string) =>
+      id === 'b' ? null : subsonicMocks.streamUrl,
+    );
+
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('a'), makeChild('b'), makeChild('c')],
+      currentTrackIndex: 1,
+    });
+  });
+
+  afterEach(() => {
+    getStreamUrl.mockImplementation(() => subsonicMocks.streamUrl);
+    playbackSettingsStore.getState().setRepeatMode('off');
+    getPersistedRadioSeed.mockReturnValue(null);
+  });
+
+  it('preserves the persisted Primary and lifespan when that song is pruned', async () => {
+    const seed = {
+      primarySeedId: 'b',
+      remainingRefills: 2,
+    };
+
+    getPersistedRadioSeed.mockReturnValue(seed);
+
+    restorePersistedQueueAfterBoot();
+    await drainHydration();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    const [tracks, startIndex] = mockTP.setQueue.mock.calls[0];
+
+    expect(tracks.map((track: { id: string }) => track.id))
+      .toEqual(['a', 'c']);
+    expect(startIndex).toBe(0);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual(seed);
+
+    expect(persistQueue).toHaveBeenLastCalledWith(
+      [makeChild('a'), makeChild('c')],
+      0,
+    );
+
+    expect(isRadioQueueTransitionActive()).toBe(false);
+  });
+
+  it('uses the playable fallback as Primary when restoring a legacy queue', async () => {
+    restorePersistedQueueAfterBoot();
+    await drainHydration();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    const [tracks, startIndex] = mockTP.setQueue.mock.calls[0];
+
+    expect(tracks.map((track: { id: string }) => track.id))
+      .toEqual(['a', 'c']);
+    expect(startIndex).toBe(0);
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('a');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+    expect(isRadioQueueTransitionActive()).toBe(false);
   });
 });

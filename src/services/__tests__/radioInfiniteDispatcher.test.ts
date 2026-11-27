@@ -44,3 +44,65 @@ describe('Radio Infinite refill dispatcher', () => {
     });
   });
 });
+
+describe('Radio Infinite queue transition protection', () => {
+  it('suppresses requests until the transition ends', () => {
+    jest.isolateModules(() => {
+      const dispatcher = require('../radioInfiniteDispatcher');
+      const handler = jest.fn();
+
+      dispatcher.registerRadioInfiniteRefillHandler(handler);
+      dispatcher.beginRadioQueueTransition();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(true);
+
+      dispatcher.requestRadioInfiniteRefill();
+      expect(handler).not.toHaveBeenCalled();
+
+      dispatcher.endRadioQueueTransition();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(false);
+
+      dispatcher.requestRadioInfiniteRefill();
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('keeps nested transitions protected until all have ended', () => {
+    jest.isolateModules(() => {
+      const dispatcher = require('../radioInfiniteDispatcher');
+      const handler = jest.fn();
+
+      dispatcher.registerRadioInfiniteRefillHandler(handler);
+      dispatcher.beginRadioQueueTransition();
+      dispatcher.beginRadioQueueTransition();
+
+      dispatcher.endRadioQueueTransition();
+      dispatcher.requestRadioInfiniteRefill();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(true);
+      expect(handler).not.toHaveBeenCalled();
+
+      dispatcher.endRadioQueueTransition();
+      dispatcher.requestRadioInfiniteRefill();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(false);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not underflow the transition counter', () => {
+    jest.isolateModules(() => {
+      const dispatcher = require('../radioInfiniteDispatcher');
+
+      dispatcher.endRadioQueueTransition();
+      dispatcher.beginRadioQueueTransition();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(true);
+
+      dispatcher.endRadioQueueTransition();
+
+      expect(dispatcher.isRadioQueueTransitionActive()).toBe(false);
+    });
+  });
+});

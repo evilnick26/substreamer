@@ -44,6 +44,8 @@ jest.mock('../imageCacheService', () => ({
 }));
 
 jest.mock('../queuePersistenceService', () => ({
+  persistRadioSeed: jest.fn(),
+  getPersistedRadioSeed: jest.fn(() => null),
   persistQueue: jest.fn(),
   persistCurrentIndex: jest.fn(),
   persistPositionIfDue: jest.fn(),
