@@ -354,6 +354,58 @@ describe('Radio Infinite musical context restoration', () => {
     expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
   });
 
+  it('establishes the fallback Primary even when resume seek fails', async () => {
+    const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('first'), makeChild('current')],
+      currentTrackIndex: 1,
+    });
+
+    mockGetPersistedPosition.mockReturnValue({
+      trackId: 'current',
+      position: 45,
+    });
+
+    mockTP.seekTo.mockRejectedValueOnce(new Error('Resume seek failed'));
+
+    restorePersistedQueueAfterBoot();
+    await togglePlayPause();
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+    expect(mockTP.seekTo).toHaveBeenCalledWith(45);
+
+    expect(seed.primarySeedId).toBe('current');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('keeps the queue uncertain when native hydration replacement fails', async () => {
+    const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+
+    mockGetPersistedQueue.mockReturnValue({
+      queue: [makeChild('current')],
+      currentTrackIndex: 0,
+    });
+
+    mockTP.setQueue.mockRejectedValueOnce(
+      new Error('Native hydration replacement failed'),
+    );
+
+    restorePersistedQueueAfterBoot();
+    await togglePlayPause();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(isRadioQueueTransitionActive()).toBe(false);
+    expect(canRefillRadioInfinite()).toBe(false);
+  });
+
   it('does not establish a Primary when no queue exists', () => {
     mockGetPersistedQueue.mockReturnValue(null);
 

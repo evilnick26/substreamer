@@ -145,6 +145,7 @@ import {
   retryPlayback,
   clearQueue,
   addToQueue,
+  appendRadioInfiniteRecommendations,
   removeFromQueue,
   removeNonDownloadedTracks,
   cycleRepeatMode,
@@ -1414,6 +1415,9 @@ describe('Radio Infinite primary seed during playback selection', () => {
     expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual(previous);
     expect(isRadioQueueTransitionActive()).toBe(false);
     expect(requestRadioInfiniteRefill).not.toHaveBeenCalled();
+
+    const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+    expect(canRefillRadioInfinite()).toBe(false);
   });
 
   it('retains the new Primary if playback fails after queue replacement', async () => {
@@ -1426,6 +1430,9 @@ describe('Radio Infinite primary seed during playback selection', () => {
     ).toBe('new-primary');
 
     expect(isRadioQueueTransitionActive()).toBe(false);
+
+    const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+    expect(canRefillRadioInfinite()).toBe(true);
   });
 
   it('preserves the Primary and lifespan during ordinary queue navigation', async () => {
@@ -1526,6 +1533,9 @@ describe('Radio Infinite queue clearing failure', () => {
     expect(mockSetQueue).toHaveBeenCalledWith([]);
     expect(mockSetCurrentTrack).toHaveBeenCalledWith(null);
     expect(isRadioQueueTransitionActive()).toBe(false);
+
+    const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+    expect(canRefillRadioInfinite()).toBe(false);
   });
 });
 
@@ -1559,6 +1569,8 @@ describe('Radio Infinite musical context preservation', () => {
     radioInfiniteSeedSession.completeRefill(generation, ['recommendation']);
 
     const previous = radioInfiniteSeedSession.getSnapshot();
+    const { getRadioQueueRevision } = require('../radioInfiniteDispatcher');
+    const previousRevision = getRadioQueueRevision();
 
     (playerStore.getState as jest.Mock).mockReturnValue({
       ...playerStore.getState(),
@@ -1577,6 +1589,7 @@ describe('Radio Infinite musical context preservation', () => {
     expect(mockTP.setQueue.mock.calls[0][1]).toBe(1);
     expect(mockTP.seekTo).toHaveBeenCalledWith(42);
     expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(getRadioQueueRevision()).toBe(previousRevision + 1);
   });
 
   it('establishes the selected playlist song as Primary and preserves playlist provenance', async () => {
@@ -1618,6 +1631,8 @@ describe('Radio Infinite unsuccessful server failover', () => {
     radioInfiniteSeedSession.completeRefill(generation, ['recommendation']);
 
     const previous = radioInfiniteSeedSession.getSnapshot();
+    const { getRadioQueueRevision } = require('../radioInfiniteDispatcher');
+    const previousRevision = getRadioQueueRevision();
 
     mockTP.setQueue.mockClear();
 
@@ -1627,5 +1642,510 @@ describe('Radio Infinite unsuccessful server failover', () => {
 
     expect(mockTP.setQueue).not.toHaveBeenCalled();
     expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(getRadioQueueRevision()).toBe(previousRevision + 1);
+  });
+});
+
+describe('Radio Infinite guarded append', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { persistRadioSeed } = require('../queuePersistenceService');
+  const dispatcher = require('../radioInfiniteDispatcher');
+
+  beforeEach(async () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const queue = [makeChild('primary'), makeChild('tail')];
+    await playTrack(queue[0], queue);
+
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'primary',
+      remainingRefills: 3,
+    });
+
+    jest.clearAllMocks();
+  });
+
+  function append(tracks: Child[]): Promise<Child[]> {
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    const revision = dispatcher.getRadioQueueRevision();
+
+    return appendRadioInfiniteRecommendations(
+      tracks,
+      generation,
+      () =>
+        dispatcher.getRadioQueueRevision() === revision &&
+        radioInfiniteSeedSession.getSnapshot().generation === generation &&
+        playbackSettingsStore.getState().repeatMode === 'radio',
+    );
+  }
+
+  it('counts a successful batch as exactly one refill', async () => {
+    const tracks = [makeChild('a'), makeChild('b'), makeChild('c')];
+
+    await expect(append(tracks)).resolves.toEqual(tracks);
+
+    expect(mockTP.addToQueue).toHaveBeenCalledTimes(1);
+    expect(mockTP.setQueue).not.toHaveBeenCalled();
+    expect(mockTP.play).not.toHaveBeenCalled();
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual({
+      primarySeedId: 'primary',
+      remainingRefills: 2,
+    });
+
+    expect(persistRadioSeed).toHaveBeenLastCalledWith({
+      primarySeedId: 'primary',
+      remainingRefills: 2,
+    });
+
+    expect(mockPersistQueue).toHaveBeenLastCalledWith(
+      [
+        expect.objectContaining({ id: 'primary' }),
+        expect.objectContaining({ id: 'tail' }),
+        ...tracks,
+      ],
+      expect.any(Number),
+    );
+  });
+
+  it('rotates to the first actually appended playable recommendation', async () => {
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'primary',
+      remainingRefills: 1,
+    });
+
+    (getStreamUrl as jest.Mock).mockImplementation(
+      (id: string) =>
+        id === 'unplayable' ? null : 'https://example.com/stream.mp3',
+    );
+
+    const playable = makeChild('playable');
+
+    await expect(
+      append([makeChild('unplayable'), playable, makeChild('later')]),
+    ).resolves.toEqual([playable, makeChild('later')]);
+
+    const { seed } = radioInfiniteSeedSession.getSnapshot();
+
+    expect(seed.primarySeedId).toBe('playable');
+    expect(seed.remainingRefills).toBeGreaterThanOrEqual(3);
+    expect(seed.remainingRefills).toBeLessThanOrEqual(5);
+    expect(persistRadioSeed).toHaveBeenLastCalledWith(seed);
+  });
+
+  it('does not consume lifespan for an empty recommendation batch', async () => {
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    await expect(append([])).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+  });
+
+  it('does not consume lifespan when no recommendations are playable', async () => {
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    (getStreamUrl as jest.Mock).mockReturnValue(null);
+
+    await expect(append([makeChild('unplayable')])).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+  });
+
+  it('rejects an already stale recommendation context', async () => {
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+
+    await expect(
+      appendRadioInfiniteRecommendations(
+        [makeChild('stale')],
+        generation,
+        () => false,
+      ),
+    ).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+  });
+
+  it('never starts playback when the queue is empty', async () => {
+    await clearQueue();
+    jest.clearAllMocks();
+
+    await expect(append([makeChild('recommendation')])).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+    expect(mockTP.setQueue).not.toHaveBeenCalled();
+    expect(mockTP.play).not.toHaveBeenCalled();
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+  });
+
+  it('preserves lifespan and marks the queue uncertain after native failure', async () => {
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockTP.addToQueue.mockRejectedValueOnce(new Error('Native append failed'));
+
+    await expect(append([makeChild('recommendation')]))
+      .rejects.toThrow('Native append failed');
+
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+    expect(mockPersistQueue).not.toHaveBeenCalled();
+    expect(dispatcher.canRefillRadioInfinite()).toBe(false);
+  });
+
+  it('suppresses further appends until a successful full replacement', async () => {
+    dispatcher.markRadioQueueUncertain();
+
+    await expect(append([makeChild('blocked')])).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+
+    const replacement = makeChild('replacement');
+    await playTrack(replacement, [replacement]);
+
+    expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+
+    const recommendation = makeChild('accepted');
+
+    await expect(append([recommendation])).resolves.toEqual([recommendation]);
+
+    expect(mockTP.addToQueue).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Radio Infinite native append races', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { persistRadioSeed } = require('../queuePersistenceService');
+  const dispatcher = require('../radioInfiniteDispatcher');
+
+  function deferred() {
+    let resolve!: () => void;
+
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+
+    return { promise, resolve };
+  }
+
+  beforeEach(async () => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+
+    const queue = [makeChild('primary'), makeChild('tail')];
+    await playTrack(queue[0], queue);
+
+    radioInfiniteSeedSession.restore({
+      primarySeedId: 'primary',
+      remainingRefills: 3,
+    });
+
+    jest.clearAllMocks();
+  });
+
+  function startPendingAppend() {
+    const entered = deferred();
+    const release = deferred();
+
+    mockTP.addToQueue.mockImplementationOnce(async () => {
+      entered.resolve();
+      await release.promise;
+    });
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    const revision = dispatcher.getRadioQueueRevision();
+
+    const append = appendRadioInfiniteRecommendations(
+      [makeChild('recommendation')],
+      generation,
+      () =>
+        dispatcher.getRadioQueueRevision() === revision &&
+        radioInfiniteSeedSession.getSnapshot().generation === generation &&
+        playbackSettingsStore.getState().repeatMode === 'radio',
+    );
+
+    return { entered, release, append };
+  }
+
+  it('accounts for a completed refill before a waiting shuffle proceeds', async () => {
+    const pending = startPendingAppend();
+
+    await pending.entered.promise;
+
+    const shuffle = shuffleQueue();
+
+    try {
+      expect(dispatcher.canRefillRadioInfinite()).toBe(false);
+      expect(mockTP.setQueue).not.toHaveBeenCalled();
+
+      expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual({
+        primarySeedId: 'primary',
+        remainingRefills: 3,
+      });
+
+      mockTP.setQueue.mockImplementationOnce(async () => {
+        expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual({
+          primarySeedId: 'primary',
+          remainingRefills: 2,
+        });
+
+        expect(persistRadioSeed).toHaveBeenLastCalledWith({
+          primarySeedId: 'primary',
+          remainingRefills: 2,
+        });
+      });
+    } finally {
+      pending.release.resolve();
+    }
+
+    await pending.append;
+    await shuffle;
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    const nativeTracks = mockTP.setQueue.mock.calls[0][0];
+
+    expect(nativeTracks.map((track: { id: string }) => track.id).sort())
+      .toEqual(['primary', 'recommendation', 'tail']);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toEqual({
+      primarySeedId: 'primary',
+      remainingRefills: 2,
+    });
+
+    expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('finishes the old native append before replacing the playback queue', async () => {
+    const pending = startPendingAppend();
+
+    await pending.entered.promise;
+
+    const replacement = makeChild('new-primary');
+    const selection = playTrack(replacement, [replacement]);
+
+    try {
+      expect(mockTP.setQueue).not.toHaveBeenCalled();
+      expect(dispatcher.canRefillRadioInfinite()).toBe(false);
+    } finally {
+      pending.release.resolve();
+    }
+
+    await pending.append;
+    await selection;
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    expect(mockTP.setQueue.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ id: 'new-primary' }),
+    ]);
+
+    expect(radioInfiniteSeedSession.getSnapshot().seed.primarySeedId)
+      .toBe('new-primary');
+
+    expect(mockPersistQueue).toHaveBeenLastCalledWith([replacement], 0);
+
+    expect(persistRadioSeed).toHaveBeenCalledTimes(1);
+    expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('finishes an active native append before clearing the queue', async () => {
+    const pending = startPendingAppend();
+
+    await pending.entered.promise;
+
+    const clearing = clearQueue();
+
+    try {
+      expect(mockTP.clearQueue).not.toHaveBeenCalled();
+      expect(dispatcher.canRefillRadioInfinite()).toBe(false);
+    } finally {
+      pending.release.resolve();
+    }
+
+    await pending.append;
+    await clearing;
+
+    expect(mockTP.clearQueue).toHaveBeenCalledTimes(1);
+    expect(mockClearPersistedQueue).toHaveBeenCalledTimes(1);
+    expect(mockSetQueue).toHaveBeenLastCalledWith([]);
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+    expect(persistRadioSeed).not.toHaveBeenCalled();
+    expect(dispatcher.canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('discards recommendations when the queue changes during preparation', async () => {
+    const { waitForTrackMapsReady } = require('../musicCacheService');
+
+    const entered = deferred();
+    const release = deferred();
+
+    waitForTrackMapsReady.mockImplementationOnce(async () => {
+      entered.resolve();
+      await release.promise;
+    });
+
+    const { generation } = radioInfiniteSeedSession.getSnapshot();
+    const revision = dispatcher.getRadioQueueRevision();
+
+    const append = appendRadioInfiniteRecommendations(
+      [makeChild('stale')],
+      generation,
+      () => dispatcher.getRadioQueueRevision() === revision,
+    );
+
+    await entered.promise;
+
+    try {
+      await clearQueue();
+    } finally {
+      release.resolve();
+    }
+
+    await expect(append).resolves.toEqual([]);
+
+    expect(mockTP.addToQueue).not.toHaveBeenCalled();
+    expect(mockTP.setQueue).not.toHaveBeenCalled();
+    expect(mockTP.play).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot().seed).toBeNull();
+  });
+});
+
+describe('Radio Infinite replacement synchronization', () => {
+  const { radioInfiniteSeedSession } = require('../radioInfiniteSeed');
+  const { canRefillRadioInfinite } = require('../radioInfiniteDispatcher');
+  const { playerStore } = require('../../store/playerStore');
+
+  beforeEach(() => {
+    playbackSettingsStore.getState().setRepeatMode('radio');
+  });
+
+  it('publishes the replacement queue even when failover resume seek fails', async () => {
+    const queue = [
+      makeChild('primary'),
+      makeChild('current'),
+      makeChild('unavailable'),
+    ];
+
+    await playTrack(queue[1], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    (playerStore.getState as jest.Mock).mockReturnValue({
+      ...defaultPlayerState(),
+      queue,
+      currentTrack: queue[1],
+      currentTrackIndex: 1,
+      position: 42,
+      playbackState: 'playing',
+    });
+
+    (getStreamUrl as jest.Mock).mockImplementation((id: string) =>
+      id === 'unavailable'
+        ? null
+        : `https://secondary.example.com/stream/${id}`,
+    );
+
+    mockTP.setQueue.mockClear();
+    mockTP.play.mockClear();
+    mockPersistQueue.mockClear();
+    mockSetQueue.mockClear();
+
+    mockTP.seekTo.mockRejectedValueOnce(new Error('Resume seek failed'));
+
+    await rebuildQueueForServerSwitch();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+
+    const [tracks, index] = mockTP.setQueue.mock.calls[0];
+
+    expect(tracks.map((track: { id: string }) => track.id))
+      .toEqual(['primary', 'current']);
+    expect(index).toBe(1);
+
+    expect(mockSetQueue).toHaveBeenLastCalledWith(queue.slice(0, 2));
+    expect(mockPersistQueue).toHaveBeenLastCalledWith(queue.slice(0, 2), 1);
+
+    expect(mockTP.seekTo).toHaveBeenCalledWith(42);
+    expect(mockTP.play).not.toHaveBeenCalled();
+
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('marks the queue uncertain when native failover replacement fails', async () => {
+    const queue = [makeChild('primary'), makeChild('next')];
+
+    await playTrack(queue[0], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockPersistQueue.mockClear();
+
+    mockTP.setQueue.mockRejectedValueOnce(
+      new Error('Native failover replacement failed'),
+    );
+
+    await rebuildQueueForServerSwitch();
+
+    expect(mockPersistQueue).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(canRefillRadioInfinite()).toBe(false);
+  });
+
+  it('persists the shuffled order even when subsequent playback fails', async () => {
+    const queue = [
+      makeChild('primary'),
+      makeChild('second'),
+      makeChild('third'),
+    ];
+
+    await playTrack(queue[0], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockTP.setQueue.mockClear();
+    mockPersistQueue.mockClear();
+
+    mockTP.play.mockRejectedValueOnce(new Error('Shuffle playback failed'));
+
+    await shuffleQueue();
+
+    expect(mockTP.setQueue).toHaveBeenCalledTimes(1);
+    expect(mockPersistQueue).toHaveBeenCalledTimes(1);
+
+    const [nativeTracks, nativeIndex] = mockTP.setQueue.mock.calls[0];
+    const [persistedTracks, persistedIndex] = mockPersistQueue.mock.calls[0];
+
+    expect(persistedTracks.map((track: Child) => track.id))
+      .toEqual(nativeTracks.map((track: { id: string }) => track.id));
+
+    expect(persistedIndex).toBe(nativeIndex);
+    expect(persistedIndex).toBe(0);
+
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(canRefillRadioInfinite()).toBe(true);
+  });
+
+  it('marks the queue uncertain when native shuffle replacement fails', async () => {
+    const queue = [makeChild('primary'), makeChild('next')];
+
+    await playTrack(queue[0], queue);
+
+    const previous = radioInfiniteSeedSession.getSnapshot();
+
+    mockPersistQueue.mockClear();
+
+    mockTP.setQueue.mockRejectedValueOnce(
+      new Error('Native shuffle replacement failed'),
+    );
+
+    await shuffleQueue();
+
+    expect(mockPersistQueue).not.toHaveBeenCalled();
+    expect(radioInfiniteSeedSession.getSnapshot()).toEqual(previous);
+    expect(canRefillRadioInfinite()).toBe(false);
   });
 });

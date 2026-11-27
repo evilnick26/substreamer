@@ -33,7 +33,14 @@ import { registerPlayerPlayStatListener } from './playStatsService';
 import {
   beginRadioQueueTransition,
   endRadioQueueTransition,
+  beginRadioQueueMutation,
+  endRadioQueueMutation,
   isRadioQueueTransitionActive,
+  canRefillRadioInfinite,
+  markRadioQueueUncertain,
+  markRadioQueueSynchronized,
+  waitForRadioAppend,
+  runRadioAppend,
   requestRadioInfiniteRefill,
 } from './radioInfiniteDispatcher';
 import { radioInfiniteSeedSession } from './radioInfiniteSeed';
@@ -92,6 +99,30 @@ function applyNativeRepeatMode(mode: RepeatModeSetting): Promise<void> {
   const update = repeatNativeUpdate.catch(() => {}).then(() => tp.setRepeatMode(mapRepeatMode(mode)));
   repeatNativeUpdate = update;
   return update;
+}
+
+/**
+ * Keep the queue uncertain until the caller publishes the replacement.
+ */
+async function replaceNativeQueue(
+  operation: () => Promise<void>,
+): Promise<void> {
+  markRadioQueueUncertain();
+  await operation();
+}
+
+/**
+ * An incremental mutation cannot repair an already uncertain queue.
+ */
+async function mutateNativeQueue(
+  operation: () => Promise<void>,
+): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    markRadioQueueUncertain();
+    throw error;
+  }
 }
 
 let radioOfflineFallbackInitialized = false;
@@ -556,14 +587,7 @@ async function hydrateRestoredQueue(): Promise<void> {
       if (idx !== -1) startIndex = idx;
     }
 
-    await tp.setQueue(rnTracks, startIndex);
-    if (
-      resume &&
-      filteredQueue[startIndex]?.id === resume.trackId &&
-      resume.position > 0
-    ) {
-      await tp.seekTo(resume.position);
-    }
+    await replaceNativeQueue(() => tp.setQueue(rnTracks, startIndex));
 
     if (pruned) {
       persistQueue(filteredQueue, startIndex);
@@ -576,6 +600,16 @@ async function hydrateRestoredQueue(): Promise<void> {
       radioInfiniteSeedSession.getSnapshot().seed === null
     ) {
       establishRadioPrimarySeed(filteredQueue[startIndex].id);
+    }
+
+    markRadioQueueSynchronized();
+
+    if (
+      resume &&
+      filteredQueue[startIndex]?.id === resume.trackId &&
+      resume.position > 0
+    ) {
+      await tp.seekTo(resume.position);
     }
   } catch (e) {
     console.warn('[Player] Queue hydration failed:', e);
@@ -615,6 +649,7 @@ export async function playTrack(
   let playbackStarted = false;
 
   try {
+    await waitForRadioAppend();
     await awaitHydration();
     maybePromptFireBackgroundPlayback();
     pendingResumePosition = null;
@@ -646,7 +681,7 @@ export async function playTrack(
     let startIndex = filteredQueue.findIndex((c) => c.id === track.id);
     if (startIndex === -1) startIndex = 0;
 
-    await tp.setQueue(rnTracks, startIndex);
+    await replaceNativeQueue(() => tp.setQueue(rnTracks, startIndex));
 
     persistQueue(filteredQueue, startIndex);
     if (playbackSettingsStore.getState().repeatMode === 'radio') {
@@ -654,6 +689,8 @@ export async function playTrack(
     } else {
       clearRadioPrimarySeed();
     }
+
+    markRadioQueueSynchronized();
 
     await tp.play();
     playbackStarted = true;
@@ -890,7 +927,7 @@ async function clearPlayerStateInternal(): Promise<void> {
   radioInfiniteSeedSession.clear();
 
   try {
-    await tp.clearQueue();
+    await replaceNativeQueue(() => tp.clearQueue());
   } finally {
     clearPersistedQueue();
 
@@ -903,6 +940,8 @@ async function clearPlayerStateInternal(): Promise<void> {
     store.setRetrying(false);
     store.clearQueueFormats();
   }
+
+  markRadioQueueSynchronized();
 }
 
 /** Stop playback, clear the queue, and reset all player state to defaults. */
@@ -911,6 +950,7 @@ export async function clearQueue(): Promise<void> {
   radioInfiniteSeedSession.invalidate();
 
   try {
+    await waitForRadioAppend();
     await awaitHydration();
     await clearPlayerStateInternal();
   } finally {
@@ -926,35 +966,43 @@ export async function clearQueue(): Promise<void> {
  * local URI). No-op when the queue is empty.
  */
 export async function rebuildQueueForServerSwitch(): Promise<void> {
-  await awaitHydration();
-  const queue = currentChildQueue;
-  if (queue.length === 0) return;
-
-  const idx = playerStore.getState().currentTrackIndex ?? 0;
-  const position = playerStore.getState().position;
-  const wasPlaying = playerStore.getState().playbackState === 'playing';
-
+  beginRadioQueueMutation();
   try {
-    // Re-establish cover-art auth + the iOS streaming proxy against the NEW
-    // server BEFORE regenerating URLs — the switch nulled the token.
-    await ensureCoverArtAuth();
-    if (Platform.OS === 'ios') {
-      await syncProxyUpstreams();
+    await waitForRadioAppend();
+    await awaitHydration();
+    const queue = currentChildQueue;
+    if (queue.length === 0) return;
+
+    const idx = playerStore.getState().currentTrackIndex ?? 0;
+    const position = playerStore.getState().position;
+    const wasPlaying = playerStore.getState().playbackState === 'playing';
+
+    try {
+      // Re-establish cover-art auth + the iOS streaming proxy against the NEW
+      // server BEFORE regenerating URLs — the switch nulled the token.
+      await ensureCoverArtAuth();
+      if (Platform.OS === 'ios') {
+        await syncProxyUpstreams();
+      }
+
+      const { rnTracks, filteredQueue } = await buildPlayableQueue(queue);
+      if (rnTracks.length === 0) return;
+
+      const safeIdx = Math.min(Math.max(0, idx), rnTracks.length - 1);
+      await replaceNativeQueue(() => tp.setQueue(rnTracks, safeIdx));
+
+      currentChildQueue = filteredQueue;
+      playerStore.getState().setQueue(filteredQueue);
+      persistQueue(filteredQueue, safeIdx);
+      markRadioQueueSynchronized();
+
+      if (position > 0) await tp.seekTo(position);
+      if (wasPlaying) await tp.play();
+    } catch {
+      // Best-effort recovery; an uncertain queue cannot receive radio appends.
     }
-
-    const { rnTracks, filteredQueue } = await buildPlayableQueue(queue);
-    if (rnTracks.length === 0) return;
-
-    const safeIdx = Math.min(Math.max(0, idx), rnTracks.length - 1);
-    await tp.setQueue(rnTracks, safeIdx);
-    if (position > 0) await tp.seekTo(position);
-    if (wasPlaying) await tp.play();
-
-    currentChildQueue = filteredQueue;
-    playerStore.getState().setQueue(filteredQueue);
-    persistQueue(filteredQueue, safeIdx);
-  } catch {
-    // Best-effort — a failed switch leaves the prior queue loaded.
+  } finally {
+    endRadioQueueMutation();
   }
 }
 
@@ -966,35 +1014,101 @@ export async function addToQueue(
   tracks: Child[],
   sourcePlaylistId?: string | null,
 ): Promise<void> {
-  if (tracks.length === 0) return;
-  await awaitHydration();
+  beginRadioQueueMutation();
+  try {
+    await waitForRadioAppend();
+    if (tracks.length === 0) return;
+    await awaitHydration();
 
-  if (currentChildQueue.length === 0) {
-    await playTrack(tracks[0], tracks, sourcePlaylistId);
-    return;
+    if (currentChildQueue.length === 0) {
+      await playTrack(tracks[0], tracks, sourcePlaylistId);
+      return;
+    }
+
+    await waitForTrackMapsReady();
+    await ensureCoverArtAuth();
+
+    const { rnTracks, filteredQueue: playable } = await buildPlayableQueue(tracks);
+    if (rnTracks.length === 0) {
+      playbackToastStore.getState().fail();
+      return;
+    }
+
+    await mutateNativeQueue(() => tp.addToQueue(rnTracks));
+
+    if (sourcePlaylistId) {
+      for (const child of playable) trackPlaylistMap.set(child.id, sourcePlaylistId);
+    }
+    for (const child of playable) {
+      playerStore.getState().addQueueFormat(child.id, stampQueueFormat(child));
+    }
+
+    currentChildQueue = [...currentChildQueue, ...playable];
+    playerStore.getState().setQueue(currentChildQueue);
+    persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
+  } finally {
+    endRadioQueueMutation();
+  }
+}
+
+/**
+ * Append playable Radio Infinite recommendations without starting playback
+ * or allowing a stale request to modify a replacement queue.
+ */
+export async function appendRadioInfiniteRecommendations(
+  tracks: Child[],
+  seedGeneration: number,
+  isContextCurrent: () => boolean,
+): Promise<Child[]> {
+  if (
+    tracks.length === 0 ||
+    !canRefillRadioInfinite() ||
+    !isContextCurrent()
+  ) {
+    return [];
   }
 
+  await awaitHydration();
   await waitForTrackMapsReady();
   await ensureCoverArtAuth();
 
   const { rnTracks, filteredQueue: playable } = await buildPlayableQueue(tracks);
-  if (rnTracks.length === 0) {
-    playbackToastStore.getState().fail();
-    return;
-  }
 
-  await tp.addToQueue(rnTracks);
+  if (rnTracks.length === 0) return [];
 
-  if (sourcePlaylistId) {
-    for (const child of playable) trackPlaylistMap.set(child.id, sourcePlaylistId);
-  }
-  for (const child of playable) {
-    playerStore.getState().addQueueFormat(child.id, stampQueueFormat(child));
-  }
+  const appended = await runRadioAppend(async () => {
+    if (currentChildQueue.length === 0 || !isContextCurrent()) {
+      return [];
+    }
 
-  currentChildQueue = [...currentChildQueue, ...playable];
-  playerStore.getState().setQueue(currentChildQueue);
-  persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
+    try {
+      await mutateNativeQueue(() => tp.addToQueue(rnTracks));
+
+      for (const child of playable) {
+        playerStore.getState().addQueueFormat(child.id, stampQueueFormat(child));
+      }
+
+      currentChildQueue = [...currentChildQueue, ...playable];
+      playerStore.getState().setQueue(currentChildQueue);
+      persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
+
+      if (
+        radioInfiniteSeedSession.completeRefill(
+          seedGeneration,
+          playable.map((child) => child.id),
+        )
+      ) {
+        persistRadioSeed(radioInfiniteSeedSession.getSnapshot().seed);
+      }
+
+      return playable;
+    } catch (error) {
+      markRadioQueueUncertain();
+      throw error;
+    }
+  });
+
+  return appended ?? [];
 }
 
 /**
@@ -1002,38 +1116,44 @@ export async function addToQueue(
  * When the queue is empty, behaves like `playTrack`.
  */
 export async function playSongNext(song: Child): Promise<void> {
-  await awaitHydration();
+  beginRadioQueueMutation();
+  try {
+    await waitForRadioAppend();
+    await awaitHydration();
 
-  if (currentChildQueue.length === 0) {
-    await playTrack(song, [song]);
-    return;
+    if (currentChildQueue.length === 0) {
+      await playTrack(song, [song]);
+      return;
+    }
+
+    await waitForTrackMapsReady();
+    await ensureCoverArtAuth();
+
+    const { rnTracks, filteredQueue: playable } = await buildPlayableQueue([song]);
+    if (rnTracks.length === 0) {
+      playbackToastStore.getState().fail();
+      return;
+    }
+
+    const currentIndex = playerStore.getState().currentTrackIndex ?? 0;
+    const insertBefore = Math.min(currentIndex + 1, currentChildQueue.length);
+
+    // addToQueue(tracks, insertBefore) inserts BEFORE the given index.
+    await mutateNativeQueue(() => tp.addToQueue(rnTracks, insertBefore));
+
+    for (const child of playable) {
+      playerStore.getState().addQueueFormat(child.id, stampQueueFormat(child));
+    }
+
+    const newQueue = [...currentChildQueue];
+    newQueue.splice(insertBefore, 0, ...playable);
+    currentChildQueue = newQueue;
+    playerStore.getState().setQueue(currentChildQueue);
+    // Re-read the index AFTER the awaited add in case an auto-advance moved it.
+    persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
+  } finally {
+    endRadioQueueMutation();
   }
-
-  await waitForTrackMapsReady();
-  await ensureCoverArtAuth();
-
-  const { rnTracks, filteredQueue: playable } = await buildPlayableQueue([song]);
-  if (rnTracks.length === 0) {
-    playbackToastStore.getState().fail();
-    return;
-  }
-
-  const currentIndex = playerStore.getState().currentTrackIndex ?? 0;
-  const insertBefore = Math.min(currentIndex + 1, currentChildQueue.length);
-
-  // addToQueue(tracks, insertBefore) inserts BEFORE the given index.
-  await tp.addToQueue(rnTracks, insertBefore);
-
-  for (const child of playable) {
-    playerStore.getState().addQueueFormat(child.id, stampQueueFormat(child));
-  }
-
-  const newQueue = [...currentChildQueue];
-  newQueue.splice(insertBefore, 0, ...playable);
-  currentChildQueue = newQueue;
-  playerStore.getState().setQueue(currentChildQueue);
-  // Re-read the index AFTER the awaited add in case an auto-advance moved it.
-  persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
 }
 
 /**
@@ -1042,30 +1162,36 @@ export async function playSongNext(song: Child): Promise<void> {
  * back rather than adjusting by hand. Clears the queue when it was the last.
  */
 export async function removeFromQueue(index: number): Promise<void> {
-  await awaitHydration();
+  beginRadioQueueMutation();
+  try {
+    await waitForRadioAppend();
+    await awaitHydration();
 
-  if (index < 0 || index >= currentChildQueue.length) return;
-  if (currentChildQueue.length === 1) {
-    await clearQueue();
-    return;
+    if (index < 0 || index >= currentChildQueue.length) return;
+    if (currentChildQueue.length === 1) {
+      await clearQueue();
+      return;
+    }
+
+    const removedChild = currentChildQueue[index];
+    await mutateNativeQueue(() => tp.removeFromQueue([index]));
+
+    trackPlaylistMap.delete(removedChild.id);
+    currentChildQueue = currentChildQueue.filter((_, i) => i !== index);
+    playerStore.getState().setQueue(currentChildQueue);
+
+    // Re-sync the active index from native (recomputed on removal). The scrobble
+    // guard follows it too, or the next milestone reads as a new play.
+    const nativeIndex = tp.getCurrentTrackIndex();
+    if (activeScrobbleIndex != null && nativeIndex >= 0) activeScrobbleIndex = nativeIndex;
+    playerStore.getState().setCurrentTrack(
+      playerStore.getState().currentTrack,
+      nativeIndex >= 0 ? nativeIndex : null,
+    );
+    persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
+  } finally {
+    endRadioQueueMutation();
   }
-
-  const removedChild = currentChildQueue[index];
-  await tp.removeFromQueue([index]);
-
-  trackPlaylistMap.delete(removedChild.id);
-  currentChildQueue = currentChildQueue.filter((_, i) => i !== index);
-  playerStore.getState().setQueue(currentChildQueue);
-
-  // Re-sync the active index from native (recomputed on removal). The scrobble
-  // guard follows it too, or the next milestone reads as a new play.
-  const nativeIndex = tp.getCurrentTrackIndex();
-  if (activeScrobbleIndex != null && nativeIndex >= 0) activeScrobbleIndex = nativeIndex;
-  playerStore.getState().setCurrentTrack(
-    playerStore.getState().currentTrack,
-    nativeIndex >= 0 ? nativeIndex : null,
-  );
-  persistQueue(currentChildQueue, playerStore.getState().currentTrackIndex ?? 0);
 }
 
 /**
@@ -1074,28 +1200,34 @@ export async function removeFromQueue(index: number): Promise<void> {
  * queue if nothing remains.
  */
 export async function removeNonDownloadedTracks(): Promise<void> {
-  await awaitHydration();
+  beginRadioQueueMutation();
+  try {
+    await waitForRadioAppend();
+    await awaitHydration();
 
-  if (currentChildQueue.length === 0) return;
+    if (currentChildQueue.length === 0) return;
 
-  const indicesToRemove: number[] = [];
-  for (let i = currentChildQueue.length - 1; i >= 0; i--) {
-    if (!getLocalTrackUri(currentChildQueue[i].id)) {
-      indicesToRemove.push(i);
+    const indicesToRemove: number[] = [];
+    for (let i = currentChildQueue.length - 1; i >= 0; i--) {
+      if (!getLocalTrackUri(currentChildQueue[i].id)) {
+        indicesToRemove.push(i);
+      }
     }
-  }
 
-  if (indicesToRemove.length === 0) return;
-  if (indicesToRemove.length === currentChildQueue.length) {
-    await clearQueue();
-    return;
-  }
+    if (indicesToRemove.length === 0) return;
+    if (indicesToRemove.length === currentChildQueue.length) {
+      await clearQueue();
+      return;
+    }
 
-  // The playing track stays: native won't remove it, and the JS queue must match native.
-  const playingIndex = tp.getCurrentTrackIndex();
-  for (const index of indicesToRemove) {
-    if (index === playingIndex) continue;
-    await removeFromQueue(index);
+    // The playing track stays: native won't remove it, and the JS queue must match native.
+    const playingIndex = tp.getCurrentTrackIndex();
+    for (const index of indicesToRemove) {
+      if (index === playingIndex) continue;
+      await removeFromQueue(index);
+    }
+  } finally {
+    endRadioQueueMutation();
   }
 }
 
@@ -1183,25 +1315,33 @@ registerPlayerPlayStatListener(applyLocalPlayToPlayer);
  * load it atomically. `trackPlaylistMap` is left intact — IDs are unchanged.
  */
 export async function shuffleQueue(): Promise<void> {
-  await awaitHydration();
-  if (currentChildQueue.length < 2) return;
-
+  beginRadioQueueMutation();
   try {
-    const shuffled = shuffleArray(currentChildQueue);
-    const { rnTracks, filteredQueue } = await buildPlayableQueue(shuffled);
-    if (rnTracks.length === 0) {
+    await waitForRadioAppend();
+    await awaitHydration();
+    if (currentChildQueue.length < 2) return;
+
+    try {
+      const shuffled = shuffleArray(currentChildQueue);
+      const { rnTracks, filteredQueue } = await buildPlayableQueue(shuffled);
+      if (rnTracks.length === 0) {
+        playbackToastStore.getState().fail();
+        await clearPlayerStateInternal();
+        return;
+      }
+
+      currentChildQueue = filteredQueue;
+      playerStore.getState().setQueue(filteredQueue);
+
+      await replaceNativeQueue(() => tp.setQueue(rnTracks, 0));
+      persistQueue(filteredQueue, 0);
+      markRadioQueueSynchronized();
+
+      await tp.play();
+    } catch {
       playbackToastStore.getState().fail();
-      await clearPlayerStateInternal();
-      return;
     }
-
-    currentChildQueue = filteredQueue;
-    playerStore.getState().setQueue(filteredQueue);
-
-    await tp.setQueue(rnTracks, 0);
-    await tp.play();
-    persistQueue(filteredQueue, 0);
-  } catch {
-    playbackToastStore.getState().fail();
+  } finally {
+    endRadioQueueMutation();
   }
 }

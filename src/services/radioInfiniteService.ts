@@ -1,7 +1,15 @@
 /** Issue #77: automatic Radio Infinite queue replenishment. */
 import * as ExpoCrypto from 'expo-crypto';
 
-import { addToQueue } from './playerService';
+import { appendRadioInfiniteRecommendations } from './playerService';
+import {
+  canRefillRadioInfinite,
+  getRadioQueueRevision,
+} from './radioInfiniteDispatcher';
+import {
+  buildRadioInfiniteSeedIds,
+  radioInfiniteSeedSession,
+} from './radioInfiniteSeed';
 import { filterRadioInfiniteRecommendations } from './radioInfiniteFilter';
 import { getApi } from './subsonicService';
 import { authStore } from '../store/authStore';
@@ -13,7 +21,7 @@ const ENDPOINT = 'https://radinf.sancti.fi/radio/recommendations';
 let inFlight = false;
 
 export async function refillRadioInfinite(): Promise<number> {
-  if (inFlight) return 0;
+  if (inFlight || !canRefillRadioInfinite()) return 0;
   if (playbackSettingsStore.getState().repeatMode !== 'radio') {
     throw new Error('Select Radio Infinite repeat mode first.');
   }
@@ -29,11 +37,43 @@ export async function refillRadioInfinite(): Promise<number> {
   if (!originalQueue.length || index == null || index < 0 || index >= originalQueue.length) return 0;
   // Three UPCOMING songs, excluding the currently playing song.
   if (originalQueue.length - index - 1 > 3) return 0;
-  const seedIds = originalQueue.slice(-3).map((track) => track.id);
+  const { seed, generation: seedGeneration } =
+    radioInfiniteSeedSession.getSnapshot();
+
+  if (!seed) return 0;
+
+  const queueRevision = getRadioQueueRevision();
+  const seedIds = buildRadioInfiniteSeedIds(
+    seed,
+    originalQueue.map((track) => track.id),
+  );
   const api = getApi();
   if (!api) throw new Error('Navidrome is unavailable.');
 
   const repeatGeneration = playbackSettingsStore.getState().repeatGeneration;
+
+  const hasContextChanged = (): boolean =>
+    playbackSettingsStore.getState().repeatGeneration !== repeatGeneration ||
+    radioInfiniteSeedSession.getSnapshot().generation !== seedGeneration ||
+    getRadioQueueRevision() !== queueRevision;
+
+  const isContextCurrent = (): boolean => {
+    const now = authStore.getState();
+
+    return (
+      canRefillRadioInfinite() &&
+      !hasContextChanged() &&
+      playbackSettingsStore.getState().repeatMode === 'radio' &&
+      !offlineModeStore.getState().offlineMode &&
+      playerStore.getState().queue === originalQueue &&
+      now.username === auth.username &&
+      now.password === auth.password &&
+      now.serverUrl === auth.serverUrl &&
+      now.legacyAuth === auth.legacyAuth &&
+      now.isLoggedIn
+    );
+  };
+
   inFlight = true;
   try {
     const salt = Array.from(await ExpoCrypto.getRandomBytesAsync(16))
@@ -72,19 +112,9 @@ export async function refillRadioInfinite(): Promise<number> {
       return result.song;
     }));
 
-    // Reject results if the mode, queue, login or network state changed during the request.
-    const now = authStore.getState();
-    if (playbackSettingsStore.getState().repeatMode !== 'radio' ||
-        playbackSettingsStore.getState().repeatGeneration !== repeatGeneration ||
-        offlineModeStore.getState().offlineMode ||
-        playerStore.getState().queue !== originalQueue ||
-        now.username !== auth.username || now.password !== auth.password ||
-        now.serverUrl !== auth.serverUrl || now.legacyAuth !== auth.legacyAuth ||
-        !now.isLoggedIn) {
+    if (!isContextCurrent()) {
       throw new Error('Playback queue or session changed; recommendations discarded.');
     }
-    // A cleared queue must never fall through addToQueue's start-playback branch.
-    if (!playerStore.getState().queue.length) return 0;
 
     // IDs were cheaply deduplicated before getSong(); now apply the metadata
     // rules against the queue and within this batch, preserving bridge order.
@@ -101,18 +131,17 @@ export async function refillRadioInfinite(): Promise<number> {
     );
     if (!eligible.length) return 0;
 
-    const beforeAppend = playerStore.getState().queue.length;
-    await addToQueue(eligible);
-    // addToQueue may omit unplayable tracks; report observed queue growth.
-    const queueLength = playerStore.getState().queue.length;
-    const appended = Math.max(0, queueLength - beforeAppend);
-    return appended;
+    const appended = await appendRadioInfiniteRecommendations(
+      eligible,
+      seedGeneration,
+      isContextCurrent,
+    );
+
+    return appended.length;
   } finally {
     inFlight = false;
-    // If Radio was disabled and re-enabled while this request was in flight,
-    // the discarded old request must not suppress a refill for the new session.
-    if (playbackSettingsStore.getState().repeatGeneration !== repeatGeneration &&
-        playbackSettingsStore.getState().repeatMode === 'radio') {
+    // Reassess only when the request's context was superseded.
+    if (hasContextChanged()) {
       requestRadioInfiniteRefill();
     }
   }
@@ -121,10 +150,11 @@ export async function refillRadioInfinite(): Promise<number> {
 /** Best-effort trigger. Native playback must continue if recommendations fail. */
 export function requestRadioInfiniteRefill(): void {
   if (playbackSettingsStore.getState().repeatMode !== 'radio') return;
-  if (inFlight) return;
+  if (inFlight || !canRefillRadioInfinite()) return;
+  if (offlineModeStore.getState().offlineMode) return;
   const state = playerStore.getState();
   const index = state.currentTrackIndex;
-  if (index == null || index < 0 || !state.queue.length) return;
+  if (index == null || index < 0 || index >= state.queue.length) return;
   if (state.queue.length - index - 1 > 3) return;
   void refillRadioInfinite().catch((error: unknown) => {
     console.warn('[RadioInfinite] Refill failed:', error instanceof Error ? error.message : String(error));
