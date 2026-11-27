@@ -25,6 +25,7 @@ beforeEach(() => {
   store.setState({
     enabled: false,
     logFileSize: null,
+    busy: false,
   });
 
   mockStatus.mockResolvedValue({
@@ -127,7 +128,9 @@ describe('Radio Infinite diagnostics store', () => {
     expect(store.getState().logFileSize).toBe(1024);
   });
 
-  it('returns the exported URI and refreshes status', async () => {
+  it('shares the exported URI and refreshes status', async () => {
+    const share = jest.fn().mockResolvedValue(undefined);
+
     mockExport.mockResolvedValue('file:///mock/export.log');
 
     mockStatus.mockResolvedValue({
@@ -135,19 +138,138 @@ describe('Radio Infinite diagnostics store', () => {
       logFileSize: 2048,
     });
 
-    await expect(store.getState().exportLog()).resolves.toBe(
-      'file:///mock/export.log',
-    );
+    await store.getState().shareLog(share);
 
+    expect(share).toHaveBeenCalledWith('file:///mock/export.log');
     expect(exportRadioInfiniteLog).toHaveBeenCalledTimes(1);
     expect(store.getState().logFileSize).toBe(2048);
+    expect(store.getState().busy).toBe(false);
   });
 
-  it('returns null when no export is available', async () => {
+  it('does not invoke sharing when no export is available', async () => {
+    const share = jest.fn();
+
     mockExport.mockResolvedValue(null);
 
-    await expect(store.getState().exportLog()).resolves.toBeNull();
+    await store.getState().shareLog(share);
 
+    expect(share).not.toHaveBeenCalled();
     expect(getRadioInfiniteLogStatus).toHaveBeenCalledTimes(1);
+    expect(store.getState().busy).toBe(false);
+  });
+
+  it('blocks overlapping actions throughout native sharing', async () => {
+    mockExport.mockResolvedValue('file:///mock/export.log');
+
+    let finishSharing!: () => void;
+    let sharingStarted!: () => void;
+
+    const started = new Promise<void>((resolve) => {
+      sharingStarted = resolve;
+    });
+
+    const share = jest.fn(() => new Promise<void>((resolve) => {
+      finishSharing = resolve;
+      sharingStarted();
+    }));
+
+    const pending = store.getState().shareLog(share);
+
+    expect(store.getState().busy).toBe(true);
+
+    await started;
+
+    await store.getState().shareLog(share);
+    await store.getState().resetLog();
+    await store.getState().setEnabled(false);
+
+    expect(exportRadioInfiniteLog).toHaveBeenCalledTimes(1);
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(clearRadioInfiniteLog).not.toHaveBeenCalled();
+    expect(setRadioInfiniteLoggingEnabled).not.toHaveBeenCalled();
+    expect(store.getState().busy).toBe(true);
+
+    finishSharing();
+    await pending;
+
+    expect(store.getState().busy).toBe(false);
+
+    await store.getState().resetLog();
+
+    expect(clearRadioInfiniteLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks sharing while clearing is in progress', async () => {
+    let finishClear!: () => void;
+
+    jest.mocked(clearRadioInfiniteLog).mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        finishClear = resolve;
+      }),
+    );
+
+    const pending = store.getState().resetLog();
+
+    expect(store.getState().busy).toBe(true);
+
+    await store.getState().shareLog(jest.fn());
+
+    expect(exportRadioInfiniteLog).not.toHaveBeenCalled();
+
+    finishClear();
+    await pending;
+
+    expect(store.getState().busy).toBe(false);
+  });
+
+  it('blocks overlapping enablement changes', async () => {
+    let finishToggle!: () => void;
+
+    jest.mocked(setRadioInfiniteLoggingEnabled).mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        finishToggle = resolve;
+      }),
+    );
+
+    const pending = store.getState().setEnabled(true);
+
+    expect(store.getState().busy).toBe(true);
+
+    await store.getState().setEnabled(false);
+
+    expect(setRadioInfiniteLoggingEnabled).toHaveBeenCalledTimes(1);
+    expect(setRadioInfiniteLoggingEnabled).toHaveBeenCalledWith(true);
+
+    finishToggle();
+    await pending;
+
+    expect(store.getState().busy).toBe(false);
+  });
+
+  it('releases the busy state when native sharing fails', async () => {
+    mockExport.mockResolvedValue('file:///mock/export.log');
+
+    const share = jest.fn().mockRejectedValue(
+      new Error('Sharing failed'),
+    );
+
+    await expect(store.getState().shareLog(share)).resolves.toBeUndefined();
+
+    expect(store.getState().busy).toBe(false);
+
+    await store.getState().resetLog();
+
+    expect(clearRadioInfiniteLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the busy state when export fails unexpectedly', async () => {
+    mockExport.mockRejectedValue(new Error('Export failed'));
+
+    const share = jest.fn();
+
+    await expect(store.getState().shareLog(share)).resolves.toBeUndefined();
+
+    expect(share).not.toHaveBeenCalled();
+    expect(store.getState().busy).toBe(false);
   });
 });

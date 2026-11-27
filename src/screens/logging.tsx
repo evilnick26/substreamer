@@ -16,6 +16,7 @@ import { VOICE_SEARCH_DIAG_LOG_FILE } from '../services/voiceSearchLogger';
 import { audioDiagnosticsStore } from '../store/audioDiagnosticsStore';
 import { imageCacheDiagnosticsStore } from '../store/imageCacheDiagnosticsStore';
 import { librarySyncDiagnosticsStore } from '../store/librarySyncDiagnosticsStore';
+import { radioInfiniteDiagnosticsStore } from '../store/radioInfiniteDiagnosticsStore';
 import { remoteControlDiagnosticsStore } from '../store/remoteControlDiagnosticsStore';
 import { voiceSearchDiagnosticsStore } from '../store/voiceSearchDiagnosticsStore';
 import { formatBytes } from '../utils/formatters';
@@ -44,6 +45,10 @@ export function LoggingScreen() {
   const syncLogSize = librarySyncDiagnosticsStore((s) => s.logFileSize);
   const voiceEnabled = voiceSearchDiagnosticsStore((s) => s.enabled);
   const voiceLogSize = voiceSearchDiagnosticsStore((s) => s.logFileSize);
+  const radioEnabled = radioInfiniteDiagnosticsStore((s) => s.enabled);
+  const radioLogSize = radioInfiniteDiagnosticsStore((s) => s.logFileSize);
+  const radioBusy = radioInfiniteDiagnosticsStore((s) => s.busy);
+  const radioActionsDisabled = radioBusy || radioLogSize == null;
 
   useEffect(() => {
     audioDiagnosticsStore.getState().refreshStatus();
@@ -51,6 +56,7 @@ export function LoggingScreen() {
     imageCacheDiagnosticsStore.getState().refreshStatus();
     librarySyncDiagnosticsStore.getState().refreshStatus();
     voiceSearchDiagnosticsStore.getState().refreshStatus();
+    radioInfiniteDiagnosticsStore.getState().refreshStatus();
     if (LOG_FILE.exists) {
       LOG_FILE.text().then((text) => {
         setContent(text);
@@ -129,6 +135,20 @@ export function LoggingScreen() {
     if (VOICE_LOG_FILE.exists) {
       await shareAsync(VOICE_LOG_FILE.uri, { mimeType: 'text/plain' });
     }
+  }, []);
+
+  const handleRadioToggle = useCallback(async (value: boolean) => {
+    await radioInfiniteDiagnosticsStore.getState().setEnabled(value);
+  }, []);
+
+  const handleRadioReset = useCallback(async () => {
+    await radioInfiniteDiagnosticsStore.getState().resetLog();
+  }, []);
+
+  const handleShareRadioLog = useCallback(async () => {
+    await radioInfiniteDiagnosticsStore.getState().shareLog(
+      (uri) => shareAsync(uri, { mimeType: 'text/plain' }),
+    );
   }, []);
 
   const handleShareMigrationLog = useCallback(async () => {
@@ -210,6 +230,70 @@ export function LoggingScreen() {
             >
               <Ionicons name="trash-outline" size={18} color={diagLogSize != null ? colors.red : colors.textSecondary} />
               <Text style={[styles.actionButtonText, { color: diagLogSize != null ? colors.red : colors.textSecondary }]}>
+                {t('clear')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      {/* Radio Infinite Diagnostics */}
+      <View style={settingsStyles.section}>
+        <Text style={[settingsStyles.sectionTitle, { color: colors.label }]}>{t('radioInfiniteDiagnostics')}</Text>
+        <View style={[settingsStyles.card, settingsStyles.cardPadded, { backgroundColor: colors.card }]}>
+          <View style={[styles.diagRow, { borderBottomColor: colors.border }]}>
+            <View style={styles.diagTextWrap}>
+              <Text style={[styles.diagLabel, { color: colors.textPrimary }]}>{t('radioInfiniteLogging')}</Text>
+              <Text style={[styles.diagHint, { color: colors.textSecondary }]}>
+                {t('radioInfiniteLoggingHint')}
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel={t('radioInfiniteLogging')}
+              disabled={radioBusy}
+              value={radioEnabled}
+              onValueChange={handleRadioToggle}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+          <View style={[styles.diagRow, styles.diagRowLast]}>
+            <Text style={[styles.diagLabel, { color: colors.textPrimary }]}>{t('logFile')}</Text>
+            <Text style={[styles.diagValue, { color: colors.textSecondary }]}>
+              {radioLogSize != null ? formatBytes(radioLogSize) : t('none')}
+            </Text>
+          </View>
+          <View style={styles.buttonRow}>
+            <Pressable
+              accessibilityRole="button"
+              testID="radio-infinite-share-log"
+              onPress={handleShareRadioLog}
+              disabled={radioActionsDisabled}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { borderColor: colors.border },
+                pressed && !radioActionsDisabled && settingsStyles.pressed,
+                radioActionsDisabled && settingsStyles.disabled,
+              ]}
+            >
+              <Ionicons name="share-outline" size={18} color={!radioActionsDisabled ? colors.primary : colors.textSecondary} />
+              <Text style={[styles.actionButtonText, { color: !radioActionsDisabled ? colors.primary : colors.textSecondary }]}>
+                {t('share')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              testID="radio-infinite-clear-log"
+              onPress={handleRadioReset}
+              disabled={radioActionsDisabled}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { borderColor: colors.border },
+                pressed && !radioActionsDisabled && settingsStyles.pressed,
+                radioActionsDisabled && settingsStyles.disabled,
+              ]}
+            >
+              <Ionicons name="trash-outline" size={18} color={!radioActionsDisabled ? colors.red : colors.textSecondary} />
+              <Text style={[styles.actionButtonText, { color: !radioActionsDisabled ? colors.red : colors.textSecondary }]}>
                 {t('clear')}
               </Text>
             </Pressable>

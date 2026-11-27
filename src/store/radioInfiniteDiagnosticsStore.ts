@@ -10,35 +10,64 @@ import {
 interface RadioInfiniteDiagnosticsState {
   enabled: boolean;
   logFileSize: number | null;
+  busy: boolean;
   setEnabled: (enabled: boolean) => Promise<void>;
   resetLog: () => Promise<void>;
   refreshStatus: () => Promise<void>;
-  exportLog: () => Promise<string | null>;
+  shareLog: (share: (uri: string) => Promise<void>) => Promise<void>;
 }
 
 export const radioInfiniteDiagnosticsStore =
-  create<RadioInfiniteDiagnosticsState>()((set, get) => ({
-    enabled: false,
-    logFileSize: null,
+  create<RadioInfiniteDiagnosticsState>()((set, get) => {
+    const runAction = async (
+      action: () => Promise<void>,
+    ): Promise<void> => {
+      if (get().busy) return;
 
-    setEnabled: async (enabled: boolean) => {
-      await setRadioInfiniteLoggingEnabled(enabled);
-      await get().refreshStatus();
-    },
+      set({ busy: true });
 
-    resetLog: async () => {
-      await clearRadioInfiniteLog();
-      await get().refreshStatus();
-    },
+      try {
+        await action();
+      } catch {
+        // Diagnostic actions are best-effort.
+      } finally {
+        set({ busy: false });
+      }
+    };
 
-    refreshStatus: async () => {
-      const status = await getRadioInfiniteLogStatus();
-      if (status !== null) set(status);
-    },
+    return {
+      enabled: false,
+      logFileSize: null,
+      busy: false,
 
-    exportLog: async () => {
-      const uri = await exportRadioInfiniteLog();
-      await get().refreshStatus();
-      return uri;
-    },
-  }));
+      setEnabled: async (enabled: boolean) => {
+        await runAction(async () => {
+          await setRadioInfiniteLoggingEnabled(enabled);
+          await get().refreshStatus();
+        });
+      },
+
+      resetLog: async () => {
+        await runAction(async () => {
+          await clearRadioInfiniteLog();
+          await get().refreshStatus();
+        });
+      },
+
+      refreshStatus: async () => {
+        const status = await getRadioInfiniteLogStatus();
+        if (status !== null) set(status);
+      },
+
+      shareLog: async (share) => {
+        await runAction(async () => {
+          const uri = await exportRadioInfiniteLog();
+          await get().refreshStatus();
+
+          if (uri !== null) {
+            await share(uri);
+          }
+        });
+      },
+    };
+  });
